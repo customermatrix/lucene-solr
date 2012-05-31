@@ -268,11 +268,8 @@ var solr_admin = function( app_config )
                 // cloud
 
                 var cloud_nav_element = $( '#menu #cloud' );
-                if( cloud_args )
-                {
                   cloud_nav_element
                     .show();
-                }
 
                 // sammy
 
