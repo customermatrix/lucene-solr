@@ -373,7 +373,7 @@ public class CoreContainer
         slf4jImpl = StaticLoggerBinder.getSingleton().getLoggerFactoryClassStr();
         if(fname==null) {
           if( slf4jImpl.indexOf("Log4j") > 0) {
-            log.warn("Log watching is not yet implemented for log4j" );
+            log.info("Log watching is not yet implemented for log4j" );
           }
           else if( slf4jImpl.indexOf("JDK") > 0) {
             fname = "JUL";
