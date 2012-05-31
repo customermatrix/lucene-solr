@@ -425,7 +425,7 @@ public class CoreContainer
     shareSchema = cfg.getBool("solr/cores/@shareSchema", DEFAULT_SHARE_SCHEMA);
     zkClientTimeout = cfg.getInt("solr/cores/@zkClientTimeout", DEFAULT_ZK_CLIENT_TIMEOUT);
 
-    hostPort = cfg.get("solr/cores/@hostPort", DEFAULT_HOST_PORT);
+    hostPort = cfg.get("solr/cores/@hostPort", System.getProperty("hostPort", DEFAULT_HOST_PORT));
 
     hostContext = cfg.get("solr/cores/@hostContext", DEFAULT_HOST_CONTEXT);
     host = cfg.get("solr/cores/@host", null);
