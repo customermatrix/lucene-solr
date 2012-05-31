@@ -114,13 +114,13 @@ public class CoreContainer
   protected Integer zkClientTimeout;
   protected String solrHome;
   protected String defaultCoreName = null;
-  private SolrXMLSerializer solrXMLSerializer = new SolrXMLSerializer();
-  private ZkController zkController;
-  private SolrZkServer zkServer;
-  private ShardHandlerFactory shardHandlerFactory;
+  protected SolrXMLSerializer solrXMLSerializer = new SolrXMLSerializer();
+  protected ZkController zkController;
+  protected SolrZkServer zkServer;
+  protected ShardHandlerFactory shardHandlerFactory;
   protected LogWatcher logging = null;
-  private String zkHost;
-  private Map<SolrCore,String> coreToOrigName = new ConcurrentHashMap<SolrCore,String>();
+  protected String zkHost;
+  protected Map<SolrCore,String> coreToOrigName = new ConcurrentHashMap<SolrCore,String>();
 
 
   {
@@ -575,6 +575,7 @@ public class CoreContainer
         }
         if (shardHandlerFactory != null) {
           shardHandlerFactory.close();
+          shardHandlerFactory = null;
         }
         isShutDown = true;
       }

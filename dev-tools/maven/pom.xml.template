@@ -39,6 +39,7 @@
   </modules>
   <properties>
     <top-level>..</top-level>
+    <nexus.server>https://dev.polyspot.com/nexus</nexus.server>
     <base.specification.version>4.0.0</base.specification.version>
     <maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss</maven.build.timestamp.format>
     <java.compat.version>1.6</java.compat.version>
@@ -67,6 +68,21 @@
     <tests.verbose>false</tests.verbose>
     <tests.infostream>${tests.verbose}</tests.infostream>
   </properties>
+
+  <distributionManagement>
+    <repository>
+      <id>repository-polyspot</id>
+      <name>polyspot releases repository</name>
+      <url>${nexus.server}/content/repositories/releases</url>
+    </repository>
+    <snapshotRepository>
+      <id>repository-polyspot</id>
+      <name>polyspot snapshots repository</name>
+      <url>${nexus.server}/content/repositories/snapshots</url>
+      <uniqueVersion>false</uniqueVersion>
+    </snapshotRepository>
+  </distributionManagement>
+
   <issueManagement>
     <system>JIRA</system>
     <url>http://issues.apache.org/jira/browse/LUCENE</url>
@@ -127,17 +143,17 @@
   </licenses>
   <repositories>
     <repository>
-      <id>apache.snapshots</id>
-      <name>Apache Snapshot Repository</name>
-      <url>http://repository.apache.org/snapshots</url>
-      <releases>
-        <enabled>false</enabled>
-      </releases>
-      <snapshots>
-        <updatePolicy>never</updatePolicy>
-      </snapshots>
+      <id>repository-polyspot</id>
+      <url>${nexus.server}/content/groups/public</url>
     </repository>
   </repositories>
+
+  <pluginRepositories>
+    <pluginRepository>
+      <id>repository-polyspot</id>
+      <url>${nexus.server}/content/groups/public</url>
+    </pluginRepository>
+  </pluginRepositories>
   <dependencyManagement>
     <dependencies>
       <dependency>

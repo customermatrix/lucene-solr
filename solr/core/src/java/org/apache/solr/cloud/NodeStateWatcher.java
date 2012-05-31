@@ -17,14 +17,6 @@ package org.apache.solr.cloud;
  * the License.
  */
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
 import org.apache.solr.common.cloud.CoreState;
 import org.apache.solr.common.cloud.SolrZkClient;
 import org.apache.zookeeper.KeeperException;
@@ -32,6 +24,14 @@ import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Watcher for node state changes.
@@ -81,6 +81,9 @@ public class NodeStateWatcher implements Watcher {
   }
 
   private void processStateChange() throws KeeperException, InterruptedException {
+    if (zkClient.isClosed()) {
+      return;
+    }
     byte[] data = zkClient.getData(path, this, null, true);
 
     if (data != null) {

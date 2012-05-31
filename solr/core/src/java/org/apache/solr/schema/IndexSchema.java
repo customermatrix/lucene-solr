@@ -50,7 +50,7 @@ import org.slf4j.LoggerFactory;
  *
  *
  */
-public final class IndexSchema {
+public class IndexSchema {
   public static final String DEFAULT_SCHEMA_FILE = "schema.xml";
   public static final String LUCENE_MATCH_VERSION_PARAM = "luceneMatchVersion";
 

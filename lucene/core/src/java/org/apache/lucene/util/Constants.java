@@ -17,8 +17,9 @@ package org.apache.lucene.util;
  * limitations under the License.
  */
 
-import java.lang.reflect.Field;
 import org.apache.lucene.LucenePackage;
+
+import java.lang.reflect.Field;
 
 /**
  * Some useful constants.
@@ -111,9 +112,9 @@ public final class Constants {
     Package pkg = LucenePackage.get();
     String v = (pkg == null) ? null : pkg.getImplementationVersion();
     if (v == null) {
-      v = LUCENE_MAIN_VERSION + "-SNAPSHOT";
+      v = LUCENE_MAIN_VERSION + "-PES-SNAPSHOT";
     } else if (!v.startsWith(LUCENE_MAIN_VERSION)) {
-      v = LUCENE_MAIN_VERSION + "-SNAPSHOT " + v;
+      v = LUCENE_MAIN_VERSION + "-PES-SNAPSHOT " + v;
     }
     LUCENE_VERSION = ident(v);
   }

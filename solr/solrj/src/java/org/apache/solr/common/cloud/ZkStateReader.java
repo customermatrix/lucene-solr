@@ -199,7 +199,9 @@ public class ZkStateReader {
           } catch (KeeperException e) {
             if (e.code() == KeeperException.Code.SESSIONEXPIRED
                 || e.code() == KeeperException.Code.CONNECTIONLOSS) {
-              log.warn("ZooKeeper watch triggered, but Solr cannot talk to ZK");
+              if (!zkClient.isClosed()) {
+                log.warn("ZooKeeper watch triggered, but Solr cannot talk to ZK");
+              }
               return;
             }
             log.error("", e);
@@ -239,7 +241,9 @@ public class ZkStateReader {
               } catch (KeeperException e) {
                 if (e.code() == KeeperException.Code.SESSIONEXPIRED
                     || e.code() == KeeperException.Code.CONNECTIONLOSS) {
-                  log.warn("ZooKeeper watch triggered, but Solr cannot talk to ZK");
+                  if (!zkClient.isClosed()) {
+                    log.warn("ZooKeeper watch triggered, but Solr cannot talk to ZK");
+                  }
                   return;
                 }
                 log.error("", e);
@@ -323,7 +327,9 @@ public class ZkStateReader {
             } catch (KeeperException e) {
               if (e.code() == KeeperException.Code.SESSIONEXPIRED
                   || e.code() == KeeperException.Code.CONNECTIONLOSS) {
-                log.warn("ZooKeeper watch triggered, but Solr cannot talk to ZK");
+                if (!zkClient.isClosed()) {
+                  log.warn("ZooKeeper watch triggered, but Solr cannot talk to ZK");
+                }
                 return;
               }
               log.error("", e);

@@ -17,18 +17,6 @@ package org.apache.solr.cloud;
  * the License.
  */
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.Set;
-
 import org.apache.solr.cloud.NodeStateWatcher.NodeStateChangeListener;
 import org.apache.solr.cloud.ShardLeaderWatcher.ShardLeaderListener;
 import org.apache.solr.common.SolrException;
@@ -48,6 +36,18 @@ import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * Cluster leader. Responsible node assignments, cluster state file?
@@ -171,6 +171,9 @@ public class Overseer implements NodeStateChangeListener, ShardLeaderListener {
       
       private boolean amILeader() {
         try {
+          if (zkClient.isClosed()) {
+            return false;
+          }
           ZkNodeProps props = ZkNodeProps.load(zkClient.getData("/overseer_elect/leader", null, null, true));
           if(myId.equals(props.get("id"))) {
             return true;
@@ -395,7 +398,9 @@ public class Overseer implements NodeStateChangeListener, ShardLeaderListener {
           collectionsChanged(collections);
         } catch (KeeperException e) {
             if (e.code() == Code.CONNECTIONLOSS || e.code() == Code.SESSIONEXPIRED) {
-            log.warn("ZooKeeper watch triggered, but Solr cannot talk to ZK");
+              if (!zkClient.isClosed()) {
+                log.warn("ZooKeeper watch triggered, but Solr cannot talk to ZK");
+              }
             return;
           }
         } catch (InterruptedException e) {
@@ -438,14 +443,25 @@ public class Overseer implements NodeStateChangeListener, ShardLeaderListener {
           @Override
           public void process(WatchedEvent event) {
             try {
-              List<String> leaderNodes = zkClient.getChildren(
-                  ZkStateReader.getShardLeadersPath(collection, null), this, true);
+              if (zkClient.isClosed()) {
+                return;
+              }
+
+              String shardLeadersPath = ZkStateReader.getShardLeadersPath(collection, null);
+
+              if (zkClient.exists(shardLeadersPath, this, false) == null) {
+                return;
+              }
+
+              List<String> leaderNodes = zkClient.getChildren(shardLeadersPath, this, true);
               
               processLeaderNodesChanged(collection, leaderNodes);
             } catch (KeeperException e) {
               if (e.code() == KeeperException.Code.SESSIONEXPIRED
                   || e.code() == KeeperException.Code.CONNECTIONLOSS) {
-                log.warn("ZooKeeper watch triggered, but Solr cannot talk to ZK");
+                if (!zkClient.isClosed()) {
+                  log.warn("ZooKeeper watch triggered, but Solr cannot talk to ZK");
+                }
                 return;
               }
               SolrException.log(log, "", e);
@@ -518,7 +534,9 @@ public class Overseer implements NodeStateChangeListener, ShardLeaderListener {
                 } catch (KeeperException e) {
                   if (e.code() == KeeperException.Code.SESSIONEXPIRED
                       || e.code() == KeeperException.Code.CONNECTIONLOSS) {
-                    log.warn("ZooKeeper watch triggered, but Solr cannot talk to ZK");
+                    if (!zkClient.isClosed()) {
+                      log.warn("ZooKeeper watch triggered, but Solr cannot talk to ZK");
+                    }
                     return;
                   }
                   SolrException.log(log, "", e);

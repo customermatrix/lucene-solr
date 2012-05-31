@@ -31,6 +31,8 @@ import org.apache.lucene.util.PrintStreamInfoStream;
 import org.apache.lucene.util.SetOnce;
 import org.apache.lucene.util.Version;
 
+import java.io.PrintStream;
+
 /**
  * Holds all the configuration of {@link IndexWriter}.  You
  * should instantiate this class, call the setters to set
@@ -131,7 +133,7 @@ public final class IndexWriterConfig implements Cloneable {
     return WRITE_LOCK_TIMEOUT;
   }
 
-  private final Analyzer analyzer;
+  private Analyzer analyzer;
   private volatile IndexDeletionPolicy delPolicy;
   private volatile IndexCommit commit;
   private volatile OpenMode openMode;
@@ -226,6 +228,11 @@ public final class IndexWriterConfig implements Cloneable {
   /** Returns the default analyzer to use for indexing documents. */
   public Analyzer getAnalyzer() {
     return analyzer;
+  }
+
+  public IndexWriterConfig setAnalyzer(Analyzer analyzer) {
+    this.analyzer = analyzer;
+    return this;
   }
 
   /** Specifies {@link OpenMode} of the index.

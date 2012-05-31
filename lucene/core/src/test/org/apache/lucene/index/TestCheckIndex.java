@@ -99,7 +99,7 @@ public class TestCheckIndex extends LuceneTestCase {
     final String version = System.getProperty("lucene.version");
     assertNotNull( "null version", version);
     assertTrue("Invalid version: "+version,
-               version.equals(Constants.LUCENE_MAIN_VERSION+"-SNAPSHOT") ||
+               version.equals(Constants.LUCENE_MAIN_VERSION+"-PES-SNAPSHOT") ||
                version.equals(Constants.LUCENE_MAIN_VERSION));
     assertTrue(version + " should start with: "+Constants.LUCENE_VERSION,
                Constants.LUCENE_VERSION.startsWith(version));

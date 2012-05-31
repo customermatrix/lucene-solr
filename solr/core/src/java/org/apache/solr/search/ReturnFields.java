@@ -417,4 +417,12 @@ public class ReturnFields
   {
     return transformer;
   }
+
+  public Set<String> getOkFieldNames() {
+    return okFieldNames;
+  }
+
+  public void setOkFieldNames(Set<String> okFieldNames) {
+    this.okFieldNames = okFieldNames;
+  }
 }

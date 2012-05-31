@@ -202,7 +202,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
   volatile private boolean hitOOM;
 
   private final Directory directory;  // where this index resides
-  private final Analyzer analyzer;    // how to analyze text
+  private Analyzer analyzer;    // how to analyze text
 
   private volatile long changeCount; // increments every time a change is completed
   private long lastCommitChangeCount; // last changeCount that was committed
@@ -970,6 +970,10 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
   public Analyzer getAnalyzer() {
     ensureOpen();
     return analyzer;
+  }
+
+  public void setAnalyzer(Analyzer analyzer) {
+    this.analyzer = analyzer;
   }
 
   /** Returns total number of docs in this index, including
