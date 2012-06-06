@@ -16,8 +16,6 @@
  */
 package org.apache.solr.search;
 
-import java.util.*;
-
 import org.apache.commons.io.FilenameUtils;
 import org.apache.lucene.queries.function.FunctionQuery;
 import org.apache.lucene.queries.function.ValueSource;
@@ -30,14 +28,11 @@ import org.apache.solr.common.params.MapSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.request.SolrQueryRequest;
-import org.apache.solr.response.transform.DocTransformer;
-import org.apache.solr.response.transform.DocTransformers;
-import org.apache.solr.response.transform.RenameFieldTransformer;
-import org.apache.solr.response.transform.ScoreAugmenter;
-import org.apache.solr.response.transform.TransformerFactory;
-import org.apache.solr.response.transform.ValueSourceAugmenter;
+import org.apache.solr.response.transform.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.*;
 
 /**
  * A class representing the return fields
@@ -254,6 +249,11 @@ public class ReturnFields
           Map<String,String> augmenterArgs = new HashMap<String,String>();
           int end = QueryParsing.parseLocalParams(funcStr, 0, augmenterArgs, req.getParams(), "[", ']');
           sp.pos += end;
+
+          if (end >0 && end <= funcStr.length())
+          {
+            okFieldNames.add(funcStr.substring(0, end));
+          }
           
           // [foo] is short for [type=foo] in localParams syntax
           String augmenterName = augmenterArgs.remove("type"); 
