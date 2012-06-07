@@ -384,6 +384,9 @@ public class ZkStateReader {
 
 	}
   
+  /**
+   * Get shard leader url.
+   */
   public String getLeaderUrl(String collection, String shard) throws InterruptedException, KeeperException {
     return getLeaderUrl(collection, shard, 1000);
   }
@@ -395,6 +398,9 @@ public class ZkStateReader {
     return props.getCoreUrl();
   }
   
+  /**
+   * Get shard leader properties.
+   */
   public ZkNodeProps getLeaderProps(String collection, String shard) throws InterruptedException {
     return getLeaderProps(collection, shard, 1000);
   }
@@ -414,12 +420,23 @@ public class ZkStateReader {
     throw new RuntimeException("No registered leader was found, collection:" + collection + " slice:" + shard);
   }
 
+  /**
+   * Get path where shard leader properties live in zookeeper.
+   */
   public static String getShardLeadersPath(String collection, String shardId) {
     return COLLECTIONS_ZKNODE + "/" + collection + "/"
         + SHARD_LEADERS_ZKNODE + (shardId != null ? ("/" + shardId)
         : "");
   }
-  
+
+  /**
+   * Get CoreNodeName for a core. This name is unique across the collection.  
+   * @param nodeName in form: 127.0.0.1:54065_solr
+   */
+  public static String getCoreNodeName(String nodeName, String coreName) {
+    return nodeName + "_" + coreName;
+  }
+
   public List<ZkCoreNodeProps> getReplicaProps(String collection,
       String shardId, String thisNodeName, String coreName) {
     return getReplicaProps(collection, shardId, thisNodeName, coreName, null);

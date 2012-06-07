@@ -755,8 +755,8 @@ New features
   value, custom similarities can now set a integer, float or byte value to the
   given Norm object. (Simon Willnauer)  
 
-* LUCENE-2604: Added RegexpQuery support to contrib/queryparser.
-  (Simon Willnauer, Robert Muir)
+* LUCENE-2604, LUCENE-4103: Added RegexpQuery support to contrib/queryparser.
+  (Simon Willnauer, Robert Muir, Daniel Truemper)
 
 * LUCENE-2373: Added a Codec implementation that works with append-only
   filesystems (such as e.g. Hadoop DFS). SegmentInfos writing/reading
@@ -880,6 +880,11 @@ New features
 * LUCENE-3523: Added oal.search.spell.WordBreakSpellChecker, which 
     generates suggestions by combining two or more terms and/or 
     breaking terms into multiple words.  See Javadocs for usage. (James Dyer)
+
+* LUCENE-4019: Added improved parsing of Hunspell Dictionaries so those
+  rules missing the required number of parameters either ignored or 
+  cause a ParseException (depending on whether strict parsing is enabled).
+  (Luca Cavanna via Chris Male)
    
 Optimizations
 
@@ -941,7 +946,13 @@ Optimizations
 
 * LUCENE-2357: Reduce transient RAM usage when merging segments in
   IndexWriter. (Adrien Grand via Mike McCandless)
-  
+
+* LUCENE-4098: Add bulk get/set methods to PackedInts (Adrien Grand
+  via Mike McCandless)
+
+* LUCENE-4108: add replaceTaxonomy to DirectoryTaxonomyWriter, which replaces
+  the taxonomy in place with the given one. (Shai Erera)
+
 Bug fixes
 
 * LUCENE-2803: The FieldCache can miss values if an entry for a reader
@@ -1008,6 +1019,12 @@ Bug fixes
 
 * LUCENE-4079: Fixed loading of Hunspell dictionaries that use aliasing (AF rules)
   (Ludovic Boutros via Chris Male)
+
+* LUCENE-4077: Expose the max score and per-group scores from
+  ToParentBlockJoinCollector (Christoph Kaser, Mike McCandless)
+
+* LUCENE-4114: Fix int overflow bugs in BYTES_FIXED_STRAIGHT and
+  BYTES_FIXED_DEREF doc values implementations (Walt Elder via Mike McCandless).
 
 Documentation
 

@@ -2129,7 +2129,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
         nextGen = bufferedDeletesStream.getNextGen();
       }
       if (infoStream.isEnabled("IW")) {
-        infoStream.message("IW", "publish sets newSegment delGen=" + nextGen + " seg=" + newSegment);
+        infoStream.message("IW", "publish sets newSegment delGen=" + nextGen + " seg=" + segString(newSegment));
       }
       newSegment.setBufferedDeletesGen(nextGen);
       segmentInfos.add(newSegment);
@@ -3239,7 +3239,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
     }
     for(SegmentInfoPerCommit info : merge.segments) {
       if (infoStream.isEnabled("IW")) {
-        infoStream.message("IW", "registerMerge info=" + info);
+        infoStream.message("IW", "registerMerge info=" + segString(info));
       }
       mergingSegments.add(info);
     }
@@ -3314,19 +3314,20 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
       checkpoint();
     }
 
-    Map<String,String> details = new HashMap<String,String>();
-    details.put("mergeMaxNumSegments", ""+merge.maxNumSegments);
-    details.put("mergeFactor", Integer.toString(merge.segments.size()));
-
     // Bind a new segment name here so even with
     // ConcurrentMergePolicy we keep deterministic segment
     // names.
     final String mergeSegmentName = newSegmentName();
-    SegmentInfo si = new SegmentInfo(directory, Constants.LUCENE_MAIN_VERSION, mergeSegmentName, -1, false, codec, details, null);
+    SegmentInfo si = new SegmentInfo(directory, Constants.LUCENE_MAIN_VERSION, mergeSegmentName, -1, false, codec, null, null);
     merge.info = new SegmentInfoPerCommit(si, 0, -1L);
 
     // Lock order: IW -> BD
     bufferedDeletesStream.prune(segmentInfos);
+
+    Map<String,String> details = new HashMap<String,String>();
+    details.put("mergeMaxNumSegments", ""+merge.maxNumSegments);
+    details.put("mergeFactor", Integer.toString(merge.segments.size()));
+    setDiagnostics(si, "merge", details);
 
     if (infoStream.isEnabled("IW")) {
       infoStream.message("IW", "merge seg=" + merge.info.info.name);
@@ -3479,11 +3480,11 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
 
           if (infoStream.isEnabled("IW")) {
             if (rld.getPendingDeleteCount() != 0) {
-              infoStream.message("IW", "seg=" + info + " delCount=" + info.getDelCount() + " pendingDelCount=" + rld.getPendingDeleteCount());
+              infoStream.message("IW", "seg=" + segString(info) + " delCount=" + info.getDelCount() + " pendingDelCount=" + rld.getPendingDeleteCount());
             } else if (info.getDelCount() != 0) {
-              infoStream.message("IW", "seg=" + info + " delCount=" + info.getDelCount());
+              infoStream.message("IW", "seg=" + segString(info) + " delCount=" + info.getDelCount());
             } else {
-              infoStream.message("IW", "seg=" + info + " no deletes");
+              infoStream.message("IW", "seg=" + segString(info) + " no deletes");
             }
           }
         }
