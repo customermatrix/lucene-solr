@@ -19,4 +19,9 @@ public class VirtualIndexSchema extends IndexSchema {
   public SchemaField getFieldOrNull(String fieldName) {
     return fields.get(fieldName);
   }
+
+  @Override
+  protected FieldType dynFieldType(String fieldName) {
+    return null;
+  }
 }
