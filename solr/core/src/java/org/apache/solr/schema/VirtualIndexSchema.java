@@ -14,4 +14,9 @@ public class VirtualIndexSchema extends IndexSchema {
   public void setUniqueKeyField(SchemaField uniqueKeyField) {
     this.uniqueKeyField = uniqueKeyField;
   }
+
+  @Override
+  public SchemaField getFieldOrNull(String fieldName) {
+    return fields.get(fieldName);
+  }
 }
