@@ -265,54 +265,58 @@ public class SimpleFacets {
 
 
     NamedList<Integer> counts;
-    SchemaField sf = searcher.getSchema().getField(field);
-    FieldType ft = sf.getType();
+		try {
+    	SchemaField sf = searcher.getSchema().getField(field);
+      FieldType ft = sf.getType();
 
-    // determine what type of faceting method to use
-    String method = params.getFieldParam(field, FacetParams.FACET_METHOD);
-    boolean enumMethod = FacetParams.FACET_METHOD_enum.equals(method);
+      // determine what type of faceting method to use
+      String method = params.getFieldParam(field, FacetParams.FACET_METHOD);
+      boolean enumMethod = FacetParams.FACET_METHOD_enum.equals(method);
 
-    // TODO: default to per-segment or not?
-    boolean per_segment = FacetParams.FACET_METHOD_fcs.equals(method);
+      // TODO: default to per-segment or not?
+      boolean per_segment = FacetParams.FACET_METHOD_fcs.equals(method);
 
-    if (method == null && ft instanceof BoolField) {
-      // Always use filters for booleans... we know the number of values is very small.
-      enumMethod = true;
-    }
-    boolean multiToken = sf.multiValued() || ft.multiValuedFieldCache();
+      if (method == null && ft instanceof BoolField) {
+        // Always use filters for booleans... we know the number of values is very small.
+        enumMethod = true;
+      }
+      boolean multiToken = sf.multiValued() || ft.multiValuedFieldCache();
 
-    if (TrieField.getMainValuePrefix(ft) != null) {
-      // A TrieField with multiple parts indexed per value... currently only
-      // UnInvertedField can handle this case, so force it's use.
-      enumMethod = false;
-      multiToken = true;
-    }
+      if (TrieField.getMainValuePrefix(ft) != null) {
+        // A TrieField with multiple parts indexed per value... currently only
+        // UnInvertedField can handle this case, so force it's use.
+        enumMethod = false;
+        multiToken = true;
+      }
 
-    if (params.getFieldBool(field, GroupParams.GROUP_FACET, false)) {
-      counts = getGroupedCounts(searcher, base, field, multiToken, offset,limit, mincount, missing, sort, prefix);
-    } else {
-      // unless the enum method is explicitly specified, use a counting method.
-      if (enumMethod) {
-        counts = getFacetTermEnumCounts(searcher, base, field, offset, limit, mincount,missing,sort,prefix);
+      if (params.getFieldBool(field, GroupParams.GROUP_FACET, false)) {
+        counts = getGroupedCounts(searcher, base, field, multiToken, offset,limit, mincount, missing, sort, prefix);
       } else {
-        if (multiToken) {
-          UnInvertedField uif = UnInvertedField.getUnInvertedField(field, searcher);
-          counts = uif.getCounts(searcher, base, offset, limit, mincount,missing,sort,prefix);
+        // unless the enum method is explicitly specified, use a counting method.
+        if (enumMethod) {
+          counts = getFacetTermEnumCounts(searcher, base, field, offset, limit, mincount,missing,sort,prefix);
         } else {
-          // TODO: future logic could use filters instead of the fieldcache if
-          // the number of terms in the field is small enough.
-          if (per_segment) {
-            PerSegmentSingleValuedFaceting ps = new PerSegmentSingleValuedFaceting(searcher, base, field, offset,limit, mincount, missing, sort, prefix);
-            Executor executor = threads == 0 ? directExecutor : facetExecutor;
-            ps.setNumThreads(threads);
-            counts = ps.getFacetCounts(executor);
+          if (multiToken) {
+            UnInvertedField uif = UnInvertedField.getUnInvertedField(field, searcher);
+            counts = uif.getCounts(searcher, base, offset, limit, mincount,missing,sort,prefix);
           } else {
-            counts = getFieldCacheCounts(searcher, base, field, offset,limit, mincount, missing, sort, prefix);
-          }
+            // TODO: future logic could use filters instead of the fieldcache if
+            // the number of terms in the field is small enough.
+            if (per_segment) {
+              PerSegmentSingleValuedFaceting ps = new PerSegmentSingleValuedFaceting(searcher, base, field, offset,limit, mincount, missing, sort, prefix);
+              Executor executor = threads == 0 ? directExecutor : facetExecutor;
+              ps.setNumThreads(threads);
+              counts = ps.getFacetCounts(executor);
+            } else {
+              counts = getFieldCacheCounts(searcher, base, field, offset,limit, mincount, missing, sort, prefix);
+            }
 
+          }
         }
       }
-    }
+		} catch (Exception e) {
+      counts = new NamedList<Integer>();
+    } 
 
     return counts;
   }

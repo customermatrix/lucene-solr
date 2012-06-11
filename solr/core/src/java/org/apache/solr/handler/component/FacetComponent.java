@@ -72,26 +72,19 @@ public class FacetComponent extends SearchComponent {
   @Override
   public void process(ResponseBuilder rb) throws IOException {
     if (rb.doFacets) {
-      try {
-        SolrParams params = rb.req.getParams();
-        SimpleFacets f = new SimpleFacets(rb.req, rb.getResults().docSet, params, rb);
-
-        NamedList<Object> counts = f.getFacetCounts();
-        String[] pivots = params.getParams(FacetParams.FACET_PIVOT);
-        if (pivots != null && pivots.length > 0) {
-          NamedList v = pivotHelper.process(rb, params, pivots);
-          if (v != null) {
-            counts.add(PIVOT_KEY, v);
-          }
-        }
-
-        // TODO ???? add this directly to the response, or to the builder?
-        rb.rsp.add("facet_counts", counts);
-      } catch (Exception e) {
-        if (log.isWarnEnabled()) {
-          log.warn("", e);
+      SolrParams params = rb.req.getParams();
+      SimpleFacets f = new SimpleFacets(rb.req, rb.getResults().docSet, params, rb);
+      NamedList<Object> counts = f.getFacetCounts();
+      String[] pivots = params.getParams(FacetParams.FACET_PIVOT);
+      if (pivots != null && pivots.length > 0) {
+        NamedList v = pivotHelper.process(rb, params, pivots);
+        if (v != null) {
+          counts.add(PIVOT_KEY, v);
         }
       }
+
+      // TODO ???? add this directly to the response, or to the builder?
+      rb.rsp.add("facet_counts", counts);
     }
   }
 
@@ -287,7 +280,6 @@ public class FacetComponent extends SearchComponent {
     for (ShardResponse srsp : sreq.responses) {
       int shardNum = rb.getShardNum(srsp.getShard());
       NamedList facet_counts = (NamedList) srsp.getSolrResponse().getResponse().get("facet_counts");
-
       // handle facet queries
       NamedList facet_queries = (NamedList) facet_counts.get("facet_queries");
       if (facet_queries != null) {
@@ -310,7 +302,7 @@ public class FacetComponent extends SearchComponent {
 
       // Distributed facet_dates
       //
-      // The implementation below uses the first encountered shard's 
+      // The implementation below uses the first encountered shard's
       // facet_dates as the basis for subsequent shards' data to be merged.
       // (the "NOW" param should ensure consistency)
       @SuppressWarnings("unchecked")
@@ -352,44 +344,44 @@ public class FacetComponent extends SearchComponent {
             }
           }
         }
-      }
 
-      // Distributed facet_ranges
-      //
-      // The implementation below uses the first encountered shard's 
-      // facet_ranges as the basis for subsequent shards' data to be merged.
-      @SuppressWarnings("unchecked")
-      SimpleOrderedMap<SimpleOrderedMap<Object>> facet_ranges =
-          (SimpleOrderedMap<SimpleOrderedMap<Object>>)
-              facet_counts.get("facet_ranges");
+        // Distributed facet_ranges
+        //
+        // The implementation below uses the first encountered shard's
+        // facet_ranges as the basis for subsequent shards' data to be merged.
+        @SuppressWarnings("unchecked")
+        SimpleOrderedMap<SimpleOrderedMap<Object>> facet_ranges =
+            (SimpleOrderedMap<SimpleOrderedMap<Object>>)
+                facet_counts.get("facet_ranges");
 
-      if (facet_ranges != null) {
+        if (facet_ranges != null) {
 
-        // go through each facet_range
-        for (Map.Entry<String, SimpleOrderedMap<Object>> entry : facet_ranges) {
-          final String field = entry.getKey();
-          if (fi.rangeFacets.get(field) == null) {
-            // first time we've seen this field, no merging
-            fi.rangeFacets.add(field, entry.getValue());
+          // go through each facet_range
+          for (Map.Entry<String, SimpleOrderedMap<Object>> entry : facet_ranges) {
+            final String field = entry.getKey();
+            if (fi.rangeFacets.get(field) == null) {
+              // first time we've seen this field, no merging
+              fi.rangeFacets.add(field, entry.getValue());
 
-          } else {
-            // not the first time, merge current field counts
+            } else {
+              // not the first time, merge current field counts
 
-            @SuppressWarnings("unchecked")
-            NamedList<Integer> shardFieldValues
-                = (NamedList<Integer>) entry.getValue().get("counts");
+              @SuppressWarnings("unchecked")
+              NamedList<Integer> shardFieldValues
+                  = (NamedList<Integer>) entry.getValue().get("counts");
 
-            @SuppressWarnings("unchecked")
-            NamedList<Integer> existFieldValues
-                = (NamedList<Integer>) fi.rangeFacets.get(field).get("counts");
+              @SuppressWarnings("unchecked")
+              NamedList<Integer> existFieldValues
+                  = (NamedList<Integer>) fi.rangeFacets.get(field).get("counts");
 
-            for (Map.Entry<String, Integer> existPair : existFieldValues) {
-              final String key = existPair.getKey();
-              // can be null if inconsistencies in shards responses
-              Integer newValue = shardFieldValues.get(key);
-              if (null != newValue) {
-                Integer oldValue = existPair.getValue();
-                existPair.setValue(oldValue + newValue);
+              for (Map.Entry<String, Integer> existPair : existFieldValues) {
+                final String key = existPair.getKey();
+                // can be null if inconsistencies in shards responses
+                Integer newValue = shardFieldValues.get(key);
+                if (null != newValue) {
+                  Integer oldValue = existPair.getValue();
+                  existPair.setValue(oldValue + newValue);
+                }
               }
             }
           }
