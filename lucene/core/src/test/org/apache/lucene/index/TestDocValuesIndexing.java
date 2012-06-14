@@ -1,6 +1,6 @@
 package org.apache.lucene.index;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -49,7 +49,6 @@ import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.util._TestUtil;
 import org.apache.lucene.util.LuceneTestCase.SuppressCodecs;
-import org.junit.Before;
 
 /**
  * 
@@ -72,7 +71,7 @@ public class TestDocValuesIndexing extends LuceneTestCase {
     for (int i = 0; i < 5; i++) {
       Document doc = new Document();
       doc.add(new PackedLongDocValuesField("docId", i));
-      doc.add(new TextField("docId", "" + i));
+      doc.add(new TextField("docId", "" + i, Field.Store.NO));
       writer.addDocument(doc);
     }
     writer.commit();
@@ -125,7 +124,7 @@ public class TestDocValuesIndexing extends LuceneTestCase {
     Directory d1 = newDirectory();
     RandomIndexWriter w = new RandomIndexWriter(random(), d1);
     Document doc = new Document();
-    doc.add(newField("id", "1", StringField.TYPE_STORED));
+    doc.add(newStringField("id", "1", Field.Store.YES));
     doc.add(new PackedLongDocValuesField("dv", 1));
     w.addDocument(doc);
     IndexReader r1 = w.getReader();
@@ -134,7 +133,7 @@ public class TestDocValuesIndexing extends LuceneTestCase {
     Directory d2 = newDirectory();
     w = new RandomIndexWriter(random(), d2);
     doc = new Document();
-    doc.add(newField("id", "2", StringField.TYPE_STORED));
+    doc.add(newStringField("id", "2", Field.Store.YES));
     doc.add(new PackedLongDocValuesField("dv", 2));
     w.addDocument(doc);
     IndexReader r2 = w.getReader();
@@ -704,7 +703,7 @@ public class TestDocValuesIndexing extends LuceneTestCase {
         }
       }
       doc.removeFields("id");
-      doc.add(new Field("id", idBase + i, StringField.TYPE_STORED));
+      doc.add(new StringField("id", idBase + i, Field.Store.YES));
       w.addDocument(doc);
 
       if (i % 7 == 0) {
@@ -800,7 +799,7 @@ public class TestDocValuesIndexing extends LuceneTestCase {
       int len = 1 + random().nextInt(50);
       for (int i = 0; i < numDocs; i++) {
         Document doc = new Document();
-        doc.add(newField("id", "" + i, TextField.TYPE_STORED));
+        doc.add(newTextField("id", "" + i, Field.Store.YES));
         String string = fixed ? _TestUtil.randomFixedByteLengthUnicodeString(random(),
             len) : _TestUtil.randomRealisticUnicodeString(random(), 1, len);
         BytesRef br = new BytesRef(string);
@@ -815,7 +814,7 @@ public class TestDocValuesIndexing extends LuceneTestCase {
       int numDocsNoValue = atLeast(10);
       for (int i = 0; i < numDocsNoValue; i++) {
         Document doc = new Document();
-        doc.add(newField("id", "noValue", TextField.TYPE_STORED));
+        doc.add(newTextField("id", "noValue", Field.Store.YES));
         w.addDocument(doc);
       }
       BytesRef bytesRef = new BytesRef(fixed ? len : 0);
@@ -828,7 +827,7 @@ public class TestDocValuesIndexing extends LuceneTestCase {
       for (int i = 0; i < numDocs; i++) {
         Document doc = new Document();
         String id = "" + i + numDocs;
-        doc.add(newField("id", id, TextField.TYPE_STORED));
+        doc.add(newTextField("id", id, Field.Store.YES));
         String string = fixed ? _TestUtil.randomFixedByteLengthUnicodeString(random(),
             len) : _TestUtil.randomRealisticUnicodeString(random(), 1, len);
         BytesRef br = new BytesRef(string);

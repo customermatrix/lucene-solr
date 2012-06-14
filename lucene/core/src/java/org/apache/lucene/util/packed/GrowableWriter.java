@@ -1,6 +1,6 @@
 package org.apache.lucene.util.packed;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -16,6 +16,10 @@ package org.apache.lucene.util.packed;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+import java.io.IOException;
+
+import org.apache.lucene.store.DataOutput;
 
 /**     
  * Implements {@link PackedInts.Mutable}, but grows the
@@ -109,6 +113,16 @@ public class GrowableWriter implements PackedInts.Mutable {
   public void fill(int fromIndex, int toIndex, long val) {
     ensureCapacity(val);
     current.fill(fromIndex, toIndex, val);
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    return current.ramBytesUsed();
+  }
+
+  @Override
+  public void save(DataOutput out) throws IOException {
+    current.save(out);
   }
 
 }

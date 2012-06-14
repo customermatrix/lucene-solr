@@ -50,7 +50,7 @@ import org.apache.lucene.facet.taxonomy.directory.DirectoryTaxonomyWriter;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -263,7 +263,7 @@ public abstract class FacetTestBase extends LuceneTestCase {
     CategoryDocumentBuilder builder = new CategoryDocumentBuilder(tw, iParams);
     builder.setCategoryPaths(categories);
     builder.build(d);
-    d.add(new Field("content", content, TextField.TYPE_STORED));
+    d.add(new TextField("content", content, Field.Store.YES));
     iw.addDocument(d);
   }
   

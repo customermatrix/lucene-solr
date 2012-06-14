@@ -1,6 +1,6 @@
 package org.apache.lucene.index;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -28,6 +28,7 @@ import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.analysis.tokenattributes.PayloadAttribute;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.PayloadProcessorProvider.ReaderPayloadProcessor;
@@ -104,7 +105,7 @@ public class TestPayloadProcessorProvider extends LuceneTestCase {
 
       called = true;
       byte[] p = new byte[] { 1 };
-      payload.setPayload(new Payload(p));
+      payload.setPayload(new BytesRef(p));
       term.append(t);
       return true;
     }
@@ -138,12 +139,12 @@ public class TestPayloadProcessorProvider extends LuceneTestCase {
     );
     TokenStream payloadTS1 = new PayloadTokenStream("p1");
     TokenStream payloadTS2 = new PayloadTokenStream("p2");
-    FieldType customType = new FieldType(TextField.TYPE_UNSTORED);
+    FieldType customType = new FieldType(TextField.TYPE_NOT_STORED);
     customType.setOmitNorms(true);
     for (int i = 0; i < NUM_DOCS; i++) {
       Document doc = new Document();
       doc.add(newField("id", "doc" + i, customType));
-      doc.add(newField("content", "doc content " + i, TextField.TYPE_UNSTORED));
+      doc.add(newTextField("content", "doc content " + i, Field.Store.NO));
       doc.add(new TextField("p", payloadTS1));
       doc.add(new TextField("p", payloadTS2));
       writer.addDocument(doc);

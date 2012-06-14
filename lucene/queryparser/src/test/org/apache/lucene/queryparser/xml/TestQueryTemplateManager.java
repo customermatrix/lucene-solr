@@ -1,6 +1,6 @@
 package org.apache.lucene.queryparser.xml;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -19,7 +19,7 @@ package org.apache.lucene.queryparser.xml;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.MockAnalyzer;
-import org.apache.lucene.document.TextField;
+import org.apache.lucene.document.Field;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
@@ -129,7 +129,7 @@ public class TestQueryTemplateManager extends LuceneTestCase {
       String name = st.nextToken().trim();
       if (st.hasMoreTokens()) {
         String value = st.nextToken().trim();
-        result.add(newField(name, value, TextField.TYPE_STORED));
+        result.add(newTextField(name, value, Field.Store.YES));
       }
     }
     return result;

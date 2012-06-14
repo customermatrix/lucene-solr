@@ -1,6 +1,6 @@
 package org.apache.lucene.codecs.lucene40.values;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -67,6 +67,7 @@ class FixedDerefBytesImpl {
       idxOut.writeInt(numValues);
       writeIndex(idxOut, docCount, numValues, docToEntry);
     }
+
   }
 
   public static class FixedDerefReader extends BytesReaderBase {

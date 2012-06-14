@@ -1,6 +1,6 @@
 package org.apache.lucene.index;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -185,13 +185,7 @@ final class SegmentMerger {
     if (previous == null) {
       previous = TypePromoter.getIdentityPromoter();
     }
-    TypePromoter promoted = previous.promote(incoming);
-    if (promoted == null) {
-      // type is incompatible: promote to BYTES_VAR_STRAIGHT
-      return TypePromoter.create(DocValues.Type.BYTES_VAR_STRAIGHT, TypePromoter.VAR_TYPE_VALUE_SIZE);
-    } else {
-      return promoted;
-    }
+    return previous.promote(incoming);
   }
 
   // NOTE: this is actually merging all the fieldinfos

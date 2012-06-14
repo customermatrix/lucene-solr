@@ -1,6 +1,6 @@
 package org.apache.lucene.index;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -38,7 +38,7 @@ import java.util.ArrayList;
  *  policy also does not over-merge (i.e. cascade merges). 
  *
  *  <p>For normal merging, this policy first computes a
- *  "budget" of how many segments are allowed by be in the
+ *  "budget" of how many segments are allowed to be in the
  *  index.  If the index is over-budget, then the policy
  *  sorts segments by decreasing size (pro-rating by percent
  *  deletes), and then finds the least-cost merge.  Merge

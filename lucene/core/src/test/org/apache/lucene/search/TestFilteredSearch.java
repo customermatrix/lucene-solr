@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -19,10 +19,10 @@ package org.apache.lucene.search;
 
 import java.io.IOException;
 
+import org.apache.lucene.document.Field;
 import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.analysis.MockAnalyzer;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.DirectoryReader;
@@ -67,7 +67,7 @@ public class TestFilteredSearch extends LuceneTestCase {
     try {
       for (int i = 0; i < 60; i++) {//Simple docs
         Document doc = new Document();
-        doc.add(newField(FIELD, Integer.toString(i), StringField.TYPE_STORED));
+        doc.add(newStringField(FIELD, Integer.toString(i), Field.Store.YES));
         writer.addDocument(doc);
       }
       if (fullMerge) {

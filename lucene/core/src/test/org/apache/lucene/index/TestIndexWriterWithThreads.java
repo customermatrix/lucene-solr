@@ -1,6 +1,6 @@
 package org.apache.lucene.index;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -477,7 +477,7 @@ public class TestIndexWriterWithThreads extends LuceneTestCase {
      public void run() {
        try {
          Document doc = new Document();
-         Field field = newField("field", "testData", TextField.TYPE_STORED);
+         Field field = newTextField("field", "testData", Field.Store.YES);
          doc.add(field);
          IndexWriter writer = new IndexWriter(dir, newIndexWriterConfig(
              TEST_VERSION_CURRENT, new MockAnalyzer(random())));

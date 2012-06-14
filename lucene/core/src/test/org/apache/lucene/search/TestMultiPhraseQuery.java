@@ -1,6 +1,6 @@
 package org.apache.lucene.search;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -23,6 +23,7 @@ import java.util.LinkedList;
 import org.apache.lucene.analysis.CannedTokenStream;
 import org.apache.lucene.analysis.Token;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
@@ -197,7 +198,7 @@ public class TestMultiPhraseQuery extends LuceneTestCase {
   
   private void add(String s, RandomIndexWriter writer) throws IOException {
     Document doc = new Document();
-    doc.add(newField("body", s, TextField.TYPE_STORED));
+    doc.add(newTextField("body", s, Field.Store.YES));
     writer.addDocument(doc);
   }
   
@@ -317,8 +318,8 @@ public class TestMultiPhraseQuery extends LuceneTestCase {
   private void add(String s, String type, RandomIndexWriter writer)
       throws IOException {
     Document doc = new Document();
-    doc.add(newField("body", s, TextField.TYPE_STORED));
-    doc.add(newField("type", type, StringField.TYPE_UNSTORED));
+    doc.add(newTextField("body", s, Field.Store.YES));
+    doc.add(newStringField("type", type, Field.Store.NO));
     writer.addDocument(doc);
   }
   

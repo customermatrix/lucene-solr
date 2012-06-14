@@ -1,12 +1,8 @@
 package org.apache.lucene.util;
 
-import org.apache.lucene.codecs.Codec;
-import org.apache.lucene.codecs.PostingsFormat;
-import org.apache.lucene.index.RandomCodec;
 import org.apache.lucene.search.BooleanQuery;
-import org.junit.internal.AssumptionViolatedException;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -32,27 +28,6 @@ final class TestRuleSetupAndRestoreInstanceEnv extends AbstractBeforeAfterRule {
 
   protected void before() {
     savedBoolMaxClauseCount = BooleanQuery.getMaxClauseCount();
-
-    Codec codec = Codec.getDefault();
-    if (LuceneTestCase.shouldAvoidCodec(codec.getName())) {
-      throw new AssumptionViolatedException(
-          "Method not allowed to use codec: " + codec.getName() + ".");
-    }
-    // TODO: make this more efficient
-    if (codec instanceof RandomCodec) {
-      for (String name : ((RandomCodec)codec).formatNames) {
-        if (LuceneTestCase.shouldAvoidCodec(name)) {
-          throw new AssumptionViolatedException(
-              "Method not allowed to use postings format: " + name + ".");
-        }
-      }
-    }
-    PostingsFormat pf = codec.postingsFormat();
-    if (LuceneTestCase.shouldAvoidCodec(pf.getName())) {
-      throw new AssumptionViolatedException(
-          "Method not allowed to use postings format: " + pf.getName() + ".");
-    }
-    
   }
 
   protected void after() {

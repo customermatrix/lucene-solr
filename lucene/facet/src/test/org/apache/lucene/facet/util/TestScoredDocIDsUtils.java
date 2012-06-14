@@ -30,7 +30,7 @@ import org.apache.lucene.facet.search.ScoredDocIDs;
 import org.apache.lucene.facet.search.ScoredDocIDsIterator;
 import org.apache.lucene.facet.search.ScoredDocIdCollector;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -189,8 +189,8 @@ public class TestScoredDocIDsUtils extends LuceneTestCase {
     protected final static String delTxt = "delete";
     protected final static String alphaTxt = "alpha";
     
-    private final static Field deletionMark = new StringField(field, delTxt);
-    private final static Field alphaContent = new StringField(field, alphaTxt);
+    private final static Field deletionMark = new StringField(field, delTxt, Field.Store.NO);
+    private final static Field alphaContent = new StringField(field, alphaTxt, Field.Store.NO);
     
     protected final int numDocs;
     

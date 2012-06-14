@@ -1,6 +1,6 @@
 package org.apache.lucene.search.vectorhighlight;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -42,12 +42,13 @@ public class SimpleFieldFragList extends FieldFragList {
    */
   @Override
   public void add( int startOffset, int endOffset, List<WeightedPhraseInfo> phraseInfoList ) {
-    float score = 0;
+    float totalBoost = 0;
     List<SubInfo> subInfos = new ArrayList<SubInfo>();
     for( WeightedPhraseInfo phraseInfo : phraseInfoList ){
       subInfos.add( new SubInfo( phraseInfo.getText(), phraseInfo.getTermsOffsets(), phraseInfo.getSeqnum() ) );
-      score += phraseInfo.getBoost();
+      totalBoost += phraseInfo.getBoost();
     }
-    getFragInfos().add( new WeightedFragInfo( startOffset, endOffset, subInfos, score ) );
+    getFragInfos().add( new WeightedFragInfo( startOffset, endOffset, subInfos, totalBoost ) );
   }
+  
 }

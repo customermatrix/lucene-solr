@@ -1,6 +1,6 @@
 package org.apache.lucene.util.fst;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -33,7 +33,6 @@ import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.lucene40.Lucene40PostingsFormat;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
@@ -65,6 +64,7 @@ import org.apache.lucene.util.fst.BytesRefFSTEnum.InputOutput;
 import org.apache.lucene.util.fst.FST.Arc;
 import org.apache.lucene.util.fst.FST.BytesReader;
 import org.apache.lucene.util.fst.PairOutputs.Pair;
+import org.apache.lucene.util.packed.PackedInts;
 
 @SuppressCodecs({ "SimpleText", "Memory" })
 public class TestFSTs extends LuceneTestCase {
@@ -436,13 +436,14 @@ public class TestFSTs extends LuceneTestCase {
       in.offset = 0;
       final T NO_OUTPUT = fst.outputs.getNoOutput();
       T output = NO_OUTPUT;
+      final FST.BytesReader fstReader = fst.getBytesReader(0);
 
       while(true) {
         // read all arcs:
-        fst.readFirstTargetArc(arc, arc);
+        fst.readFirstTargetArc(arc, arc, fstReader);
         arcs.add(new FST.Arc<T>().copyFrom(arc));
         while(!arc.isLast()) {
-          fst.readNextArc(arc);
+          fst.readNextArc(arc, fstReader);
           arcs.add(new FST.Arc<T>().copyFrom(arc));
         }
       
@@ -536,7 +537,7 @@ public class TestFSTs extends LuceneTestCase {
         if (VERBOSE) {
           System.out.println("TEST: now rewrite");
         }
-        final FST<T> packed = fst.pack(_TestUtil.nextInt(random, 1, 10), _TestUtil.nextInt(random, 0, 10000000));
+        final FST<T> packed = fst.pack(_TestUtil.nextInt(random, 1, 10), _TestUtil.nextInt(random, 0, 10000000), random.nextFloat());
         if (VERBOSE) {
           System.out.println("TEST: now verify packed FST");
         }
@@ -1182,7 +1183,7 @@ public class TestFSTs extends LuceneTestCase {
           if (rewriteIter == 1) {
             if (doRewrite) {
               // Verify again, with packed FST:
-              fst = fst.pack(_TestUtil.nextInt(random, 1, 10), _TestUtil.nextInt(random, 0, 10000000));
+              fst = fst.pack(_TestUtil.nextInt(random, 1, 10), _TestUtil.nextInt(random, 0, 10000000), random.nextFloat());
             } else {
               break;
             }
@@ -1324,7 +1325,7 @@ public class TestFSTs extends LuceneTestCase {
 
         if (doPack) {
           System.out.println("Pack...");
-          fst = fst.pack(4, 100000000);
+          fst = fst.pack(4, 100000000, random().nextFloat());
           System.out.println("New size " + fst.sizeInBytes() + " bytes");
         }
         
@@ -1621,7 +1622,7 @@ public class TestFSTs extends LuceneTestCase {
       RandomIndexWriter w = new RandomIndexWriter(random(), dir,
                                                   newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random())).setOpenMode(IndexWriterConfig.OpenMode.CREATE));
       Document doc = new Document();
-      Field idField = newField("id", "", StringField.TYPE_UNSTORED);
+      Field idField = newStringField("id", "", Field.Store.NO);
       doc.add(idField);
       
       final int NUM_IDS = atLeast(200);
@@ -1756,7 +1757,7 @@ public class TestFSTs extends LuceneTestCase {
     RandomIndexWriter w = new RandomIndexWriter(random(), dir,
                                                 newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random())).setOpenMode(IndexWriterConfig.OpenMode.CREATE));
     Document doc = new Document();
-    Field f = newField("field", "", StringField.TYPE_UNSTORED);
+    Field f = newStringField("field", "", Field.Store.NO);
     doc.add(f);
       
     final int NUM_TERMS = (int) (1000*RANDOM_MULTIPLIER * (1+random().nextDouble()));
@@ -1847,10 +1848,11 @@ public class TestFSTs extends LuceneTestCase {
         throws IOException {
         if (FST.targetHasArcs(arc)) {
           int childCount = 0;
-          for (arc = fst.readFirstTargetArc(arc, arc);; 
-               arc = fst.readNextArc(arc), childCount++)
+          FST.BytesReader fstReader = fst.getBytesReader(0);
+          for (arc = fst.readFirstTargetArc(arc, arc, fstReader);; 
+               arc = fst.readNextArc(arc, fstReader), childCount++)
           {
-            boolean expanded = fst.isExpandedTarget(arc);
+            boolean expanded = fst.isExpandedTarget(arc, fstReader);
             int children = verifyStateAndBelow(fst, new FST.Arc<Object>().copyFrom(arc), depth + 1);
 
             assertEquals(
@@ -1926,7 +1928,7 @@ public class TestFSTs extends LuceneTestCase {
     final Long nothing = outputs.getNoOutput();
     final Builder<Long> b = new Builder<Long>(FST.INPUT_TYPE.BYTE1, outputs);
 
-    final FST<Long> fst = new FST<Long>(FST.INPUT_TYPE.BYTE1, outputs, false);
+    final FST<Long> fst = new FST<Long>(FST.INPUT_TYPE.BYTE1, outputs, false, PackedInts.COMPACT);
 
     final Builder.UnCompiledNode<Long> rootNode = new Builder.UnCompiledNode<Long>(b, 0);
 
@@ -1982,12 +1984,13 @@ public class TestFSTs extends LuceneTestCase {
     assertEquals(nothing, startArc.output);
     assertEquals(nothing, startArc.nextFinalOutput);
 
-    FST.Arc<Long> arc = fst.readFirstTargetArc(startArc, new FST.Arc<Long>());
+    FST.Arc<Long> arc = fst.readFirstTargetArc(startArc, new FST.Arc<Long>(),
+                                               fst.getBytesReader(0));
     assertEquals('a', arc.label);
     assertEquals(17, arc.nextFinalOutput.longValue());
     assertTrue(arc.isFinal());
 
-    arc = fst.readNextArc(arc);
+    arc = fst.readNextArc(arc, fst.getBytesReader(0));
     assertEquals('b', arc.label);
     assertFalse(arc.isFinal());
     assertEquals(42, arc.output.longValue());

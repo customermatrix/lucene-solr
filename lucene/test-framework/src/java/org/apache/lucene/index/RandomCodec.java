@@ -1,6 +1,6 @@
 package org.apache.lucene.index;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -99,8 +99,8 @@ public class RandomCodec extends Lucene40Codec {
         new NestedPulsingPostingsFormat(),
         new Lucene40WithOrds(),
         new SimpleTextPostingsFormat(),
-        new MemoryPostingsFormat(true),
-        new MemoryPostingsFormat(false));
+        new MemoryPostingsFormat(true, random.nextFloat()),
+        new MemoryPostingsFormat(false, random.nextFloat()));
 
     Collections.shuffle(formats, random);
   }

@@ -1,6 +1,6 @@
 package org.apache.lucene.codecs.lucene3x;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -97,7 +97,7 @@ class PreFlexRWNormsConsumer extends PerDocConsumer {
     }
     return new Lucene3xNormsDocValuesConsumer(fieldInfo);
   }
-  
+
   class Lucene3xNormsDocValuesConsumer extends DocValuesConsumer {
     // Holds all docID/norm pairs we've seen
     private int[] docIDs = new int[1];
@@ -168,7 +168,11 @@ class PreFlexRWNormsConsumer extends PerDocConsumer {
     protected Type getType() {
       return Type.FIXED_INTS_8;
     }
-    
+  
+    @Override
+    public int getValueSize() {
+      return 1;
+    }
     
   }
   

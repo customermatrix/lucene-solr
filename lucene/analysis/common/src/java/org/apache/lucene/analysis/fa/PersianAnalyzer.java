@@ -1,6 +1,6 @@
 package org.apache.lucene.analysis.fa;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -139,7 +139,7 @@ public final class PersianAnalyzer extends StopwordAnalyzerBase {
    * Wraps the Reader with {@link PersianCharFilter}
    */
   @Override
-  protected Reader initReader(Reader reader) {
+  protected Reader initReader(String fieldName, Reader reader) {
     return matchVersion.onOrAfter(Version.LUCENE_31) ? 
        new PersianCharFilter(CharReader.get(reader)) :
        reader;

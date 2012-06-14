@@ -1,6 +1,6 @@
 package org.apache.solr.client.solrj.impl;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -197,7 +197,8 @@ public class CloudSolrServer extends SolrServer {
     return rsp.getResponse();
   }
 
-  public void close() {
+  @Override
+  public void shutdown() {
     if (zkStateReader != null) {
       synchronized(this) {
         if (zkStateReader!= null)

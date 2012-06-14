@@ -1,6 +1,6 @@
 package org.apache.lucene.index;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -17,6 +17,7 @@ package org.apache.lucene.index;
  * limitations under the License.
  */
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -27,6 +28,7 @@ import org.apache.lucene.analysis.CannedTokenStream;
 import org.apache.lucene.analysis.MockAnalyzer;
 import org.apache.lucene.analysis.MockPayloadAnalyzer;
 import org.apache.lucene.analysis.Token;
+import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
@@ -39,6 +41,7 @@ import org.apache.lucene.search.FieldCache;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.English;
+import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.util.LuceneTestCase.SuppressCodecs;
 import org.apache.lucene.util._TestUtil;
@@ -61,7 +64,7 @@ public class TestPostingsOffsets extends LuceneTestCase {
     RandomIndexWriter w = new RandomIndexWriter(random(), dir, iwc);
     Document doc = new Document();
 
-    FieldType ft = new FieldType(TextField.TYPE_UNSTORED);
+    FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
     ft.setIndexOptions(FieldInfo.IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS);
     if (random().nextBoolean()) {
       ft.setStoreTermVectors(true);
@@ -142,7 +145,7 @@ public class TestPostingsOffsets extends LuceneTestCase {
       Document doc = new Document();
       doc.add(new Field("numbers", English.intToEnglish(i), ft));
       doc.add(new Field("oddeven", (i % 2) == 0 ? "even" : "odd", ft));
-      doc.add(new StringField("id", "" + i));
+      doc.add(new StringField("id", "" + i, Field.Store.NO));
       w.addDocument(doc);
     }
     
@@ -224,7 +227,7 @@ public class TestPostingsOffsets extends LuceneTestCase {
     final int numDocs = atLeast(20);
     //final int numDocs = atLeast(5);
 
-    FieldType ft = new FieldType(TextField.TYPE_UNSTORED);
+    FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
 
     // TODO: randomize what IndexOptions we use; also test
     // changing this up in one IW buffered segment...:
@@ -237,7 +240,7 @@ public class TestPostingsOffsets extends LuceneTestCase {
 
     for(int docCount=0;docCount<numDocs;docCount++) {
       Document doc = new Document();
-      doc.add(new IntField("id", docCount));
+      doc.add(new IntField("id", docCount, Field.Store.NO));
       List<Token> tokens = new ArrayList<Token>();
       final int numTokens = atLeast(100);
       //final int numTokens = atLeast(20);
@@ -381,6 +384,109 @@ public class TestPostingsOffsets extends LuceneTestCase {
     ir.close();
     riw.close();
     dir.close();
+  }
+  
+  public void testAddFieldTwice() throws Exception {
+    Directory dir = newDirectory();
+    RandomIndexWriter iw = new RandomIndexWriter(random(), dir);
+    Document doc = new Document();
+    FieldType customType3 = new FieldType(TextField.TYPE_STORED);
+    customType3.setStoreTermVectors(true);
+    customType3.setStoreTermVectorPositions(true);
+    customType3.setStoreTermVectorOffsets(true);    
+    customType3.setIndexOptions(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS);
+    doc.add(new Field("content3", "here is more content with aaa aaa aaa", customType3));
+    doc.add(new Field("content3", "here is more content with aaa aaa aaa", customType3));
+    iw.addDocument(doc);
+    iw.close();
+    dir.close(); // checkindex
+  }
+  
+  // NOTE: the next two tests aren't that good as we need an EvilToken...
+  public void testNegativeOffsets() throws Exception {
+    try {
+      checkTokens(new Token[] { 
+          makeToken("foo", 1, -1, -1)
+      });
+      fail();
+    } catch (IllegalArgumentException expected) {
+      //expected
+    }
+  }
+  
+  public void testIllegalOffsets() throws Exception {
+    try {
+      checkTokens(new Token[] { 
+          makeToken("foo", 1, 1, 0)
+      });
+      fail();
+    } catch (IllegalArgumentException expected) {
+      //expected
+    }
+  }
+   
+  public void testBackwardsOffsets() throws Exception {
+    try {
+      checkTokens(new Token[] { 
+         makeToken("foo", 1, 0, 3),
+         makeToken("foo", 1, 4, 7),
+         makeToken("foo", 0, 3, 6)
+      });
+      fail();
+    } catch (IllegalArgumentException expected) {
+      // expected
+    }
+  }
+  
+  public void testLegalbutVeryLargeOffsets() throws Exception {
+    Directory dir = newDirectory();
+    IndexWriter iw = new IndexWriter(dir, newIndexWriterConfig(TEST_VERSION_CURRENT, null));
+    Document doc = new Document();
+    Token t1 = new Token("foo", 0, Integer.MAX_VALUE-500);
+    if (random().nextBoolean()) {
+      t1.setPayload(new BytesRef("test"));
+    }
+    Token t2 = new Token("foo", Integer.MAX_VALUE-500, Integer.MAX_VALUE);
+    TokenStream tokenStream = new CannedTokenStream(
+        new Token[] { t1, t2 }
+    );
+    FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+    ft.setIndexOptions(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS);
+    // store some term vectors for the checkindex cross-check
+    ft.setStoreTermVectors(true);
+    ft.setStoreTermVectorPositions(true);
+    ft.setStoreTermVectorOffsets(true);
+    Field field = new Field("foo", tokenStream, ft);
+    doc.add(field);
+    iw.addDocument(doc);
+    iw.close();
+    dir.close();
+  }
+  // TODO: more tests with other possibilities
+  
+  private void checkTokens(Token[] tokens) throws IOException {
+    Directory dir = newDirectory();
+    RandomIndexWriter riw = new RandomIndexWriter(random(), dir, iwc);
+    boolean success = false;
+    try {
+      FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+      ft.setIndexOptions(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS);
+      // store some term vectors for the checkindex cross-check
+      ft.setStoreTermVectors(true);
+      ft.setStoreTermVectorPositions(true);
+      ft.setStoreTermVectorOffsets(true);
+     
+      Document doc = new Document();
+      doc.add(new Field("body", new CannedTokenStream(tokens), ft));
+      riw.addDocument(doc);
+      success = true;
+    } finally {
+      if (success) {
+        IOUtils.close(riw, dir);
+      } else {
+        IOUtils.closeWhileHandlingException(riw, dir);
+      }
+    }
   }
 
   private Token makeToken(String text, int posIncr, int startOffset, int endOffset) {

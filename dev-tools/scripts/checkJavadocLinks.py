@@ -171,7 +171,9 @@ def checkAll(dirName):
         elif link.find('lucene.apache.org/solr/features.html') != -1:
           # OK
           pass
-        elif link.find('svn.apache.org') != -1 or link.find('lucene.apache.org') != -1:
+        elif (link.find('svn.apache.org') != -1
+              or link.find('lucene.apache.org') != -1)\
+             and os.path.basename(fullPath) != 'Changes.html':
           if not printed:
             printed = True
             print
@@ -209,14 +211,13 @@ def checkAll(dirName):
         print '  BROKEN ANCHOR: %s' % origLink
 
     failures = failures or printed
-    
-  if failures:
+
+  return failures   
+
+if __name__ == '__main__':
+  if checkAll(sys.argv[1]):
     print
     print 'Broken javadocs links were found!'
     sys.exit(1)
-  else:
-    sys.exit(0)
-        
-if __name__ == '__main__':
-  checkAll(sys.argv[1])
+  sys.exit(0)
   

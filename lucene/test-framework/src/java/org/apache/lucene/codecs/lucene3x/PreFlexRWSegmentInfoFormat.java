@@ -2,7 +2,7 @@ package org.apache.lucene.codecs.lucene3x;
 
 import org.apache.lucene.codecs.SegmentInfoWriter;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -26,7 +26,7 @@ class PreFlexRWSegmentInfoFormat extends Lucene3xSegmentInfoFormat {
   private final SegmentInfoWriter writer = new PreFlexRWSegmentInfoWriter();
 
   @Override
-  public SegmentInfoWriter getSegmentInfosWriter() {
+  public SegmentInfoWriter getSegmentInfoWriter() {
     return writer;
   }
 }

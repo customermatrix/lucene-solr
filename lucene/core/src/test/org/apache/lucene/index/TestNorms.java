@@ -1,6 +1,6 @@
 package org.apache.lucene.index;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -67,8 +67,8 @@ public class TestNorms extends LuceneTestCase {
     config.setSimilarity(new CustomNormEncodingSimilarity());
     RandomIndexWriter writer = new RandomIndexWriter(random(), dir, config);
     Document doc = new Document();
-    Field foo = newField("foo", "", TextField.TYPE_UNSTORED);
-    Field bar = newField("bar", "", TextField.TYPE_UNSTORED);
+    Field foo = newTextField("foo", "", Field.Store.NO);
+    Field bar = newTextField("bar", "", Field.Store.NO);
     doc.add(foo);
     doc.add(bar);
     
@@ -188,8 +188,7 @@ public class TestNorms extends LuceneTestCase {
     for (int i = 0; i < num; i++) {
       Document doc = docs.nextDoc();
       int boost = writeNorms ? 1 + random().nextInt(255) : 0;
-      Field f = new Field(byteTestField, "" + boost,
-          TextField.TYPE_STORED);
+      Field f = new TextField(byteTestField, "" + boost, Field.Store.YES);
       f.setBoost(boost);
       doc.add(f);
       writer.addDocument(doc);
@@ -247,6 +246,5 @@ public class TestNorms extends LuceneTestCase {
         norm.setByte((byte) (0xFF & boost));
       }
     }
-  }
- 
+  } 
 }

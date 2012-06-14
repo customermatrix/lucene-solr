@@ -6,7 +6,7 @@ http://s.apache.org/luceneversions
 For "contrib" changes prior to 4.0, please see:
 http://svn.apache.org/repos/asf/lucene/dev/tags/lucene_solr_3_6_0/lucene/contrib/CHANGES.txt
 
-======================= Lucene 4.0.0 =======================
+======================= Lucene 4.0.0-ALPHA =======================
 More information about this release, including any errata related to the 
 release notes, upgrade instructions, or other changes may be found online at:
    https://wiki.apache.org/lucene-java/Lucene4.0
@@ -384,6 +384,13 @@ Changes in Runtime Behavior
   any of the calls to the Analyzer throw an IOException.  QueryParseBase.analyzeRangePart()
   will throw a RuntimException if an IOException is thrown by the Analyzer.
 
+* LUCENE-4127: IndexWriter will now throw IllegalArgumentException if
+  the first token of an indexed field has 0 positionIncrement
+  (previously it silently corrected it to 1, possibly masking bugs).
+  OffsetAttributeImpl will throw IllegalArgumentException if startOffset
+  is less than endOffset, or if offsets are negative.
+  (Robert Muir, Mike McCandless)
+
 API Changes
 
 * LUCENE-2302, LUCENE-1458, LUCENE-2111, LUCENE-2514: Terms are no longer
@@ -517,6 +524,8 @@ API Changes
 
 * LUCENE-4063: FrenchLightStemmer no longer deletes repeated digits.
   (Tanguy Moal via Steve Rowe)
+
+* LUCENE-4122: Replace Payload with BytesRef. (Andrzej Bialecki)
 
 New features
 
@@ -886,6 +895,9 @@ New features
   cause a ParseException (depending on whether strict parsing is enabled).
   (Luca Cavanna via Chris Male)
    
+* LUCENE-3440: Add ordered fragments feature with IDF-weighted terms for FVH.
+  (Sebastian Lutze via Koji Sekiguchi)
+
 Optimizations
 
 * LUCENE-2588: Don't store unnecessary suffixes when writing the terms
@@ -945,7 +957,7 @@ Optimizations
   implementations (Adrien Grand via Mike McCandless)
 
 * LUCENE-2357: Reduce transient RAM usage when merging segments in
-  IndexWriter. (Adrien Grand via Mike McCandless)
+  IndexWriter. (Adrien Grand)
 
 * LUCENE-4098: Add bulk get/set methods to PackedInts (Adrien Grand
   via Mike McCandless)

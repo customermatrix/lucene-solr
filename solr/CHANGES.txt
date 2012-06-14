@@ -20,7 +20,7 @@ See the tutorial at http://lucene.apache.org/solr/tutorial.html
 
 $Id$
 
-==================  4.0.0 ==================
+==================  4.0.0-ALPHA ==================
 More information about this release, including any errata related to the 
 release notes, upgrade instructions, or other changes may be found online at:
    https://wiki.apache.org/solr/Solr4.0
@@ -248,6 +248,8 @@ New Features
       LastFieldValueUpdateProcessorFactory
       MinFieldValueUpdateProcessorFactory
       MaxFieldValueUpdateProcessorFactory
+      TruncateFieldUpdateProcessorFactory
+      IgnoreFieldUpdateProcessorFactory 
   (hossman, janhoy)
 
 * SOLR-3120: Optional post filtering for spatial queries bbox and geofilt
@@ -347,6 +349,15 @@ New Features
     {"delete":{"id":"myid", "_version_":123456789}}
   (yonik)
 
+* SOLR-3211:  Allow parameter overrides in conjunction with "spellcheck.maxCollationTries".
+  To do so, use parameters starting with "spellcheck.collateParam."  For instance, to
+  override the "mm" parameter, specify "spellcheck.collateParam.mm".  This is helpful
+  in cases where testing spellcheck collations for result counts should use different
+  parameters from the main query (James Dyer)
+
+* SOLR-2599: CloneFieldUpdateProcessorFactory provides similar functionality 
+  to schema.xml's <copyField/> declaration but as an update processor that can 
+  be combined with other processors in any order. (Jan Høydahl & hossman)
 
 Optimizations
 ----------------------
@@ -481,6 +492,12 @@ Bug Fixes
   
 * SOLR-2923: IllegalArgumentException when using useFilterForSortedQuery on an 
   empty index. (Adrien Grand via Mark Miller)
+
+* SOLR-2352: Fixed TermVectorComponent so that it will not fail if the fl 
+  param contains globs or psuedo-fields (hossman)
+
+* SOLR-3541: add missing solrj dependencies to binary packages.
+  (Thijs Vonk via siren)
 
 Other Changes
 ----------------------

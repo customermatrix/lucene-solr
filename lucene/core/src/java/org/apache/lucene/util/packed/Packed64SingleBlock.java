@@ -1,6 +1,6 @@
 package org.apache.lucene.util.packed;
 
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements. See the NOTICE file distributed with this
  * work for additional information regarding copyright ownership. The ASF
@@ -282,6 +282,11 @@ abstract class Packed64SingleBlock extends PackedInts.MutableImpl {
 
   public long ramBytesUsed() {
     return RamUsageEstimator.sizeOf(blocks);
+  }
+
+  @Override
+  protected int getFormat() {
+    return PackedInts.PACKED_SINGLE_BLOCK;
   }
 
   @Override

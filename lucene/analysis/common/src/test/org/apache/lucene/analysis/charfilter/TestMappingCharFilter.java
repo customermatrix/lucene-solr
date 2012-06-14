@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -192,7 +192,7 @@ public class TestMappingCharFilter extends BaseTokenStreamTestCase {
       }
 
       @Override
-      protected Reader initReader(Reader reader) {
+      protected Reader initReader(String fieldName, Reader reader) {
         return new MappingCharFilter(normMap, CharReader.get(reader));
       }
     };
@@ -218,7 +218,7 @@ public class TestMappingCharFilter extends BaseTokenStreamTestCase {
       }
 
       @Override
-      protected Reader initReader(Reader reader) {
+      protected Reader initReader(String fieldName, Reader reader) {
         return new MappingCharFilter(map, CharReader.get(reader));
       }
     };
@@ -240,7 +240,7 @@ public class TestMappingCharFilter extends BaseTokenStreamTestCase {
         }
 
         @Override
-        protected Reader initReader(Reader reader) {
+        protected Reader initReader(String fieldName, Reader reader) {
           return new MappingCharFilter(map, CharReader.get(reader));
         }
       };
