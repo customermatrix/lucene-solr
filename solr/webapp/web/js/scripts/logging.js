@@ -317,7 +317,7 @@ var load_logging_viewer = function()
         for( var i = 0; i < docs_count; i++ )
         {
           var doc = docs[i];
-          var has_trace = 'undefined' !== typeof( doc.trace );
+          var has_trace = 'undefined' !== typeof( doc.trace ) && doc.trace != null;
 
           doc.logger = '<abbr title="' + doc.logger.esc() + '">' + doc.logger.split( '.' ).pop().esc() + '</abbr>';
 
@@ -331,7 +331,7 @@ var load_logging_viewer = function()
             content += '<td class="span"><a><span>' + format_time( doc.time ) + '</span></a></td>' + "\n";
             content += '<td class="level span"><a><span>' + doc.level.esc() + '</span></span></a></td>' + "\n";
             content += '<td class="span"><a><span>' + doc.logger + '</span></a></td>' + "\n";
-            content += '<td class="message span"><a><span>' + doc.message.replace( /,/g, ',&#8203;' ).esc() + '</span></a></td>' + "\n";
+            content += '<td class="message span"><a><span>' + doc.message.replace( /,/g, ',&#8203;' ).esc() + '&nbsp;</span></a></td>' + "\n";
           content += '</tr>' + "\n";
 
           if( has_trace )
