@@ -26,6 +26,8 @@ import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.request.SolrQueryRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
@@ -35,6 +37,7 @@ import java.util.*;
  *
  */
 public abstract class QParser {
+  private final Logger logger = LoggerFactory.getLogger(QParser.class);
   protected String qstr;
   protected SolrParams params;
   protected SolrParams localParams;
@@ -281,7 +284,13 @@ public abstract class QParser {
 
     Sort sort = null;
     if( sortStr != null ) {
-      sort = QueryParsing.parseSort(sortStr, req);
+      try {
+        sort = QueryParsing.parseSort(sortStr, req);
+      } catch (Exception e) {
+        if (logger.isWarnEnabled()) {
+          logger.warn("Invalid sort '" + sort + "' field requested", e);
+        }
+      }
     }
     return new SortSpec( sort, start, rows );
   }
