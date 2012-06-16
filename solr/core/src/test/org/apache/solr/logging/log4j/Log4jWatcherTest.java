@@ -32,27 +32,26 @@ public class Log4jWatcherTest {
     long beforeLogging = System.currentTimeMillis();
     Log4jWatcher watcher = new Log4jWatcher("test");
     watcher.registerListener(new ListenerConfig(), null);
-    int count = 2;
-    triggerWarnMessages(count);
+    triggerWarnMessages(2);
     triggerInfoMessages(1);
     long afterLogging = System.currentTimeMillis();
     System.out.println(watcher.getHistory(beforeLogging-1, null));
-    verify((int) watcher.getHistory(beforeLogging-1, null).getNumFound(), count);
+    verify((int) watcher.getHistory(beforeLogging-1, null).getNumFound(), 2);
     verify((int) watcher.getHistory(afterLogging, null).getNumFound(), 0);
   }
 
-  // can't change programmatically level in log4j
-//  @Test
-//  public void should_detect_also_new_info_messages() {
-//    long beforeLogging = System.currentTimeMillis();
-//    Log4jWatcher watcher = new Log4jWatcher("test");
-//    watcher.setLogLevel("test-logger", "INFO");
-//    watcher.registerListener(new ListenerConfig(), null);
-//    int count = 4;
-//    triggerWarnMessages(count/2);
-//    triggerInfoMessages(count/2);
-//    verify((int) watcher.getHistory(beforeLogging-1, null).getNumFound(), count);
-//  }
+  @Test
+  public void can_change_log_level() {
+    long beforeLogging = System.currentTimeMillis();
+    Log4jWatcher watcher = new Log4jWatcher("test");
+    ListenerConfig cfg = new ListenerConfig();
+    cfg.threshold = "INFO";
+    watcher.setLogLevel("test-logger", "WARN");
+    watcher.registerListener(cfg, null);
+    triggerWarnMessages(2);
+    triggerInfoMessages(2);
+    verify((int) watcher.getHistory(beforeLogging-1, null).getNumFound(), 2);
+  }
 
   private void verify(int numFound, int historyCount) {
     assertThat(numFound, IsEqual.equalTo(historyCount));
