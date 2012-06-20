@@ -266,7 +266,12 @@ public class SimpleFacets {
 
     NamedList<Integer> counts;
 		try {
-    	SchemaField sf = searcher.getSchema().getField(field);
+    	SchemaField sf = searcher.getSchema().getVirtualField(field);
+
+      if (!sf.getName().equals(field)) {
+        field = sf.getName();
+      }
+
       FieldType ft = sf.getType();
 
       // determine what type of faceting method to use
@@ -832,7 +837,7 @@ public class SimpleFacets {
 
     final NamedList<Object> resInner = new SimpleOrderedMap<Object>();
     resOuter.add(key, resInner);
-    final SchemaField sf = schema.getField(f);
+    final SchemaField sf = schema.getVirtualField(f);
     if (! (sf.getType() instanceof DateField)) {
       throw new SolrException
           (SolrException.ErrorCode.BAD_REQUEST,
@@ -1001,7 +1006,7 @@ public class SimpleFacets {
     parseParams(FacetParams.FACET_RANGE, facetRange);
     String f = facetValue;
 
-    final SchemaField sf = schema.getField(f);
+    final SchemaField sf = schema.getVirtualField(f);
     final FieldType ft = sf.getType();
 
     RangeEndpointCalculator<?> calc = null;

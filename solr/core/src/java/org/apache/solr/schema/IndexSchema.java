@@ -301,6 +301,15 @@ public class IndexSchema {
     queryAnalyzer = new SolrQueryAnalyzer();
   }
 
+  public SchemaField getVirtualField(String f) {
+    for (SchemaField schemaField : getFields().values()) {
+      if (schemaField.getName().startsWith(f + ".")) {
+        return schemaField;
+      }
+    }
+    return getFields().get(f);
+  }
+
   private class SolrIndexAnalyzer extends AnalyzerWrapper {
     protected final HashMap<String, Analyzer> analyzers;
 
