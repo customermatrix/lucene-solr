@@ -25,13 +25,7 @@ import org.apache.zookeeper.Watcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Watcher for node state changes.
@@ -44,7 +38,7 @@ public class NodeStateWatcher implements Watcher {
     void coreChanged(String nodeName, Set<CoreState> states)
         throws KeeperException, InterruptedException;
     void coreDeleted(String nodeName, Collection<CoreState> states)
-    throws KeeperException, InterruptedException;
+        throws KeeperException, InterruptedException;
   }
 
   private final SolrZkClient zkClient;
@@ -53,13 +47,13 @@ public class NodeStateWatcher implements Watcher {
   private final NodeStateChangeListener listener;
   private final String nodeName;
 
-  
+
   public Set<CoreState> getCurrentState() {
     return currentState;
   }
 
   public NodeStateWatcher(SolrZkClient zkClient, String nodeName, String path,
-      NodeStateChangeListener listener) throws KeeperException, InterruptedException {
+                          NodeStateChangeListener listener) throws KeeperException, InterruptedException {
     this.nodeName = nodeName;
     this.zkClient = zkClient;
     this.path = path;
@@ -77,64 +71,61 @@ public class NodeStateWatcher implements Watcher {
       return;
     } catch (Exception e) {
       log.warn("Error processing state change", e);
-    } 
+    }
   }
 
   private void processStateChange() throws KeeperException, InterruptedException {
-    if (zkClient.isClosed()) {
-      return;
-    }
     byte[] data = zkClient.getData(path, this, null, true);
 
     if (data != null) {
-        CoreState[] states = CoreState.load(data);
-        List<CoreState> stateList = Arrays.asList(states);
-        HashSet<CoreState> modifiedCores = new HashSet<CoreState>();
-        modifiedCores.addAll(stateList);
-        modifiedCores.removeAll(currentState);
+      CoreState[] states = CoreState.load(data);
+      List<CoreState> stateList = Arrays.asList(states);
+      HashSet<CoreState> modifiedCores = new HashSet<CoreState>();
+      modifiedCores.addAll(stateList);
+      modifiedCores.removeAll(currentState);
 
-        HashSet<CoreState> newState = new HashSet<CoreState>();
-        newState.addAll(stateList);
-        
-        HashMap<String, CoreState> lookup = new HashMap<String, CoreState>();
-        for(CoreState state: states) {
-          lookup.put(state.getCoreName(), state);
-        }
+      HashSet<CoreState> newState = new HashSet<CoreState>();
+      newState.addAll(stateList);
 
-        //check for status change
-        for(CoreState state: currentState) {
-          if(lookup.containsKey(state.getCoreName())) {
-            if(!state.getProperties().equals(lookup.get(state.getCoreName()).getProperties())) {
-              modifiedCores.add(lookup.get(state.getCoreName()));
-            }
+      HashMap<String, CoreState> lookup = new HashMap<String, CoreState>();
+      for(CoreState state: states) {
+        lookup.put(state.getCoreName(), state);
+      }
+
+      //check for status change
+      for(CoreState state: currentState) {
+        if(lookup.containsKey(state.getCoreName())) {
+          if(!state.getProperties().equals(lookup.get(state.getCoreName()).getProperties())) {
+            modifiedCores.add(lookup.get(state.getCoreName()));
           }
         }
-        
-        HashMap<String, CoreState> deletedCores = new HashMap<String, CoreState>();
-        for(CoreState state: currentState) {
-          deletedCores.put(state.getCoreNodeName(), state);
-        }
+      }
 
-        for(CoreState state: stateList) {
-          deletedCores.remove(state.getCoreNodeName());
-        }
+      HashMap<String, CoreState> deletedCores = new HashMap<String, CoreState>();
+      for(CoreState state: currentState) {
+        deletedCores.put(state.getCoreNodeName(), state);
+      }
 
-        if (deletedCores.size() > 0) {
-          listener.coreDeleted(nodeName, deletedCores.values());
-        }
-        
-        currentState = Collections.unmodifiableSet(newState);
+      for(CoreState state: stateList) {
+        deletedCores.remove(state.getCoreNodeName());
+      }
 
-        if (modifiedCores.size() > 0) {
-          try {
-            listener.coreChanged(nodeName, Collections.unmodifiableSet(modifiedCores));
-          } catch (KeeperException e) {
-            log.warn("Could not talk to ZK", e);
-          } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.warn("Could not talk to ZK", e);
-          }
+      if (deletedCores.size() > 0) {
+        listener.coreDeleted(nodeName, deletedCores.values());
+      }
+
+      currentState = Collections.unmodifiableSet(newState);
+
+      if (modifiedCores.size() > 0) {
+        try {
+          listener.coreChanged(nodeName, Collections.unmodifiableSet(modifiedCores));
+        } catch (KeeperException e) {
+          log.warn("Could not talk to ZK", e);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          log.warn("Could not talk to ZK", e);
         }
+      }
 
     } else {
       // ignore null state
