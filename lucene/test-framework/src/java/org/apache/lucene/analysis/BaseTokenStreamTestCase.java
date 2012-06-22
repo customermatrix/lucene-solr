@@ -26,11 +26,11 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Random;
 import java.util.Map;
-import java.util.HashMap;
+import java.util.Random;
 import java.util.Set;
 
 import org.apache.lucene.analysis.tokenattributes.*;
@@ -45,10 +45,10 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.Attribute;
 import org.apache.lucene.util.AttributeImpl;
 import org.apache.lucene.util.IOUtils;
-import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.util.LineFileDocs;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.util.Rethrow;
+import org.apache.lucene.util._TestUtil;
 
 /** 
  * Base class for all Lucene unit tests that use TokenStreams. 
@@ -437,7 +437,11 @@ public abstract class BaseTokenStreamTestCase extends LuceneTestCase {
     boolean useCharFilter = random.nextBoolean();
     Directory dir = null;
     RandomIndexWriter iw = null;
-    if (rarely(random)) {
+    final String postingsFormat =  _TestUtil.getPostingsFormat("dummy");
+    boolean codecOk = iterations * maxWordLength < 100000 ||
+        !(postingsFormat.equals("Memory") ||
+            postingsFormat.equals("SimpleText"));
+    if (rarely(random) && codecOk) {
       dir = newFSDirectory(_TestUtil.getTempDir("bttc"));
       iw = new RandomIndexWriter(new Random(seed), dir, a);
     }

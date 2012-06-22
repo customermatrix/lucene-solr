@@ -25,7 +25,7 @@ public final class BitsSlice implements Bits {
   private final int length;
 
   // start is inclusive; end is exclusive (length = end-start)
-  public BitsSlice(Bits parent, ReaderUtil.Slice slice) {
+  public BitsSlice(Bits parent, ReaderSlice slice) {
     this.parent = parent;
     this.start = slice.start;
     this.length = slice.length;

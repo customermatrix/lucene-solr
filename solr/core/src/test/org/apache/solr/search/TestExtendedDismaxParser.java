@@ -66,6 +66,39 @@ public class TestExtendedDismaxParser extends AbstractSolrTestCase {
     // the super classes version
     super.tearDown();
   }
+  
+
+  public void testLowercaseOperators() {
+    assertQ("Upper case operator",
+        req("q","Zapp AND Brannigan",
+            "qf", "name",
+            "lowercaseOperators", "false",
+            "defType","edismax")
+        ,"*[count(//doc)=1]");
+    
+    assertQ("Upper case operator, allow lowercase",
+        req("q","Zapp AND Brannigan",
+            "qf", "name",
+            "lowercaseOperators", "true",
+            "defType","edismax")
+        ,"*[count(//doc)=1]");
+    
+    assertQ("Lower case operator, don't allow lowercase operators",
+        req("q","Zapp and Brannigan",
+            "qf", "name",
+            "q.op", "AND", 
+            "lowercaseOperators", "false",
+            "defType","edismax")
+        ,"*[count(//doc)=0]");
+    
+    assertQ("Lower case operator, allow lower case operators",
+        req("q","Zapp and Brannigan",
+            "qf", "name",
+            "q.op", "AND", 
+            "lowercaseOperators", "true",
+            "defType","edismax")
+        ,"*[count(//doc)=1]");
+  }
     
   // test the edismax query parser based on the dismax parser
   public void testFocusQueryParser() {
@@ -121,6 +154,11 @@ public class TestExtendedDismaxParser extends AbstractSolrTestCase {
    // test that numeric field types can be queried  via qf
    assertQ(req("defType", "edismax", "qf", "text_sw foo_i",
                "q","100"), oner
+    );
+
+    assertQ("qf defaults to df",
+        req("defType", "edismax", "df", "trait_ss",
+        "q","Tool"), twor
     );
 
    assertQ("qf defaults to defaultSearchField"
@@ -621,5 +659,46 @@ public class TestExtendedDismaxParser extends AbstractSolrTestCase {
         "//str[@name='parsedquery'][contains(.,'phrase_sw:\"zzzz xxxx cccc\"~3^333.0')]",
         "//str[@name='parsedquery'][contains(.,'phrase_sw:\"xxxx cccc vvvv\"~3^333.0')]"
      );
+
+    assertQ(
+        "ps2 not working",
+        req("q", "bar foo", "qf", "phrase_sw", "pf2", "phrase_sw^10", "ps2",
+            "2", "bf", "boost_d", "fl", "score,*", "defType", "edismax"),
+        "//doc[1]/str[@name='id'][.='s0']");
+    
+    assertQ(
+        "Specifying slop in pf2 param not working",
+        req("q", "bar foo", "qf", "phrase_sw", "pf2", "phrase_sw~2^10", "bf",
+            "boost_d", "fl", "score,*", "defType", "edismax"),
+        "//doc[1]/str[@name='id'][.='s0']");
+    
+    assertQ(
+        "Slop in ps2 parameter should override ps",
+        req("q", "bar foo", "qf", "phrase_sw", "pf2", "phrase_sw^10", "ps",
+            "0", "ps2", "2", "bf", "boost_d", "fl", "score,*", "defType",
+            "edismax"), "//doc[1]/str[@name='id'][.='s0']");
+
+    assertQ(
+        "ps3 not working",
+        req("q", "a bar foo", "qf", "phrase_sw", "pf3", "phrase_sw^10", "ps3",
+            "3", "bf", "boost_d", "fl", "score,*", "defType", "edismax"),
+        "//doc[1]/str[@name='id'][.='s1']");
+    
+    assertQ(
+        "Specifying slop in pf3 param not working",
+        req("q", "a bar foo", "qf", "phrase_sw", "pf3", "phrase_sw~3^10", "bf",
+            "boost_d", "fl", "score,*", "defType", "edismax"),
+        "//doc[1]/str[@name='id'][.='s1']");
+   
+    assertQ("ps2 should not override slop specified inline in pf2",
+        req("q", "zzzz xxxx cccc vvvv",
+            "qf", "phrase_sw",
+            "pf2", "phrase_sw~2^22",
+            "ps2", "4",
+            "defType", "edismax",
+            "debugQuery", "true"),
+        "//str[@name='parsedquery'][contains(.,'phrase_sw:\"zzzz xxxx\"~2^22.0')]"
+     );
+
   }
 }

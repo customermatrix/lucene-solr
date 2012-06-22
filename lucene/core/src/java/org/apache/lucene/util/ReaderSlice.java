@@ -1,4 +1,5 @@
-package org.apache.solr.search;
+package org.apache.lucene.util;
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -17,30 +18,22 @@ package org.apache.solr.search;
  */
 
 /**
- * A class to hold "phrase slop" and "boost" parameters for pf, pf2, pf3 parameters
- **/
-public class FieldParams {
-  private final int wordGrams;  // make bigrams if 2, trigrams if 3, or all if 0
-  private final int slop;
-  private final float boost;
-  private final String field;
-  public FieldParams(String field, int wordGrams, int slop, float boost) {
-    this.wordGrams = wordGrams;
-    this.slop      = slop;
-    this.boost     = boost;
-    this.field     = field;
+ * Subreader slice from a parent composite reader.
+ */
+public final class ReaderSlice {
+  public static final ReaderSlice[] EMPTY_ARRAY = new ReaderSlice[0];
+  public final int start;
+  public final int length;
+  public final int readerIndex;
+
+  public ReaderSlice(int start, int length, int readerIndex) {
+    this.start = start;
+    this.length = length;
+    this.readerIndex = readerIndex;
   }
-  public int getWordGrams() {
-    return wordGrams;
+
+  @Override
+  public String toString() {
+    return "slice start=" + start + " length=" + length + " readerIndex=" + readerIndex;
   }
-  public int getSlop() {
-    return slop;
-  }
-  public float getBoost() {
-    return boost;
-  }
-  public String getField() {
-    return field;
-  }
-  
 }

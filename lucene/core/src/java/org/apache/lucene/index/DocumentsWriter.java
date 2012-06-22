@@ -133,7 +133,7 @@ final class DocumentsWriter {
   final DocumentsWriterFlushControl flushControl;
   
   final Codec codec;
-  DocumentsWriter(Codec codec, IndexWriterConfig config, Directory directory, IndexWriter writer, FieldNumbers globalFieldNumbers,
+  DocumentsWriter(Codec codec, LiveIndexWriterConfig config, Directory directory, IndexWriter writer, FieldNumbers globalFieldNumbers,
       BufferedDeletesStream bufferedDeletesStream) throws IOException {
     this.codec = codec;
     this.directory = directory;
@@ -202,7 +202,6 @@ final class DocumentsWriter {
    *  discarding any docs added since last flush. */
   synchronized void abort() throws IOException {
     boolean success = false;
-
     synchronized (this) {
       deleteQueue.clear();
     }
@@ -233,6 +232,7 @@ final class DocumentsWriter {
           perThread.unlock();
         }
       }
+      flushControl.waitForFlush();
       success = true;
     } finally {
       if (infoStream.isEnabled("DW")) {
