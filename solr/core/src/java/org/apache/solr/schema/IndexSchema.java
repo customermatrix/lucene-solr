@@ -75,7 +75,7 @@ public class IndexSchema {
   private String queryParserDefaultOperator;
 
 
-  private final Map<String, List<CopyField>> copyFieldsMap;
+  private Map<String, List<CopyField>> copyFieldsMap;
   private DynamicCopy[] dynamicCopyFields;
   /**
    * keys are all fields copied to, count is num of copyField
@@ -91,6 +91,14 @@ public class IndexSchema {
    * @see SolrResourceLoader#openResource
    */
   public IndexSchema(SolrConfig solrConfig, String name, InputSource is) {
+    fields = new HashMap<String,SchemaField>();
+    fieldTypes = new HashMap<String,FieldType>();
+    fieldsWithDefaultValue = new ArrayList<SchemaField>();
+    requiredFields = new HashSet<SchemaField>();
+    defaultSearchFieldName = null;
+    queryParserDefaultOperator = "OR";
+    copyFieldsMap = new HashMap<String, List<CopyField>>();
+    copyFieldTargetCounts = new HashMap<SchemaField, Integer>();
     this.solrConfig = solrConfig;
     if (name == null)
       name = DEFAULT_SCHEMA_FILE;
@@ -102,25 +110,10 @@ public class IndexSchema {
     }
     readSchema(is);
     loader.inform( loader );
-    fields = new HashMap<String,SchemaField>();
-    fieldTypes = new HashMap<String,FieldType>();
-    fieldsWithDefaultValue = new ArrayList<SchemaField>();
-    requiredFields = new HashSet<SchemaField>();
-    defaultSearchFieldName = null;
-    queryParserDefaultOperator = "OR";
-    copyFieldsMap = new HashMap<String, List<CopyField>>();
-    copyFieldTargetCounts = new HashMap<SchemaField, Integer>();
   }
+
   public IndexSchema()
   {
-    fields = new HashMap<String,SchemaField>();
-    fieldTypes = new HashMap<String,FieldType>();
-    fieldsWithDefaultValue = new ArrayList<SchemaField>();
-    requiredFields = new HashSet<SchemaField>();
-    defaultSearchFieldName = null;
-    queryParserDefaultOperator = "OR";
-    copyFieldsMap = new HashMap<String, List<CopyField>>();
-    copyFieldTargetCounts = new HashMap<SchemaField, Integer>();
   }
 
   /**
