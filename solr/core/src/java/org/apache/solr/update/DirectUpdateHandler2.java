@@ -20,33 +20,17 @@
 
 package org.apache.solr.update;
 
-import java.io.IOException;
-import java.net.URL;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.queries.function.ValueSource;
 import org.apache.lucene.queryparser.classic.ParseException;
-import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.*;
 import org.apache.lucene.search.BooleanClause.Occur;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermQuery;
-import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.params.ModifiableSolrParams;
-import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.core.SolrConfig.UpdateHandlerInfo;
@@ -62,6 +46,16 @@ import org.apache.solr.search.QueryUtils;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.search.function.ValueSourceRangeFilter;
 import org.apache.solr.util.RefCounted;
+
+import java.io.IOException;
+import java.net.URL;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  *  TODO: add soft commitWithin support
@@ -90,8 +84,8 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
   AtomicLong numErrorsCumulative = new AtomicLong();
 
   // tracks when auto-commit should occur
-  protected final CommitTracker commitTracker;
-  protected final CommitTracker softCommitTracker;
+  protected CommitTracker commitTracker;
+  protected CommitTracker softCommitTracker;
 
   public DirectUpdateHandler2(SolrCore core) throws IOException {
     super(core);
@@ -133,6 +127,22 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
     if (this.ulog != null) {
       this.ulog.init(this, core);
     }
+  }
+
+  public CommitTracker getSoftCommitTracker() {
+    return softCommitTracker;
+  }
+
+  public void setSoftCommitTracker(CommitTracker softCommitTracker) {
+    this.softCommitTracker = softCommitTracker;
+  }
+
+  public CommitTracker getCommitTracker() {
+    return commitTracker;
+  }
+
+  public void setCommitTracker(CommitTracker commitTracker) {
+    this.commitTracker = commitTracker;
   }
 
   private void deleteAll() throws IOException {
