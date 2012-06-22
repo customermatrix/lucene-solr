@@ -59,10 +59,10 @@ public class IndexSchema {
   private float version;
   private SolrResourceLoader loader;
 
-  protected HashMap<String, SchemaField> fields;
+  protected Map<String, SchemaField> fields;
 
 
-  protected HashMap<String, FieldType> fieldTypes;
+  protected Map<String, FieldType> fieldTypes;
 
   private List<SchemaField> fieldsWithDefaultValue;
   private Collection<SchemaField> requiredFields;
@@ -235,7 +235,7 @@ public class IndexSchema {
     return queryParserDefaultOperator;
   }
 
-  private SchemaField uniqueKeyField;
+  protected SchemaField uniqueKeyField;
 
   /**
    * Unique Key field specified in the schema file
