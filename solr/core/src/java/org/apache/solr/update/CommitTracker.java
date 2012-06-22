@@ -17,13 +17,6 @@ package org.apache.solr.update;
  * limitations under the License.
  */
 
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.core.SolrCore;
@@ -31,6 +24,13 @@ import org.apache.solr.request.LocalSolrQueryRequest;
 import org.apache.solr.request.SolrQueryRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Helper class for tracking autoCommit state.
@@ -40,7 +40,7 @@ import org.slf4j.LoggerFactory;
  * 
  * Note: all access must be synchronized.
  */
-final class CommitTracker implements Runnable {
+public class CommitTracker implements Runnable {
   protected final static Logger log = LoggerFactory.getLogger(CommitTracker.class);
   
   // scheduler delay for maxDoc-triggered autocommits
