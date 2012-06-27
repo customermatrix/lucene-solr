@@ -15,7 +15,7 @@ Changes in backwards compatibility policy
 
 * LUCENE-1458, LUCENE-2111, LUCENE-2354: Changes from flexible indexing:
 
-  - On upgrading to 3.1, if you do not fully reindex your documents,
+  - On upgrading to 4.0, if you do not fully reindex your documents,
     Lucene will emulate the new flex API on top of the old index,
     incurring some performance cost (up to ~10% slowdown, typically).
     To prevent this slowdown, use oal.index.IndexUpgrader
@@ -24,7 +24,7 @@ Changes in backwards compatibility policy
     Mixed flex/pre-flex indexes are perfectly fine -- the two
     emulation layers (flex API on pre-flex index, and pre-flex API on
     flex index) will remap the access as required.  So on upgrading to
-    3.1 you can start indexing new documents into an existing index.
+    4.0 you can start indexing new documents into an existing index.
     To get optimal performance, use oal.index.IndexUpgrader
     to upgrade your indexes to latest file format (LUCENE-3082).
 
@@ -277,6 +277,11 @@ Changes in backwards compatibility policy
   unmodifiable List<? extends IndexReader>. ReaderUtil.Gather was
   removed, as IndexReaderContext.leaves() is now the preferred way
   to access sub-readers.  (Uwe Schindler)
+
+* LUCENE-4155: oal.util.ReaderUtil, TwoPhaseCommit, TwoPhaseCommitTool
+  classes were moved to oal.index package. oal.util.CodecUtil class was moved
+  to oal.codecs package. oal.util.DummyConcurrentLock was removed
+  (no longer used in Lucene 4.0).  (Uwe Schindler)
 
 Changes in Runtime Behavior
 
@@ -984,6 +989,11 @@ Optimizations
 * LUCENE-4156: DirectoryTaxonomyWriter.getSize is no longer synchronized.
   (Shai Erera, Sivan Yogev)
 
+* LUCENE-4163: Improve concurrency of MMapIndexInput.clone() by using
+  the new WeakIdentityMap on top of a ConcurrentHashMap to manage
+  the cloned instances. WeakIdentityMap was extended to support
+  iterating over its keys.  (Uwe Schindler)
+
 Bug fixes
 
 * LUCENE-2803: The FieldCache can miss values if an entry for a reader
@@ -1066,6 +1076,9 @@ Documentation
   (Iulius Curt via Robert Muir)
 
 Build
+
+* LUCENE-4115: JAR resolution/ cleanup should be done automatically for ant 
+  clean/ eclipse/ resolve (Dawid Weiss)
 
 * LUCENE-4047: Cleanup of LuceneTestCase: moved blocks of initialization/ cleanup
   code into JUnit instance and class rules. (Dawid Weiss)
