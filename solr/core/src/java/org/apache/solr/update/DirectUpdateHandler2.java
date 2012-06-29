@@ -87,7 +87,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
   protected CommitTracker commitTracker;
   protected CommitTracker softCommitTracker;
 
-  public DirectUpdateHandler2(SolrCore core) throws IOException {
+  public DirectUpdateHandler2(SolrCore core) {
     super(core);
    
     solrCoreState = new DefaultSolrCoreState(core.getDirectoryFactory());
@@ -103,7 +103,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
     softCommitTracker = new CommitTracker("Soft", core, softCommitDocsUpperBound, softCommitTimeUpperBound, true, true);
   }
   
-  public DirectUpdateHandler2(SolrCore core, UpdateHandler updateHandler) throws IOException {
+  public DirectUpdateHandler2(SolrCore core, UpdateHandler updateHandler) {
     super(core);
     if (updateHandler instanceof DirectUpdateHandler2) {
       this.solrCoreState = ((DirectUpdateHandler2) updateHandler).solrCoreState;

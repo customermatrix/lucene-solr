@@ -34,12 +34,14 @@ import org.apache.lucene.spatial.prefix.tree.Node;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
 import org.apache.lucene.spatial.util.CachedDistanceValueSource;
 
-import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * @lucene.internal
+ */
 public abstract class PrefixTreeStrategy extends SpatialStrategy<SimpleSpatialFieldInfo> {
   protected final SpatialPrefixTree grid;
   private final Map<String, PointPrefixTreeFieldCacheProvider> provider = new ConcurrentHashMap<String, PointPrefixTreeFieldCacheProvider>();
@@ -73,6 +75,9 @@ public abstract class PrefixTreeStrategy extends SpatialStrategy<SimpleSpatialFi
       //TODO should be smarter; don't index 2 tokens for this in CellTokenizer. Harmless though.
       cells.add(grid.getNodes(ctr,grid.getMaxLevels(),false).get(0));
     }
+
+    //TODO is CellTokenStream supposed to be re-used somehow? see Uwe's comments:
+    //  http://code.google.com/p/lucene-spatial-playground/issues/detail?id=4
 
     String fname = fieldInfo.getFieldName();
     if( store ) {
@@ -126,7 +131,7 @@ public abstract class PrefixTreeStrategy extends SpatialStrategy<SimpleSpatialFi
     CharSequence nextTokenStringNeedingLeaf = null;
 
     @Override
-    public boolean incrementToken() throws IOException {
+    public boolean incrementToken() {
       clearAttributes();
       if (nextTokenStringNeedingLeaf != null) {
         termAtt.append(nextTokenStringNeedingLeaf);

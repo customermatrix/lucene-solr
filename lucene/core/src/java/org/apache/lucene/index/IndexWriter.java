@@ -500,7 +500,6 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
      * Obtain a ReadersAndLiveDocs instance from the
      * readerPool.  If create is true, you must later call
      * {@link #release(ReadersAndLiveDocs)}.
-     * @throws IOException
      */
     public synchronized ReadersAndLiveDocs get(SegmentInfoPerCommit info, boolean create) {
 
@@ -532,7 +531,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * If the reader isn't being pooled, the segmentInfo's 
    * delCount is returned.
    */
-  public int numDeletedDocs(SegmentInfoPerCommit info) throws IOException {
+  public int numDeletedDocs(SegmentInfoPerCommit info) {
     ensureOpen(false);
     int delCount = info.getDelCount();
 
@@ -574,19 +573,13 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * @param conf
    *          the configuration settings according to which IndexWriter should
    *          be initialized.
-   * @throws CorruptIndexException
-   *           if the index is corrupt
-   * @throws LockObtainFailedException
-   *           if another writer has this index open (<code>write.lock</code>
-   *           could not be obtained)
    * @throws IOException
    *           if the directory cannot be read/written to, or if it does not
    *           exist and <code>conf.getOpenMode()</code> is
    *           <code>OpenMode.APPEND</code> or if there is any other low-level
    *           IO error
    */
-  public IndexWriter(Directory d, IndexWriterConfig conf)
-      throws CorruptIndexException, LockObtainFailedException, IOException {
+  public IndexWriter(Directory d, IndexWriterConfig conf) throws IOException {
     config = new LiveIndexWriterConfig(conf.clone());
     directory = d;
     analyzer = config.getAnalyzer();
@@ -762,7 +755,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
     return config;
   }
 
-  private void messageState() throws IOException {
+  private void messageState() {
     if (infoStream.isEnabled("IW")) {
       infoStream.message("IW", "\ndir=" + directory + "\n" +
             "index=" + segString() + "\n" +
@@ -810,10 +803,9 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * you should immediately close the writer, again.  See <a
    * href="#OOME">above</a> for details.</p>
    *
-   * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
    */
-  public void close() throws CorruptIndexException, IOException {
+  public void close() throws IOException {
     close(true);
   }
 
@@ -840,7 +832,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * finished (which should be at most a few seconds), and
    * then return.
    */
-  public void close(boolean waitForMerges) throws CorruptIndexException, IOException {
+  public void close(boolean waitForMerges) throws IOException {
 
     // Ensure that only one thread actually gets to do the
     // closing, and make sure no commit is also in progress:
@@ -879,7 +871,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
     }
   }
 
-  private void closeInternal(boolean waitForMerges, boolean doFlush) throws CorruptIndexException, IOException {
+  private void closeInternal(boolean waitForMerges, boolean doFlush) throws IOException {
 
     try {
 
@@ -993,7 +985,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    *  are not counted.  If you really need these to be
    *  counted you should call {@link #commit()} first.
    *  @see #numDocs */
-  public synchronized int numDocs() throws IOException {
+  public synchronized int numDocs() {
     ensureOpen();
     int count;
     if (docWriter != null)
@@ -1007,7 +999,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
     return count;
   }
 
-  public synchronized boolean hasDeletions() throws IOException {
+  public synchronized boolean hasDeletions() {
     ensureOpen();
     if (bufferedDeletesStream.any()) {
       return true;
@@ -1065,7 +1057,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
    */
-  public void addDocument(Iterable<? extends IndexableField> doc) throws CorruptIndexException, IOException {
+  public void addDocument(Iterable<? extends IndexableField> doc) throws IOException {
     addDocument(doc, analyzer);
   }
 
@@ -1084,7 +1076,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
    */
-  public void addDocument(Iterable<? extends IndexableField> doc, Analyzer analyzer) throws CorruptIndexException, IOException {
+  public void addDocument(Iterable<? extends IndexableField> doc, Analyzer analyzer) throws IOException {
     updateDocument(null, doc, analyzer);
   }
 
@@ -1129,7 +1121,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    *
    * @lucene.experimental
    */
-  public void addDocuments(Iterable<? extends Iterable<? extends IndexableField>> docs) throws CorruptIndexException, IOException {
+  public void addDocuments(Iterable<? extends Iterable<? extends IndexableField>> docs) throws IOException {
     addDocuments(docs, analyzer);
   }
 
@@ -1144,7 +1136,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    *
    * @lucene.experimental
    */
-  public void addDocuments(Iterable<? extends Iterable<? extends IndexableField>> docs, Analyzer analyzer) throws CorruptIndexException, IOException {
+  public void addDocuments(Iterable<? extends Iterable<? extends IndexableField>> docs, Analyzer analyzer) throws IOException {
     updateDocuments(null, docs, analyzer);
   }
 
@@ -1161,7 +1153,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    *
    * @lucene.experimental
    */
-  public void updateDocuments(Term delTerm, Iterable<? extends Iterable<? extends IndexableField>> docs) throws CorruptIndexException, IOException {
+  public void updateDocuments(Term delTerm, Iterable<? extends Iterable<? extends IndexableField>> docs) throws IOException {
     updateDocuments(delTerm, docs, analyzer);
   }
 
@@ -1179,7 +1171,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    *
    * @lucene.experimental
    */
-  public void updateDocuments(Term delTerm, Iterable<? extends Iterable<? extends IndexableField>> docs, Analyzer analyzer) throws CorruptIndexException, IOException {
+  public void updateDocuments(Term delTerm, Iterable<? extends Iterable<? extends IndexableField>> docs, Analyzer analyzer) throws IOException {
     ensureOpen();
     try {
       boolean success = false;
@@ -1213,7 +1205,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
    */
-  public void deleteDocuments(Term term) throws CorruptIndexException, IOException {
+  public void deleteDocuments(Term term) throws IOException {
     ensureOpen();
     try {
       docWriter.deleteTerms(term);
@@ -1236,7 +1228,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
    */
-  public void deleteDocuments(Term... terms) throws CorruptIndexException, IOException {
+  public void deleteDocuments(Term... terms) throws IOException {
     ensureOpen();
     try {
       docWriter.deleteTerms(terms);
@@ -1256,7 +1248,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
    */
-  public void deleteDocuments(Query query) throws CorruptIndexException, IOException {
+  public void deleteDocuments(Query query) throws IOException {
     ensureOpen();
     try {
       docWriter.deleteQueries(query);
@@ -1278,7 +1270,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
    */
-  public void deleteDocuments(Query... queries) throws CorruptIndexException, IOException {
+  public void deleteDocuments(Query... queries) throws IOException {
     ensureOpen();
     try {
       docWriter.deleteQueries(queries);
@@ -1304,7 +1296,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
    */
-  public void updateDocument(Term term, Iterable<? extends IndexableField> doc) throws CorruptIndexException, IOException {
+  public void updateDocument(Term term, Iterable<? extends IndexableField> doc) throws IOException {
     ensureOpen();
     updateDocument(term, doc, getAnalyzer());
   }
@@ -1328,7 +1320,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * @throws IOException if there is a low-level IO error
    */
   public void updateDocument(Term term, Iterable<? extends IndexableField> doc, Analyzer analyzer)
-      throws CorruptIndexException, IOException {
+      throws IOException {
     ensureOpen();
     try {
       boolean success = false;
@@ -1469,7 +1461,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * @param maxNumSegments maximum number of segments left
    * in the index after merging finishes
   */
-  public void forceMerge(int maxNumSegments) throws CorruptIndexException, IOException {
+  public void forceMerge(int maxNumSegments) throws IOException {
     forceMerge(maxNumSegments, true);
   }
 
@@ -1483,7 +1475,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    *  you should immediately close the writer.  See <a
    *  href="#OOME">above</a> for details.</p>
    */
-  public void forceMerge(int maxNumSegments, boolean doWait) throws CorruptIndexException, IOException {
+  public void forceMerge(int maxNumSegments, boolean doWait) throws IOException {
     ensureOpen();
 
     if (maxNumSegments < 1)
@@ -1594,7 +1586,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * {@link MergePolicy.MergeAbortedException}.
    */
   public void forceMergeDeletes(boolean doWait)
-    throws CorruptIndexException, IOException {
+    throws IOException {
     ensureOpen();
 
     flush(true, true);
@@ -1679,7 +1671,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    *  you should immediately close the writer.  See <a
    *  href="#OOME">above</a> for details.</p>
    */
-  public void forceMergeDeletes() throws CorruptIndexException, IOException {
+  public void forceMergeDeletes() throws IOException {
     forceMergeDeletes(true);
   }
 
@@ -1697,18 +1689,18 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * you should immediately close the writer.  See <a
    * href="#OOME">above</a> for details.</p>
    */
-  public final void maybeMerge() throws CorruptIndexException, IOException {
+  public final void maybeMerge() throws IOException {
     maybeMerge(-1);
   }
 
-  private final void maybeMerge(int maxNumSegments) throws CorruptIndexException, IOException {
+  private final void maybeMerge(int maxNumSegments) throws IOException {
     ensureOpen(false);
     updatePendingMerges(maxNumSegments);
     mergeScheduler.merge(this);
   }
 
   private synchronized void updatePendingMerges(int maxNumSegments)
-    throws CorruptIndexException, IOException {
+    throws IOException {
     assert maxNumSegments == -1 || maxNumSegments > 0;
 
     if (stopMerges) {
@@ -1926,7 +1918,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
     }
   }
 
-  private synchronized void finishMerges(boolean waitForMerges) throws IOException {
+  private synchronized void finishMerges(boolean waitForMerges) {
     if (!waitForMerges) {
 
       stopMerges = true;
@@ -2092,7 +2084,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
     return newSegment;
   }
   
-  synchronized void publishFrozenDeletes(FrozenBufferedDeletes packet) throws IOException {
+  synchronized void publishFrozenDeletes(FrozenBufferedDeletes packet) {
     assert packet != null && packet.any();
     synchronized (bufferedDeletesStream) {
       bufferedDeletesStream.push(packet);
@@ -2201,7 +2193,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
    */
-  public void addIndexes(Directory... dirs) throws CorruptIndexException, IOException {
+  public void addIndexes(Directory... dirs) throws IOException {
     ensureOpen();
 
     noDupDirs(dirs);
@@ -2285,7 +2277,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * @throws IOException
    *           if there is a low-level IO error
    */
-  public void addIndexes(IndexReader... readers) throws CorruptIndexException, IOException {
+  public void addIndexes(IndexReader... readers) throws IOException {
     ensureOpen();
     int numDocs = 0;
 
@@ -2493,7 +2485,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * href="#OOME">above</a> for details.</p>
    *
    * @see #prepareCommit(Map) */
-  public final void prepareCommit() throws CorruptIndexException, IOException {
+  public final void prepareCommit() throws IOException {
     ensureOpen();
     prepareCommit(null);
   }
@@ -2528,7 +2520,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    *  only "stick" if there are actually changes in the
    *  index to commit.
    */
-  public final void prepareCommit(Map<String,String> commitUserData) throws CorruptIndexException, IOException {
+  public final void prepareCommit(Map<String,String> commitUserData) throws IOException {
     ensureOpen(false);
 
     synchronized(commitLock) {
@@ -2659,7 +2651,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * @see #prepareCommit
    * @see #commit(Map)
    */
-  public final void commit() throws CorruptIndexException, IOException {
+  public final void commit() throws IOException {
     commit(null);
   }
 
@@ -2672,14 +2664,14 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * you should immediately close the writer.  See <a
    * href="#OOME">above</a> for details.</p>
    */
-  public final void commit(Map<String,String> commitUserData) throws CorruptIndexException, IOException {
+  public final void commit(Map<String,String> commitUserData) throws IOException {
 
     ensureOpen();
 
     commitInternal(commitUserData);
   }
 
-  private final void commitInternal(Map<String,String> commitUserData) throws CorruptIndexException, IOException {
+  private final void commitInternal(Map<String,String> commitUserData) throws IOException {
 
     if (infoStream.isEnabled("IW")) {
       infoStream.message("IW", "commit: start");
@@ -2707,7 +2699,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
     }
   }
 
-  private synchronized final void finishCommit() throws CorruptIndexException, IOException {
+  private synchronized final void finishCommit() throws IOException {
 
     if (pendingCommit != null) {
       try {
@@ -2753,7 +2745,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    *  deletes or docs were flushed) if necessary
    * @param applyAllDeletes whether pending deletes should also
    */
-  protected final void flush(boolean triggerMerge, boolean applyAllDeletes) throws CorruptIndexException, IOException {
+  protected final void flush(boolean triggerMerge, boolean applyAllDeletes) throws IOException {
 
     // NOTE: this method cannot be sync'd because
     // maybeMerge() in turn calls mergeScheduler.merge which
@@ -2769,7 +2761,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
     }
   }
 
-  private boolean doFlush(boolean applyAllDeletes) throws CorruptIndexException, IOException {
+  private boolean doFlush(boolean applyAllDeletes) throws IOException {
     if (hitOOM) {
       throw new IllegalStateException("this writer hit an OutOfMemoryError; cannot flush");
     }
@@ -2876,7 +2868,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
     return docWriter.getNumDocs();
   }
 
-  private synchronized void ensureValidMerge(MergePolicy.OneMerge merge) throws IOException {
+  private synchronized void ensureValidMerge(MergePolicy.OneMerge merge) {
     for(SegmentInfoPerCommit info : merge.segments) {
       if (!segmentInfos.contains(info)) {
         throw new MergePolicy.MergeException("MergePolicy selected a segment (" + info.info.name + ") that is not in the current index " + segString(), directory);
@@ -3136,8 +3128,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    * 
    * @lucene.experimental
    */
-  public void merge(MergePolicy.OneMerge merge)
-    throws CorruptIndexException, IOException {
+  public void merge(MergePolicy.OneMerge merge) throws IOException {
 
     boolean success = false;
 
@@ -3199,7 +3190,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
    *  are now participating in a merge, and true is
    *  returned.  Else (the merge conflicts) false is
    *  returned. */
-  final synchronized boolean registerMerge(MergePolicy.OneMerge merge) throws MergePolicy.MergeAbortedException, IOException {
+  final synchronized boolean registerMerge(MergePolicy.OneMerge merge) throws IOException {
 
     if (merge.registerDone) {
       return true;
@@ -3382,7 +3373,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
 
   /** Does fininishing for a merge, which is fast but holds
    *  the synchronized lock on IndexWriter instance. */
-  final synchronized void mergeFinish(MergePolicy.OneMerge merge) throws IOException {
+  final synchronized void mergeFinish(MergePolicy.OneMerge merge) {
 
     // forceMerge, addIndexes or finishMerges may be waiting
     // on merges to finish.
@@ -3443,8 +3434,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
   /** Does the actual (time-consuming) work of the merge,
    *  but without holding synchronized lock on IndexWriter
    *  instance */
-  private int mergeMiddle(MergePolicy.OneMerge merge)
-    throws CorruptIndexException, IOException {
+  private int mergeMiddle(MergePolicy.OneMerge merge) throws IOException {
 
     merge.checkAborted(directory);
 
@@ -3686,12 +3676,12 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
   }
 
   /** @lucene.internal */
-  public synchronized String segString() throws IOException {
+  public synchronized String segString() {
     return segString(segmentInfos);
   }
 
   /** @lucene.internal */
-  public synchronized String segString(Iterable<SegmentInfoPerCommit> infos) throws IOException {
+  public synchronized String segString(Iterable<SegmentInfoPerCommit> infos) {
     final StringBuilder buffer = new StringBuilder();
     for(final SegmentInfoPerCommit info : infos) {
       if (buffer.length() > 0) {
@@ -3703,7 +3693,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit {
   }
 
   /** @lucene.internal */
-  public synchronized String segString(SegmentInfoPerCommit info) throws IOException {
+  public synchronized String segString(SegmentInfoPerCommit info) {
     return info.toString(info.info.dir, numDeletedDocs(info) - info.getDelCount());
   }
 

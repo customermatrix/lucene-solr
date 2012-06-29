@@ -119,7 +119,7 @@ public class SolrCore implements SolrInfoMBean {
   // These should *only* be used for debugging or monitoring purposes
   public static final AtomicLong numOpens = new AtomicLong();
   public static final AtomicLong numCloses = new AtomicLong();
-  public static Map<SolrCore,Exception> openHandles = Collections.synchronizedMap(new IdentityHashMap<SolrCore,Exception>());
+  public static Map<SolrCore,Exception> openHandles = Collections.synchronizedMap(new IdentityHashMap<SolrCore, Exception>());
 
   
   public static Logger log = LoggerFactory.getLogger(SolrCore.class);
@@ -1047,12 +1047,7 @@ public class SolrCore implements SolrInfoMBean {
    * {@link org.apache.solr.request.SolrQueryRequest#getSearcher()} instead.
   */
   public RefCounted<SolrIndexSearcher> getSearcher() {
-    try {
-      return getSearcher(false,true,null);
-    } catch (IOException e) {
-      SolrException.log(log,null,e);
-      return null;
-    }
+    return getSearcher(false,true,null);
   }
 
   /**
@@ -1116,7 +1111,7 @@ public class SolrCore implements SolrInfoMBean {
   }
 
 
-  public RefCounted<SolrIndexSearcher> getSearcher(boolean forceNew, boolean returnSearcher, final Future[] waitSearcher) throws IOException {
+  public RefCounted<SolrIndexSearcher> getSearcher(boolean forceNew, boolean returnSearcher, final Future[] waitSearcher) {
     return getSearcher(forceNew, returnSearcher, waitSearcher, false);
   }
 
@@ -1261,9 +1256,8 @@ public class SolrCore implements SolrInfoMBean {
    * @param returnSearcher       if true, returns a {@link SolrIndexSearcher} holder with the refcount already incremented.
    * @param waitSearcher         if non-null, will be filled in with a {@link Future} that will return after the new searcher is registered.
    * @param updateHandlerReopens if true, the UpdateHandler will be used when reopening a {@link SolrIndexSearcher}.
-   * @throws IOException
    */
-  public RefCounted<SolrIndexSearcher> getSearcher(boolean forceNew, boolean returnSearcher, final Future[] waitSearcher, boolean updateHandlerReopens) throws IOException {
+  public RefCounted<SolrIndexSearcher> getSearcher(boolean forceNew, boolean returnSearcher, final Future[] waitSearcher, boolean updateHandlerReopens) {
     // it may take some time to open an index.... we may need to make
     // sure that two threads aren't trying to open one at the same time
     // if it isn't necessary.
@@ -1520,7 +1514,7 @@ public class SolrCore implements SolrInfoMBean {
   //
   // onDeckSearchers will also be decremented (it should have been incremented
   // as a result of opening a new searcher).
-  private void registerSearcher(RefCounted<SolrIndexSearcher> newSearcherHolder) throws IOException {
+  private void registerSearcher(RefCounted<SolrIndexSearcher> newSearcherHolder) {
     synchronized (searcherLock) {
       try {
         if (_searcher != null) {

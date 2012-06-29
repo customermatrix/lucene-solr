@@ -39,7 +39,6 @@ import org.xml.sax.InputSource;
 
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
-import javax.xml.xpath.XPathExpressionException;
 import java.util.*;
 
 /**
@@ -706,7 +705,7 @@ public class IndexSchema {
     return newArr;
   }
 
-  static SimilarityFactory readSimilarity(ResourceLoader loader, Node node) throws XPathExpressionException {
+  static SimilarityFactory readSimilarity(ResourceLoader loader, Node node) {
     if (node==null) {
       return null;
     } else {

@@ -182,7 +182,7 @@ public class EmbeddedSolrServer extends SolrServer
           new JavaBinCodec(resolver) {
 
             @Override
-            public void writeSolrDocument(SolrDocument doc) throws IOException {
+            public void writeSolrDocument(SolrDocument doc) {
               callback.streamSolrDocument( doc );
               //super.writeSolrDocument( doc, fields );
             }
@@ -233,7 +233,7 @@ public class EmbeddedSolrServer extends SolrServer
   protected void execute(SolrRequestHandler handler, SolrQueryRequest req, SolrQueryResponse rsp) {
 
   }
-
+  
   /**
    * @param req
    * @param rsp

@@ -6,6 +6,26 @@ http://s.apache.org/luceneversions
 For "contrib" changes prior to 4.0, please see:
 http://svn.apache.org/repos/asf/lucene/dev/tags/lucene_solr_3_6_0/lucene/contrib/CHANGES.txt
 
+======================= Lucene 4.0.0-BETA =======================
+
+API Changes
+
+* LUCENE-4138: update of morfologik (Polish morphological analyzer) to 1.5.3.
+  The tag attribute class has been renamed to MorphosyntacticTagsAttribute and
+  has a different API (carries a list of tags instead of a compound tag). Upgrade
+  of embedded morfologik dictionaries to version 1.9. (Dawid Weiss)
+
+Bug Fixes
+
+* LUCENE-4176: Fix AnalyzingQueryParser to analyze range endpoints as bytes,
+  so that it works correctly with Analyzers that produce binary non-UTF-8 terms
+  such as CollationAnalyzer. (Nattapong Sirilappanich via Robert Muir) 
+
+Build
+
+* LUCENE-4115: JAR resolution/ cleanup should be done automatically for ant 
+  clean/ eclipse/ resolve (Dawid Weiss)
+
 ======================= Lucene 4.0.0-ALPHA =======================
 More information about this release, including any errata related to the 
 release notes, upgrade instructions, or other changes may be found online at:
@@ -1076,9 +1096,6 @@ Documentation
   (Iulius Curt via Robert Muir)
 
 Build
-
-* LUCENE-4115: JAR resolution/ cleanup should be done automatically for ant 
-  clean/ eclipse/ resolve (Dawid Weiss)
 
 * LUCENE-4047: Cleanup of LuceneTestCase: moved blocks of initialization/ cleanup
   code into JUnit instance and class rules. (Dawid Weiss)

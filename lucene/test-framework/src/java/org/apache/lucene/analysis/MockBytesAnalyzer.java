@@ -1,5 +1,4 @@
-// -*- c-basic-offset: 2 -*-
-package org.apache.lucene.analysis.morfologik;
+package org.apache.lucene.analysis;
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -18,23 +17,17 @@ package org.apache.lucene.analysis.morfologik;
  * limitations under the License.
  */
 
-import org.apache.lucene.util.Attribute;
+import java.io.Reader;
 
-/** 
- * Morfologik dictionaries provide morphosyntactic annotations for
- * surface forms. For the exact format and description of these,
- * see the project's documentation (annotations vary by dictionary!).
+/**
+ * Analyzer for testing that encodes terms as UTF-16 bytes.
  */
-public interface MorphosyntacticTagAttribute extends Attribute {
-  /** 
-   * Set the POS tag. The default value (no-value) is null.
-   * @param pos POS tag corresponding to current lemma
-   */
-  public void setTag(CharSequence pos);
-
-  /** Returns the POS tag of the term. */
-  public CharSequence getTag();
-
-  /** Clear to default value. */
-  public void clear();
+public class MockBytesAnalyzer extends Analyzer {
+  private final MockBytesAttributeFactory factory = new MockBytesAttributeFactory();
+  
+  @Override
+  protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
+    Tokenizer t = new MockTokenizer(factory, reader, MockTokenizer.KEYWORD, false, MockTokenizer.DEFAULT_MAX_TOKEN_LENGTH);
+    return new TokenStreamComponents(t);
+  }
 }

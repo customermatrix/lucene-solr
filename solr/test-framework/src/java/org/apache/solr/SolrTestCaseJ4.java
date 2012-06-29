@@ -67,7 +67,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
 
   @BeforeClass 
   @SuppressWarnings("unused")
-  private static void beforeClass() throws Exception {
+  private static void beforeClass() {
     setupLogging();
     startTrackingSearchers();
     startTrackingZkClients();
@@ -139,6 +139,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
   public static void initCore(String config, String schema, String solrHome) throws Exception {
     configString = config;
     schemaString = schema;
+    testSolrHome = solrHome;
     if (solrHome != null) {
       System.setProperty("solr.solr.home", solrHome);
     }
@@ -233,6 +234,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
 
   protected static String configString;
   protected static String schemaString;
+  protected static String testSolrHome;
 
   protected static SolrConfig solrConfig;
 
@@ -323,8 +325,8 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
     log.info("####initCore end");
   }
 
-  public static void createCore() throws Exception {
-    solrConfig = TestHarness.createConfig(getSolrConfigFile());
+  public static void createCore() {
+    solrConfig = TestHarness.createConfig(testSolrHome, getSolrConfigFile());
     h = new TestHarness( dataDir.getAbsolutePath(),
             solrConfig,
             getSchemaFile());
@@ -354,7 +356,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
    * to delete dataDir, unless the system property "solr.test.leavedatadir"
    * is set.
    */
-  public static void deleteCore() throws Exception {
+  public static void deleteCore() {
     log.info("###deleteCore" );
     if (h != null) { h.close(); }
     if (dataDir != null) {
@@ -1366,7 +1368,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
   }
   
   public static String TEST_HOME() {
-    return getFile("solr/conf").getParent();
+    return getFile("solr/collection1").getParent();
   }
 
   public static Throwable getRootCause(Throwable t) {
