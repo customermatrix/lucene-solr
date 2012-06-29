@@ -17,6 +17,21 @@ package org.apache.solr.analysis;
  * limitations under the License.
  */
 
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.Tokenizer;
+import org.apache.lucene.analysis.core.LowerCaseFilter;
+import org.apache.lucene.analysis.core.WhitespaceTokenizer;
+import org.apache.lucene.analysis.synonym.SolrSynonymParser;
+import org.apache.lucene.analysis.synonym.SynonymFilter;
+import org.apache.lucene.analysis.synonym.SynonymMap;
+import org.apache.lucene.analysis.synonym.WordnetSynonymParser;
+import org.apache.lucene.analysis.util.*;
+import org.apache.lucene.util.Version;
+import org.apache.solr.common.util.StrUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -27,28 +42,13 @@ import java.nio.charset.CodingErrorAction;
 import java.text.ParseException;
 import java.util.List;
 
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.Tokenizer;
-import org.apache.lucene.analysis.core.LowerCaseFilter;
-import org.apache.lucene.analysis.core.WhitespaceTokenizer;
-import org.apache.lucene.analysis.synonym.SynonymFilter;
-import org.apache.lucene.analysis.synonym.SynonymMap;
-import org.apache.lucene.analysis.synonym.SolrSynonymParser;
-import org.apache.lucene.analysis.synonym.WordnetSynonymParser;
-import org.apache.lucene.analysis.util.*;
-import org.apache.lucene.util.Version;
-import org.apache.solr.common.util.StrUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 /**
  * @deprecated (3.4) use {@link SynonymFilterFactory} instead. this is only a backwards compatibility
  *                   mechanism that will be removed in Lucene 5.0
  */
 // NOTE: rename this to "SynonymFilterFactory" and nuke that delegator in Lucene 5.0!
 @Deprecated
-final class FSTSynonymFilterFactory extends TokenFilterFactory implements ResourceLoaderAware {
+public class FSTSynonymFilterFactory extends TokenFilterFactory implements ResourceLoaderAware {
 
   public static final Logger log = LoggerFactory.getLogger(FSTSynonymFilterFactory.class);
 
@@ -103,7 +103,7 @@ final class FSTSynonymFilterFactory extends TokenFilterFactory implements Resour
   /**
    * Load synonyms from the solr format, "format=solr".
    */
-  private SynonymMap loadSolrSynonyms(ResourceLoader loader, boolean dedup, Analyzer analyzer) throws IOException, ParseException {
+  protected SynonymMap loadSolrSynonyms(ResourceLoader loader, boolean dedup, Analyzer analyzer) throws IOException, ParseException {
     final boolean expand = getBoolean("expand", true);
     String synonyms = args.get("synonyms");
     if (synonyms == null)
@@ -131,7 +131,7 @@ final class FSTSynonymFilterFactory extends TokenFilterFactory implements Resour
   /**
    * Load synonyms from the wordnet format, "format=wordnet".
    */
-  private SynonymMap loadWordnetSynonyms(ResourceLoader loader, boolean dedup, Analyzer analyzer) throws IOException, ParseException {
+  protected SynonymMap loadWordnetSynonyms(ResourceLoader loader, boolean dedup, Analyzer analyzer) throws IOException, ParseException {
     final boolean expand = getBoolean("expand", true);
     String synonyms = args.get("synonyms");
     if (synonyms == null)
@@ -155,8 +155,8 @@ final class FSTSynonymFilterFactory extends TokenFilterFactory implements Resour
     }
     return parser.build();
   }
-  
-  private TokenizerFactory loadTokenizerFactory(ResourceLoader loader, String cname){
+
+  protected TokenizerFactory loadTokenizerFactory(ResourceLoader loader, String cname){
     TokenizerFactory tokFactory = loader.newInstance(cname, TokenizerFactory.class);
     tokFactory.setLuceneMatchVersion(luceneMatchVersion);
     tokFactory.init(args);
