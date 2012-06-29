@@ -336,7 +336,7 @@ public class CoreContainer
 
     this.loader = new SolrResourceLoader(dir);
     solrHome = loader.getInstanceDir();
-    
+    isShutDown = false;
     Config cfg = new Config(loader, null, cfgis, null, false);
     
     // keep orig config for persist to consult
