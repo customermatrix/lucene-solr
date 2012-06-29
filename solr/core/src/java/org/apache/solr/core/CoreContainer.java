@@ -556,6 +556,7 @@ public class CoreContainer
         }
         if (shardHandlerFactory != null) {
           shardHandlerFactory.close();
+          shardHandlerFactory = null;
         }
         isShutDown = true;
       }
