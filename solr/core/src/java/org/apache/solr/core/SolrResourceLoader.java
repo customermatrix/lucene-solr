@@ -17,48 +17,39 @@
 
 package org.apache.solr.core;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileFilter;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.apache.lucene.analysis.util.CharFilterFactory;
 import org.apache.lucene.analysis.util.ResourceLoaderAware;
 import org.apache.lucene.analysis.util.TokenFilterFactory;
 import org.apache.lucene.analysis.util.TokenizerFactory;
 import org.apache.solr.common.ResourceLoader;
+import org.apache.solr.common.SolrException;
 import org.apache.solr.handler.admin.CoreAdminHandler;
+import org.apache.solr.handler.component.SearchComponent;
 import org.apache.solr.handler.component.ShardHandlerFactory;
+import org.apache.solr.request.SolrRequestHandler;
+import org.apache.solr.response.QueryResponseWriter;
+import org.apache.solr.schema.FieldType;
+import org.apache.solr.search.QParserPlugin;
+import org.apache.solr.update.processor.UpdateRequestProcessorFactory;
+import org.apache.solr.util.FileUtils;
+import org.apache.solr.util.plugin.SolrCoreAware;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.nio.charset.CharacterCodingException;
-import java.nio.charset.Charset;
-import java.nio.charset.CodingErrorAction;
-import java.lang.reflect.Constructor;
 
 import javax.naming.Context;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.naming.NoInitialContextException;
-
-import org.apache.solr.util.FileUtils;
-import org.apache.solr.common.SolrException;
-import org.apache.solr.handler.component.SearchComponent;
-import org.apache.solr.request.SolrRequestHandler;
-import org.apache.solr.response.QueryResponseWriter;
-import org.apache.solr.schema.FieldType;
-import org.apache.solr.update.processor.UpdateRequestProcessorFactory;
-import org.apache.solr.util.plugin.SolrCoreAware;
-import org.apache.solr.search.QParserPlugin;
+import java.io.*;
+import java.lang.reflect.Constructor;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.Charset;
+import java.nio.charset.CodingErrorAction;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @since solr 1.3
@@ -568,11 +559,12 @@ public class SolrResourceLoader implements ResourceLoader
   /**
    * Tell all {@link ResourceLoaderAware} instances about the loader
    */
-  public void inform( ResourceLoader loader ) 
+  public List<ResourceLoaderAware> inform(ResourceLoader loader)
   {
 
      // make a copy to avoid potential deadlock of a callback adding to the list
     ResourceLoaderAware[] arr;
+    List<ResourceLoaderAware> awareList = new ArrayList<ResourceLoaderAware>();
 
     while (waitingForResources.size() > 0) {
       synchronized (waitingForResources) {
@@ -582,8 +574,11 @@ public class SolrResourceLoader implements ResourceLoader
 
       for( ResourceLoaderAware aware : arr) {
         aware.inform(loader);
+        awareList.add(aware);
       }
     }
+
+    return awareList;
   }
 
   /**

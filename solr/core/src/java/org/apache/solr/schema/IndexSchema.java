@@ -20,6 +20,7 @@ package org.apache.solr.schema;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.AnalyzerWrapper;
 import org.apache.lucene.analysis.util.ResourceLoader;
+import org.apache.lucene.analysis.util.ResourceLoaderAware;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.util.Version;
@@ -81,8 +82,9 @@ public class IndexSchema {
    * directives that target them.
    */
   private Map<SchemaField, Integer> copyFieldTargetCounts;
+  private List<ResourceLoaderAware> awareList;
 
-    /**
+  /**
    * Constructs a schema using the specified resource name and stream.
    * If the is stream is null, the resource loader will load the schema resource by name.
    * @see SolrResourceLoader#openSchema
@@ -108,7 +110,7 @@ public class IndexSchema {
       is.setSystemId(SystemIdResolver.createSystemIdFromResourceName(name));
     }
     readSchema(is);
-    loader.inform( loader );
+    awareList = loader.inform( loader );
   }
 
   public IndexSchema()
@@ -142,6 +144,9 @@ public class IndexSchema {
     return version;
   }
 
+  public List<ResourceLoaderAware> getAwareList() {
+    return awareList;
+  }
 
   /**
    * Provides direct access to the Map containing all explicit
