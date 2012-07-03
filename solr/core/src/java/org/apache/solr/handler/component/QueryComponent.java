@@ -969,15 +969,17 @@ public class QueryComponent extends SearchComponent
 
       for (SolrDocument doc : docs) {
         Object id = doc.getFieldValue(keyFieldName);
-        ShardDoc sdoc = rb.resultIds.get(id.toString());
-        if (sdoc != null) {
-          if (returnScores && sdoc.score != null) {
-              doc.setField("score", sdoc.score);
+        if (rb.resultIds != null && id != null) {
+          ShardDoc sdoc = rb.resultIds.get(id.toString());
+          if (sdoc != null) {
+            if (returnScores && sdoc.score != null) {
+                doc.setField("score", sdoc.score);
+            }
+            if(removeKeyField) {
+              doc.removeFields(keyFieldName);
+            }
+            rb._responseDocs.set(sdoc.positionInResponse, doc);
           }
-          if(removeKeyField) {
-            doc.removeFields(keyFieldName);
-          }
-          rb._responseDocs.set(sdoc.positionInResponse, doc);
         }
       }
     }
