@@ -19,6 +19,7 @@ package org.apache.solr.cloud;
 
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.cloud.*;
+import org.apache.solr.handler.component.ShardHandler;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
@@ -42,6 +43,7 @@ public class Overseer {
   
   private static class CloudStateUpdater implements Runnable {
     
+    private static final String DELETECORE = "deletecore";
     private final ZkStateReader reader;
     private final SolrZkClient zkClient;
     private final String myId;
@@ -153,7 +155,7 @@ public class Overseer {
         final ZkNodeProps message, final String operation) {
       if ("state".equals(operation)) {
         cloudState = updateState(cloudState, message);
-      } else if ("deletecore".equals(operation)) {
+      } else if (DELETECORE.equals(operation)) {
         cloudState = removeCore(cloudState, message);
       } else if (ZkStateReader.LEADER_PROP.equals(operation)) {
         StringBuilder sb = new StringBuilder();
@@ -354,13 +356,36 @@ public class Overseer {
                 LinkedHashMap<String, ZkNodeProps> newShards = new LinkedHashMap<String, ZkNodeProps>();
                 newShards.putAll(slice.getShards());
                 newShards.remove(coreNodeName);
+                
                 Slice newSlice = new Slice(slice.getName(), newShards);
                 newSlices.put(slice.getName(), newSlice);
+
               } else {
                 newSlices.put(slice.getName(), slice);
               }
             }
-            newStates.put(collectionName, newSlices);
+            int cnt = 0;
+            for (Slice slice : newSlices.values()) {
+              cnt+=slice.getShards().size();
+            }
+            // TODO: if no nodes are left after this unload
+            // remove from zk - do we have a race where Overseer
+            // see's registered nodes and publishes though?
+            if (cnt > 0) {
+              newStates.put(collectionName, newSlices);
+            } else {
+              // TODO: it might be better logically to have this in ZkController
+              // but for tests (it's easier) it seems better for the moment to leave CoreContainer and/or
+              // ZkController out of the Overseer.
+              try {
+                zkClient.clean("/collections/" + collectionName);
+              } catch (InterruptedException e) {
+                SolrException.log(log, "Cleaning up collection in zk was interrupted:" + collectionName, e);
+                Thread.currentThread().interrupt();
+              } catch (KeeperException e) {
+                SolrException.log(log, "Problem cleaning up collection in zk:" + collectionName, e);
+              }
+            }
           } else {
             newStates.put(collectionName, cloudState.getSlices(collectionName));
           }
@@ -368,9 +393,10 @@ public class Overseer {
         CloudState newState = new CloudState(cloudState.getLiveNodes(), newStates);
         return newState;
      }
+    
   }
   
-  public Overseer(final ZkStateReader reader, final String id) {
+  public Overseer(ShardHandler shardHandler, String adminPath, final ZkStateReader reader, final String id) throws KeeperException, InterruptedException {
     log.info("Overseer (id=" + id + ") starting");
     createOverseerNode(reader.getZkClient());
     //launch cluster state updater thread
@@ -378,6 +404,11 @@ public class Overseer {
     Thread updaterThread = new Thread(tg, new CloudStateUpdater(reader, id));
     updaterThread.setDaemon(true);
     updaterThread.start();
+    
+    ThreadGroup ccTg = new ThreadGroup("Overseer collection creation process.");
+    Thread ccThread = new Thread(ccTg, new OverseerCollectionProcessor(reader, id, shardHandler, adminPath));
+    ccThread.setDaemon(true);
+    ccThread.start();
   }
 
   /**
@@ -392,6 +423,12 @@ public class Overseer {
   static DistributedQueue getInternalQueue(final SolrZkClient zkClient) {
     createOverseerNode(zkClient);
     return new DistributedQueue(zkClient.getSolrZooKeeper(), "/overseer/queue-work", null);
+  }
+  
+  /* Collection creation queue */
+  static DistributedQueue getCollectionQueue(final SolrZkClient zkClient) {
+    createOverseerNode(zkClient);
+    return new DistributedQueue(zkClient.getSolrZooKeeper(), "/overseer/collection-queue-work", null);
   }
   
   private static void createOverseerNode(final SolrZkClient zkClient) {

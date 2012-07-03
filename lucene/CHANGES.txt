@@ -8,12 +8,27 @@ http://svn.apache.org/repos/asf/lucene/dev/tags/lucene_solr_3_6_0/lucene/contrib
 
 ======================= Lucene 4.0.0-BETA =======================
 
+New features
+
+* LUCENE-3832: Added BasicAutomata.makeStringUnion method to efficiently
+  create automata from a fixed collection of UTF-8 encoded BytesRef
+  (Dawid Weiss, Robert Muir)
+
 API Changes
 
 * LUCENE-4138: update of morfologik (Polish morphological analyzer) to 1.5.3.
   The tag attribute class has been renamed to MorphosyntacticTagsAttribute and
   has a different API (carries a list of tags instead of a compound tag). Upgrade
   of embedded morfologik dictionaries to version 1.9. (Dawid Weiss)
+
+* LUCENE-4178: set 'tokenized' to true on FieldType by default, so that if you
+  make a custom FieldType and set indexed = true, its analyzed by the analyzer.
+  (Robert Muir)
+
+Optimizations
+
+* LUCENE-4171: Performance improvements to Packed64.
+  (Toke Eskildsen via Adrien Grand)
 
 Bug Fixes
 
@@ -22,6 +37,13 @@ Bug Fixes
   such as CollationAnalyzer. (Nattapong Sirilappanich via Robert Muir) 
 
 Build
+
+* LUCENE-4160: Added a property to quit the tests after a given
+  number of failures has occurred. This is useful in combination
+  with -Dtests.iters=N (you can start N iterations and wait for M
+  failures, in particular M = 1). -Dtests.maxfailures=M. Alternatively,
+  specify -Dtests.failfast=true to skip all tests after the first failure.
+  (Dawid Weiss)
 
 * LUCENE-4115: JAR resolution/ cleanup should be done automatically for ant 
   clean/ eclipse/ resolve (Dawid Weiss)

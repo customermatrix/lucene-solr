@@ -62,9 +62,9 @@ public class PackedInts {
    */
   public static final int DEFAULT_BUFFER_SIZE = 1024; // 1K
 
-  private final static String CODEC_NAME = "PackedInts";
-  private final static int VERSION_START = 0;
-  private final static int VERSION_CURRENT = VERSION_START;
+  final static String CODEC_NAME = "PackedInts";
+  final static int VERSION_START = 0;
+  final static int VERSION_CURRENT = VERSION_START;
 
   static final int PACKED = 0;
   static final int PACKED_SINGLE_BLOCK = 1;
@@ -429,9 +429,6 @@ public class PackedInts {
    * @param acceptableOverheadRatio an acceptable overhead
    *        ratio per value
    * @return a mutable packed integer array
-   * @throws java.io.IOException if the Mutable could not be created. With the
-   *         current implementations, this never happens, but the method
-   *         signature allows for future persistence-backed Mutables.
    * @lucene.internal
    */
   public static Mutable getMutable(int valueCount,
