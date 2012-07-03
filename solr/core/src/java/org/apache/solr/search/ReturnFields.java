@@ -93,11 +93,7 @@ public class ReturnFields
   }
 
   public ReturnFields(String[] fl, SolrQueryRequest req) {
-    try {
-      parseFieldList(fl, req);
-    } catch (Exception e) {
-      log.error("Can't parseFieldList", e);
-    }
+    parseFieldList(fl, req);
   }
 
   private void parseFieldList(String[] fl, SolrQueryRequest req) {
