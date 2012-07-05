@@ -1,3 +1,9 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN"
+
+    "http://www.w3.org/TR/html4/strict.dtd">
+
+
+
 <html>
 
 <!--
@@ -18,9 +24,9 @@ limitations under the License.
 -->
 
 <head>
-    
+
   <title>Solr Admin</title>
-    
+
   <link rel="icon" type="image/ico" href="img/favicon.ico">
 
   <link rel="stylesheet" type="text/css" href="css/styles/common.css">
@@ -39,94 +45,94 @@ limitations under the License.
   <link rel="stylesheet" type="text/css" href="css/styles/schema-browser.css">
   <link rel="stylesheet" type="text/css" href="css/styles/threads.css">
   <link rel="stylesheet" type="text/css" href="css/chosen.css">
-    
+
   <script type="text/javascript">
-    
-  var app_config = {};
-    
-  app_config.solr_path = '${contextPath}';
-  app_config.core_admin_path = '${adminPath}';
-    
+
+    var app_config = {};
+
+    app_config.solr_path = '${contextPath}';
+    app_config.core_admin_path = '${adminPath}';
+
   </script>
-    
+
 </head>
 <body>
-    
-  <div id="wrapper">
-    
-    <div id="header">
-            
-      <a href="./" id="solr"><span>Apache SOLR</span></a>
 
-      <p id="environment">&nbsp;</p>
+<div id="wrapper">
 
-    </div>
+  <div id="header">
 
-    <div id="main" class="clearfix">
-        
-      <div id="content-wrapper">
-        <div id="content">
-                  
-          &nbsp;
-                  
-        </div>
-      </div>
-            
-      <div id="menu-wrapper">
-        <div>
-                  
-          <ul id="menu">
+    <a href="./" id="solr"><span>Apache SOLR</span></a>
 
-            <li id="index" class="global"><p><a href="#/">Dashboard</a></p></li>
+    <p id="environment">&nbsp;</p>
 
-            <li id="logging" class="global"><p><a href="#/~logging">Logging</a></p>
-              <ul>
-                <li class="level"><a href="#/~logging/level">Level</a></li>
-              </ul>
-            </li>
-
-            <li id="cloud" class="global optional"><p><a href="#/~cloud">Cloud</a></p>
-              <ul>
-                <li class="tree"><a href="#/~cloud">Tree</a></li>
-                <li class="graph"><a href="#/~cloud?view=graph">Graph</a></li>
-                <li class="rgraph"><a href="#/~cloud?view=rgraph">Graph (Radial)</a></li>
-                <li class="dump"><a href="#/~cloud">Dump</a></li>
-              </ul>
-            </li>
-
-            <li id="cores" class="global"><p><a href="#/~cores">Core Admin</a></p></li>
-
-            <li id="java-properties" class="global"><p><a href="#/~java-properties">Java Properties</a></li>
-
-            <li id="threads" class="global"><p><a href="#/~threads">Thread Dump</a></p></li>
-            
-          </ul>
-
-          <ul id="menu-selector">
-          </ul>
-                  
-        </div>
-      </div>
-            
-      <div id="meta">
-                
-        <ul>
-                    
-          <li class="documentation"><a href="http://lucene.apache.org/solr/"><span>Documentation</span></a></li>
-          <li class="issues"><a href="http://issues.apache.org/jira/browse/SOLR"><span>Issue Tracker</span></a></li>
-          <li class="irc"><a href="http://webchat.freenode.net/?channels=#solr"><span>IRC Channel</span></a></li>
-          <li class="mailinglist"><a href="http://wiki.apache.org/solr/UsingMailingLists"><span>Community forum</span></a></li>
-          <li class="wiki-query-syntax"><a href="http://wiki.apache.org/solr/SolrQuerySyntax"><span>Solr Query Syntax</span></a></li>
-                    
-        </ul>
-                
-      </div>
-            
-    </div>
-    
   </div>
-    
-  <script src="js/require.js" data-main="js/main"></script>
+
+  <div id="main" class="clearfix">
+
+    <div id="content-wrapper">
+      <div id="content">
+
+        &nbsp;
+
+      </div>
+    </div>
+
+    <div id="menu-wrapper">
+      <div>
+
+        <ul id="menu">
+
+          <li id="index" class="global"><p><a href="#/">Dashboard</a></p></li>
+
+          <li id="logging" class="global"><p><a href="#/~logging">Logging</a></p>
+            <ul>
+              <li class="level"><a href="#/~logging/level">Level</a></li>
+            </ul>
+          </li>
+
+          <li id="cloud" class="global optional"><p><a href="#/~cloud">Cloud</a></p>
+            <ul>
+              <li class="tree"><a href="#/~cloud">Tree</a></li>
+              <li class="graph"><a href="#/~cloud?view=graph">Graph</a></li>
+              <li class="rgraph"><a href="#/~cloud?view=rgraph">Graph (Radial)</a></li>
+              <li class="dump"><a href="#/~cloud">Dump</a></li>
+            </ul>
+          </li>
+
+          <li id="cores" class="global"><p><a href="#/~cores">Core Admin</a></p></li>
+
+          <li id="java-properties" class="global"><p><a href="#/~java-properties">Java Properties</a></li>
+
+          <li id="threads" class="global"><p><a href="#/~threads">Thread Dump</a></p></li>
+
+        </ul>
+
+        <ul id="menu-selector">
+        </ul>
+
+      </div>
+    </div>
+
+    <div id="meta">
+
+      <ul>
+
+        <li class="documentation"><a href="http://lucene.apache.org/solr/"><span>Documentation</span></a></li>
+        <li class="issues"><a href="http://issues.apache.org/jira/browse/SOLR"><span>Issue Tracker</span></a></li>
+        <li class="irc"><a href="http://webchat.freenode.net/?channels=#solr"><span>IRC Channel</span></a></li>
+        <li class="mailinglist"><a href="http://wiki.apache.org/solr/UsingMailingLists"><span>Community forum</span></a></li>
+        <li class="wiki-query-syntax"><a href="http://wiki.apache.org/solr/SolrQuerySyntax"><span>Solr Query Syntax</span></a></li>
+
+      </ul>
+
+    </div>
+
+  </div>
+
+</div>
+
+<script src="js/require.js" data-main="js/main"></script>
 
 </body>
 </html>
