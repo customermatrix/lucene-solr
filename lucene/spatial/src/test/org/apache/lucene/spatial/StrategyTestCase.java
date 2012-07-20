@@ -24,6 +24,7 @@ import com.spatial4j.core.io.sample.SampleDataReader;
 import com.spatial4j.core.shape.Shape;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.spatial.query.SpatialArgsParser;
@@ -31,10 +32,15 @@ import org.junit.Assert;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 import java.util.logging.Logger;
 
-public abstract class StrategyTestCase<T extends SpatialFieldInfo> extends SpatialTestCase {
+public abstract class StrategyTestCase extends SpatialTestCase {
 
   public static final String DATA_STATES_POLY = "states-poly.txt";
   public static final String DATA_STATES_BBOX = "states-bbox.txt";
@@ -51,9 +57,8 @@ public abstract class StrategyTestCase<T extends SpatialFieldInfo> extends Spati
 
   protected final SpatialArgsParser argsParser = new SpatialArgsParser();
 
-  protected SpatialStrategy<T> strategy;
+  protected SpatialStrategy strategy;
   protected SpatialContext ctx;
-  protected T fieldInfo;
   protected boolean storeShape = true;
 
   protected void executeQueries(SpatialMatchConcern concern, String... testQueryFile) throws IOException {
@@ -79,11 +84,12 @@ public abstract class StrategyTestCase<T extends SpatialFieldInfo> extends Spati
       document.add(new StringField("id", data.id, Field.Store.YES));
       document.add(new StringField("name", data.name, Field.Store.YES));
       Shape shape = ctx.readShape(data.shape);
-      for (IndexableField f : strategy.createFields(fieldInfo, shape, true, storeShape)) {
-        if( f != null ) { // null if incompatibleGeometry && ignore
-          document.add(f);
-        }
+      for (IndexableField f : strategy.createIndexableFields(shape)) {
+        document.add(f);
       }
+      if (storeShape)
+        document.add(new StoredField(strategy.getFieldName(), ctx.toString(shape)));
+
       documents.add(document);
     }
     return documents;
@@ -107,7 +113,11 @@ public abstract class StrategyTestCase<T extends SpatialFieldInfo> extends Spati
       SpatialTestQuery q = queries.next();
 
       String msg = q.line; //"Query: " + q.args.toString(ctx);
-      SearchResults got = executeQuery(strategy.makeQuery(q.args, fieldInfo), 100);
+      SearchResults got = executeQuery(strategy.makeQuery(q.args), 100);
+      if (storeShape && got.numFound > 0) {
+        //check stored value is there & parses
+        assertNotNull(ctx.readShape(got.results.get(0).document.get(strategy.getFieldName())));
+      }
       if (concern.orderIsImportant) {
         Iterator<String> ids = q.ids.iterator();
         for (SearchResult r : got.results) {

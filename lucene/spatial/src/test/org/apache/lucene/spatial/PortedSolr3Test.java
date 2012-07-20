@@ -17,6 +17,7 @@ package org.apache.lucene.spatial;
  * limitations under the License.
  */
 
+import com.carrotsearch.randomizedtesting.annotations.Name;
 import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 import com.spatial4j.core.context.SpatialContext;
 import com.spatial4j.core.context.simple.SimpleSpatialContext;
@@ -24,6 +25,7 @@ import com.spatial4j.core.shape.Point;
 import com.spatial4j.core.shape.Shape;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.FilteredQuery;
@@ -58,27 +60,42 @@ public class PortedSolr3Test extends StrategyTestCase {
     SpatialStrategy strategy;
 
     grid = new GeohashPrefixTree(ctx,12);
-    strategy = new RecursivePrefixTreeStrategy(grid);
-    ctorArgs.add(new Object[]{"recursive_geohash",strategy});
+    strategy = new RecursivePrefixTreeStrategy(grid, "recursive_geohash");
+    ctorArgs.add(new Object[]{new Param(strategy, "recursive_geohash")});
 
     grid = new QuadPrefixTree(ctx,25);
-    strategy = new RecursivePrefixTreeStrategy(grid);
-    ctorArgs.add(new Object[]{"recursive_quad",strategy});
+    strategy = new RecursivePrefixTreeStrategy(grid, "recursive_quad");
+    ctorArgs.add(new Object[]{new Param(strategy, "recursive_quad")});
 
     grid = new GeohashPrefixTree(ctx,12);
-    strategy = new TermQueryPrefixTreeStrategy(grid);
-    ctorArgs.add(new Object[]{"termquery_geohash",strategy});
+    strategy = new TermQueryPrefixTreeStrategy(grid, "termquery_geohash");
+    ctorArgs.add(new Object[]{new Param(strategy, "termquery_geohash")});
 
     return ctorArgs;
+  }
+  
+  // this is a hack for clover!
+  static class Param {
+    SpatialStrategy strategy;
+    String description;
+
+    Param(SpatialStrategy strategy, String description) {
+      this.strategy = strategy;
+      this.description = description;
+    }
+    
+    @Override
+    public String toString() {
+      return description;
+    }
   }
 
 //  private String fieldName;
 
-  public PortedSolr3Test(String fieldName, SpatialStrategy strategy) {
-    ctx = strategy.getSpatialContext();
+  public PortedSolr3Test(@Name("strategy") Param param) {
+    SpatialStrategy strategy = param.strategy;
+    this.ctx = strategy.getSpatialContext();
     this.strategy = strategy;
-//    this.fieldName = fieldName;
-    fieldInfo = new SimpleSpatialFieldInfo( fieldName );
   }
 
   private void setupDocs() throws IOException {
@@ -156,7 +173,7 @@ public class PortedSolr3Test extends StrategyTestCase {
 
   private void checkHitsOrdered(String spatialQ, String... ids) {
     SpatialArgs args = this.argsParser.parse(spatialQ,ctx);
-    Query query = strategy.makeQuery(args, fieldInfo);
+    Query query = strategy.makeQuery(args);
     SearchResults results = executeQuery(query, 100);
     String[] resultIds = new String[results.numFound];
     int i = 0;
@@ -177,9 +194,11 @@ public class PortedSolr3Test extends StrategyTestCase {
   private Document newDoc(String id, Shape shape) {
     Document doc = new Document();
     doc.add(new StringField("id", id, Field.Store.YES));
-    for (IndexableField f : strategy.createFields(fieldInfo, shape, true, storeShape)) {
+    for (IndexableField f : strategy.createIndexableFields(shape)) {
       doc.add(f);
     }
+    if (storeShape)
+      doc.add(new StoredField(strategy.getFieldName(), ctx.toString(shape)));
     return doc;
   }
 
@@ -199,9 +218,9 @@ public class PortedSolr3Test extends StrategyTestCase {
     //args.setDistPrecision(0.025);
     Query query;
     if (random().nextBoolean()) {
-      query = strategy.makeQuery(args, fieldInfo);
+      query = strategy.makeQuery(args);
     } else {
-      query = new FilteredQuery(new MatchAllDocsQuery(),strategy.makeFilter(args, fieldInfo));
+      query = new FilteredQuery(new MatchAllDocsQuery(),strategy.makeFilter(args));
     }
     SearchResults results = executeQuery(query, 100);
     assertEquals(""+shape,assertNumFound,results.numFound);

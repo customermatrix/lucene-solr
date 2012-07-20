@@ -17,9 +17,8 @@ package org.apache.lucene.util;
  * limitations under the License.
  */
 
-import org.apache.lucene.LucenePackage;
-
 import java.lang.reflect.Field;
+import org.apache.lucene.LucenePackage;
 
 /**
  * Some useful constants.
@@ -108,7 +107,7 @@ public final class Constants {
   /**
    * This is the internal Lucene version, recorded into each segment.
    */
-  public static final String LUCENE_MAIN_VERSION = ident("4.0");
+  public static final String LUCENE_MAIN_VERSION = ident("4.0.0.1");
 
   /**
    * This is the Lucene version for display purposes.
@@ -118,9 +117,14 @@ public final class Constants {
     Package pkg = LucenePackage.get();
     String v = (pkg == null) ? null : pkg.getImplementationVersion();
     if (v == null) {
-      v = LUCENE_MAIN_VERSION + "-PES-SNAPSHOT";
-    } else if (!v.startsWith(LUCENE_MAIN_VERSION)) {
-      v = LUCENE_MAIN_VERSION + "-PES-SNAPSHOT " + v;
+      String parts[] = LUCENE_MAIN_VERSION.split("\\.");
+      if (parts.length == 4) {
+        // alpha/beta
+        assert parts[2].equals("0");
+        v = parts[0] + "." + parts[1] + "-PES-SNAPSHOT";
+      } else {
+        v = LUCENE_MAIN_VERSION + "-PES-SNAPSHOT";
+      }
     }
     LUCENE_VERSION = ident(v);
   }

@@ -26,9 +26,9 @@ import com.spatial4j.core.shape.simple.PointImpl;
 import com.spatial4j.core.util.GeohashUtils;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.spatial.SimpleSpatialFieldInfo;
 import org.apache.lucene.spatial.SpatialMatchConcern;
 import org.apache.lucene.spatial.StrategyTestCase;
 import org.apache.lucene.spatial.prefix.tree.GeohashPrefixTree;
@@ -37,11 +37,15 @@ import org.apache.lucene.spatial.query.SpatialOperation;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 import static java.lang.Math.toRadians;
 
-public class TestRecursivePrefixTreeStrategy extends StrategyTestCase<SimpleSpatialFieldInfo> {
+public class TestRecursivePrefixTreeStrategy extends StrategyTestCase {
 
   private int maxLength;
 
@@ -49,9 +53,8 @@ public class TestRecursivePrefixTreeStrategy extends StrategyTestCase<SimpleSpat
   private void init(int maxLength) {
     this.maxLength = maxLength;
     this.ctx = SimpleSpatialContext.GEO_KM;
-    this.strategy = new RecursivePrefixTreeStrategy(new GeohashPrefixTree(
-        ctx, maxLength ));
-    this.fieldInfo = new SimpleSpatialFieldInfo( getClass().getSimpleName() );
+    GeohashPrefixTree grid = new GeohashPrefixTree(ctx, maxLength);
+    this.strategy = new RecursivePrefixTreeStrategy(grid, getClass().getSimpleName());
   }
 
   @Test
@@ -134,7 +137,7 @@ public class TestRecursivePrefixTreeStrategy extends StrategyTestCase<SimpleSpat
     Shape shape = ctx.makeCircle(pt,dist);
     SpatialArgs args = new SpatialArgs(SpatialOperation.Intersects,shape);
     args.setDistPrecision(0.0);
-    SearchResults got = executeQuery(strategy.makeQuery(args, fieldInfo), 100);
+    SearchResults got = executeQuery(strategy.makeQuery(args), 100);
     assertEquals(""+shape,assertNumFound,got.numFound);
     if (assertIds != null) {
       Set<Integer> gotIds = new HashSet<Integer>();
@@ -151,9 +154,11 @@ public class TestRecursivePrefixTreeStrategy extends StrategyTestCase<SimpleSpat
   private Document newDoc(String id, Shape shape) {
     Document doc = new Document();
     doc.add(new StringField("id", id, Field.Store.YES));
-    for (IndexableField f : strategy.createFields(fieldInfo, shape, true, storeShape)) {
+    for (IndexableField f : strategy.createIndexableFields(shape)) {
       doc.add(f);
     }
+    if (storeShape)
+      doc.add(new StoredField(strategy.getFieldName(), ctx.toString(shape)));
     return doc;
   }
 

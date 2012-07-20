@@ -48,7 +48,7 @@ public class CommonGramsFilterTest extends BaseTokenStreamTestCase {
     assertTrue(cgf.incrementToken());
     assertEquals("the_s", term.toString());
     
-    wt.reset(new StringReader(input));
+    wt.setReader(new StringReader(input));
     cgf.reset();
     assertTrue(cgf.incrementToken());
     assertEquals("How", term.toString());
@@ -66,7 +66,7 @@ public class CommonGramsFilterTest extends BaseTokenStreamTestCase {
     assertTrue(nsf.incrementToken());
     assertEquals("the_s", term.toString());
     
-    wt.reset(new StringReader(input));
+    wt.setReader(new StringReader(input));
     nsf.reset();
     assertTrue(nsf.incrementToken());
     assertEquals("How_the", term.toString());
@@ -318,7 +318,7 @@ public class CommonGramsFilterTest extends BaseTokenStreamTestCase {
       }
     };
     
-    checkRandomData(random(), a, 10000*RANDOM_MULTIPLIER);
+    checkRandomData(random(), a, 1000*RANDOM_MULTIPLIER);
     
     Analyzer b = new Analyzer() {
 
@@ -330,6 +330,6 @@ public class CommonGramsFilterTest extends BaseTokenStreamTestCase {
       }
     };
     
-    checkRandomData(random(), b, 10000*RANDOM_MULTIPLIER);
+    checkRandomData(random(), b, 1000*RANDOM_MULTIPLIER);
   }
 }

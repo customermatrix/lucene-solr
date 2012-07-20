@@ -23,8 +23,9 @@ import com.spatial4j.core.shape.Shape;
 import com.spatial4j.core.shape.simple.PointImpl;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.StringField;
-import org.apache.lucene.spatial.SimpleSpatialFieldInfo;
+import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.spatial.SpatialTestCase;
 import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
 import org.apache.lucene.spatial.query.SpatialArgsParser;
@@ -38,15 +39,17 @@ public class TestTermQueryPrefixGridStrategy extends SpatialTestCase {
 
   @Test
   public void testNGramPrefixGridLosAngeles() throws IOException {
-    SimpleSpatialFieldInfo fieldInfo = new SimpleSpatialFieldInfo("geo");
     SpatialContext ctx = SimpleSpatialContext.GEO_KM;
-    TermQueryPrefixTreeStrategy prefixGridStrategy = new TermQueryPrefixTreeStrategy(new QuadPrefixTree(ctx));
+    TermQueryPrefixTreeStrategy prefixGridStrategy = new TermQueryPrefixTreeStrategy(new QuadPrefixTree(ctx), "geo");
 
     Shape point = new PointImpl(-118.243680, 34.052230);
 
     Document losAngeles = new Document();
     losAngeles.add(new StringField("name", "Los Angeles", Field.Store.YES));
-    losAngeles.add(prefixGridStrategy.createField(fieldInfo, point, true, true));
+    for (IndexableField field : prefixGridStrategy.createIndexableFields(point)) {
+      losAngeles.add(field);
+    }
+    losAngeles.add(new StoredField(prefixGridStrategy.getFieldName(), ctx.toString(point)));
 
     addDocumentsAndCommit(Arrays.asList(losAngeles));
 

@@ -25,6 +25,7 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.LockObtainFailedException;
+import org.apache.solr.cloud.CloudDescriptor;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.CommonParams.EchoParamStyle;
@@ -54,7 +55,9 @@ import org.apache.solr.response.RubyResponseWriter;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.response.XMLResponseWriter;
 import org.apache.solr.response.transform.TransformerFactory;
+import org.apache.solr.schema.FieldType;
 import org.apache.solr.schema.IndexSchema;
+import org.apache.solr.schema.SchemaAware;
 import org.apache.solr.search.QParserPlugin;
 import org.apache.solr.search.SolrFieldCacheMBean;
 import org.apache.solr.search.SolrIndexSearcher;
@@ -384,7 +387,7 @@ public class SolrCore implements SolrInfoMBean {
       dirFactory = getResourceLoader().newInstance(info.className, DirectoryFactory.class);
       dirFactory.init(info.initArgs);
     } else {
-      dirFactory = new StandardDirectoryFactory();
+      dirFactory = new NRTCachingDirectoryFactory();
     }
     // And set it
     directoryFactory = dirFactory;
@@ -661,7 +664,8 @@ public class SolrCore implements SolrInfoMBean {
       latch.countDown();//release the latch, otherwise we block trying to do the close.  This should be fine, since counting down on a latch of 0 is still fine
       //close down the searcher and any other resources, if it exists, as this is not recoverable
       close();
-      throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, null, e);
+      throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, 
+                              e.getMessage(), e);
     } finally {
       // allow firstSearcher events to fire and make sure it is released
       latch.countDown();
@@ -689,9 +693,25 @@ public class SolrCore implements SolrInfoMBean {
       factory = schema.getResourceLoader().newInstance(info.className, CodecFactory.class);
       factory.init(info.initArgs);
     } else {
-      factory = new DefaultCodecFactory();
+      factory = new CodecFactory() {
+        @Override
+        public Codec getCodec() {
+          return Codec.getDefault();
+        }
+      };
     }
-    return factory.create(schema);
+    if (factory instanceof SchemaAware) {
+      ((SchemaAware)factory).inform(schema);
+    } else {
+      for (FieldType ft : schema.getFieldTypes().values()) {
+        if (null != ft.getPostingsFormat()) {
+          String msg = "FieldType '" + ft.getTypeName() + "' is configured with a postings format, but the codec does not support it: " + factory.getClass();
+          log.error(msg);
+          throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, msg);
+        }
+      }
+    }
+    return factory.getCodec();
   }
 
   /**
@@ -881,13 +901,14 @@ public class SolrCore implements SolrInfoMBean {
   public static void verbose(Object... args) {
     if (!VERBOSE) return;
     StringBuilder sb = new StringBuilder("VERBOSE:");
-    sb.append(Thread.currentThread().getName());
-    sb.append(':');
+//    sb.append(Thread.currentThread().getName());
+//    sb.append(':');
     for (Object o : args) {
       sb.append(' ');
       sb.append(o==null ? "(null)" : o.toString());
     }
-    System.out.println(sb.toString());
+    // System.out.println(sb.toString());
+    log.info(sb.toString());
   }
 
 
@@ -1159,8 +1180,12 @@ public class SolrCore implements SolrInfoMBean {
 
         if (updateHandlerReopens) {
           // SolrCore.verbose("start reopen from",previousSearcher,"writer=",writer);
-          IndexWriter writer = getUpdateHandler().getSolrCoreState().getIndexWriter(this);
-          newReader = DirectoryReader.openIfChanged(currentReader, writer, true);
+          RefCounted<IndexWriter> writer = getUpdateHandler().getSolrCoreState().getIndexWriter(this);
+          try {
+            newReader = DirectoryReader.openIfChanged(currentReader, writer.get(), true);
+          } finally {
+            writer.decref();
+          }
 
         } else {
           // verbose("start reopen without writer, reader=", currentReader);
@@ -1911,13 +1936,13 @@ public class SolrCore implements SolrInfoMBean {
         Set<String> hide = new HashSet<String>();
 
         for (String file : solrConfig.getResourceLoader().listConfigDir()) {
-          hide.add(file.toUpperCase(Locale.ENGLISH));
+          hide.add(file.toUpperCase(Locale.ROOT));
         }    
         
         // except the "gettable" list
         StringTokenizer st = new StringTokenizer( gettable );
         while( st.hasMoreTokens() ) {
-          hide.remove( st.nextToken().toUpperCase(Locale.ENGLISH) );
+          hide.remove( st.nextToken().toUpperCase(Locale.ROOT) );
         }
         for( String s : hide ) {
           invariants.add( ShowFileRequestHandler.HIDDEN, s );
@@ -1979,9 +2004,26 @@ public class SolrCore implements SolrInfoMBean {
     lst.add("startTime", new Date(startTime));
     lst.add("refCount", getOpenCount());
 
-    if (null != getCoreDescriptor() && null != getCoreDescriptor().getCoreContainer()) {
-      lst.add("aliases", getCoreDescriptor().getCoreContainer().getCoreNames(this));
+    CoreDescriptor cd = getCoreDescriptor();
+    if (cd != null) {
+      if (null != cd && cd.getCoreContainer() != null) {
+        lst.add("aliases", getCoreDescriptor().getCoreContainer().getCoreNames(this));
+      }
+      CloudDescriptor cloudDesc = cd.getCloudDescriptor();
+      if (cloudDesc != null) {
+        String collection = cloudDesc.getCollectionName();
+        if (collection == null) {
+          collection = "_notset_";
+        }
+        lst.add("collection", collection);
+        String shard = cloudDesc.getShardId();
+        if (shard == null) {
+          shard = "_auto_";
+        }
+        lst.add("shard", shard);
+      }
     }
+    
     return lst;
   }
   

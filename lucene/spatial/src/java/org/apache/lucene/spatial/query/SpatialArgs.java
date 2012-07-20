@@ -17,8 +17,8 @@ package org.apache.lucene.spatial.query;
  * limitations under the License.
  */
 
-import com.spatial4j.core.context.SpatialContext;
-import com.spatial4j.core.context.simple.SimpleSpatialContext;
+import java.util.Locale;
+
 import com.spatial4j.core.exception.InvalidSpatialArgument;
 import com.spatial4j.core.shape.Shape;
 
@@ -55,24 +55,20 @@ public class SpatialArgs {
     }
   }
 
-  public String toString(SpatialContext context) {
+  @Override
+  public String toString() {
     StringBuilder str = new StringBuilder();
     str.append(operation.getName()).append('(');
-    str.append(context.toString(shape));
+    str.append(shape.toString());
     if (min != null) {
       str.append(" min=").append(min);
     }
     if (max != null) {
       str.append(" max=").append(max);
     }
-    str.append(" distPrec=").append(String.format("%.2f%%", distPrecision / 100d));
+    str.append(" distPrec=").append(String.format(Locale.ROOT, "%.2f%%", distPrecision / 100d));
     str.append(')');
     return str.toString();
-  }
-
-  @Override
-  public String toString() {
-    return toString(SimpleSpatialContext.GEO_KM);
   }
 
   //------------------------------------------------
