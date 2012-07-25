@@ -21,26 +21,28 @@ import org.apache.lucene.index.*;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.search.*;
 import org.apache.lucene.search.grouping.AbstractAllGroupHeadsCollector;
-import org.apache.lucene.search.grouping.term.TermGroupFacetCollector;
 import org.apache.lucene.search.grouping.term.TermAllGroupsCollector;
+import org.apache.lucene.search.grouping.term.TermGroupFacetCollector;
 import org.apache.lucene.util.*;
 import org.apache.lucene.util.packed.PackedInts;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.params.*;
-import org.apache.solr.common.params.FacetParams.FacetRangeOther;
 import org.apache.solr.common.params.FacetParams.FacetRangeInclude;
+import org.apache.solr.common.params.FacetParams.FacetRangeOther;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.common.util.StrUtils;
+import org.apache.solr.handler.component.ResponseBuilder;
 import org.apache.solr.schema.*;
 import org.apache.solr.search.*;
 import org.apache.solr.search.grouping.GroupingSpecification;
 import org.apache.solr.util.BoundedTreeSet;
 import org.apache.solr.util.DateMathParser;
 import org.apache.solr.util.DefaultSolrThreadFactory;
-import org.apache.solr.handler.component.ResponseBuilder;
 import org.apache.solr.util.LongPriorityQueue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.*;
@@ -56,7 +58,7 @@ import java.util.concurrent.TimeUnit;
  * to leverage any of it's functionality.
  */
 public class SimpleFacets {
-
+  private Logger logger = LoggerFactory.getLogger(SimpleFacets.class);
   /** The main set of documents all facet counts should be relative to */
   protected DocSet docs;
   /** Configuration params behavior should be driven by */
@@ -232,22 +234,26 @@ public class SimpleFacets {
      */
     // SolrQueryParser qp = searcher.getSchema().getSolrQueryParser(null);
 
-    String[] facetQs = params.getParams(FacetParams.FACET_QUERY);
+    try {
+      String[] facetQs = params.getParams(FacetParams.FACET_QUERY);
 
-    
-    if (null != facetQs && 0 != facetQs.length) {
-      for (String q : facetQs) {
-        parseParams(FacetParams.FACET_QUERY, q);
 
-        // TODO: slight optimization would prevent double-parsing of any localParams
-        Query qobj = QParser.getParser(q, null, req).getQuery();
+      if (null != facetQs && 0 != facetQs.length) {
+        for (String q : facetQs) {
+          parseParams(FacetParams.FACET_QUERY, q);
 
-        if (params.getBool(GroupParams.GROUP_FACET, false)) {
-          res.add(key, getGroupedFacetQueryCount(qobj));
-        } else {
-          res.add(key, searcher.numDocs(qobj, base));
+          // TODO: slight optimization would prevent double-parsing of any localParams
+          Query qobj = QParser.getParser(q, null, req).getQuery();
+
+          if (params.getBool(GroupParams.GROUP_FACET, false)) {
+            res.add(key, getGroupedFacetQueryCount(qobj));
+          } else {
+            res.add(key, searcher.numDocs(qobj, base));
+          }
         }
       }
+    } catch (Exception e) {
+      logger.error("", e);
     }
 
     return res;
@@ -421,17 +427,22 @@ public class SimpleFacets {
           throws IOException, ParseException {
 
     NamedList<Object> res = new SimpleOrderedMap<Object>();
-    String[] facetFs = params.getParams(FacetParams.FACET_FIELD);
-    if (null != facetFs) {
-      for (String f : facetFs) {
-        parseParams(FacetParams.FACET_FIELD, f);
-        String termList = localParams == null ? null : localParams.get(CommonParams.TERMS);
-        if (termList != null) {
-          res.add(key, getListedTermCounts(facetValue, termList));
-        } else {
-          res.add(key, getTermCounts(facetValue));
+
+    try {
+      String[] facetFs = params.getParams(FacetParams.FACET_FIELD);
+      if (null != facetFs) {
+        for (String f : facetFs) {
+          parseParams(FacetParams.FACET_FIELD, f);
+          String termList = localParams == null ? null : localParams.get(CommonParams.TERMS);
+          if (termList != null) {
+            res.add(key, getListedTermCounts(facetValue, termList));
+          } else {
+            res.add(key, getTermCounts(facetValue));
+          }
         }
       }
+    } catch (Exception e) {
+      logger.warn("", e);
     }
     return res;
   }
@@ -838,12 +849,17 @@ public class SimpleFacets {
     throws IOException, ParseException {
 
     final NamedList<Object> resOuter = new SimpleOrderedMap<Object>();
-    final String[] fields = params.getParams(FacetParams.FACET_DATE);
 
-    if (null == fields || 0 == fields.length) return resOuter;
+    try {
+      final String[] fields = params.getParams(FacetParams.FACET_DATE);
 
-    for (String f : fields) {
-      getFacetDateCounts(f, resOuter);
+      if (null == fields || 0 == fields.length) return resOuter;
+
+      for (String f : fields) {
+        getFacetDateCounts(f, resOuter);
+      }
+    } catch (Exception e) {
+      logger.warn("", e);
     }
 
     return resOuter;
