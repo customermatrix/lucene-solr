@@ -32,7 +32,7 @@ import java.io.IOException;
  *
  *
  */
-public final class SchemaField extends FieldProperties {
+public class SchemaField extends FieldProperties {
   final String name;
   final FieldType type;
   final int properties;
