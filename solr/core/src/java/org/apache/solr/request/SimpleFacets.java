@@ -234,27 +234,27 @@ public class SimpleFacets {
      */
     // SolrQueryParser qp = searcher.getSchema().getSolrQueryParser(null);
 
-    try {
       String[] facetQs = params.getParams(FacetParams.FACET_QUERY);
 
 
       if (null != facetQs && 0 != facetQs.length) {
         for (String q : facetQs) {
-          parseParams(FacetParams.FACET_QUERY, q);
+          try {
+            parseParams(FacetParams.FACET_QUERY, q);
 
-          // TODO: slight optimization would prevent double-parsing of any localParams
-          Query qobj = QParser.getParser(q, null, req).getQuery();
-
-          if (params.getBool(GroupParams.GROUP_FACET, false)) {
-            res.add(key, getGroupedFacetQueryCount(qobj));
-          } else {
-            res.add(key, searcher.numDocs(qobj, base));
+            // TODO: slight optimization would prevent double-parsing of any localParams
+            Query qobj = QParser.getParser(q, null, req).getQuery();
+  
+            if (params.getBool(GroupParams.GROUP_FACET, false)) {
+              res.add(key, getGroupedFacetQueryCount(qobj));
+            } else {
+              res.add(key, searcher.numDocs(qobj, base));
+            }
+          } catch (Exception e) {
+            logger.error("", e);
           }
         }
       }
-    } catch (Exception e) {
-      logger.error("", e);
-    }
 
     return res;
   }
