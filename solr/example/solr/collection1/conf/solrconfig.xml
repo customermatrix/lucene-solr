@@ -821,6 +821,8 @@
   <requestHandler name="/get" class="solr.RealTimeGetHandler">
      <lst name="defaults">
        <str name="omitHeader">true</str>
+       <str name="wt">json</str>
+       <str name="indent">true</str>
      </lst>
   </requestHandler>
 
@@ -849,6 +851,7 @@
        <str name="qf">
           text^0.5 features^1.0 name^1.2 sku^1.5 id^10.0 manu^1.1 cat^1.4
        </str>
+       <str name="df">text</str>
        <str name="mm">100%</str>
        <str name="q.alt">*:*</str>
        <str name="rows">10</str>
@@ -1608,6 +1611,24 @@
        <processor class="solr.RunUpdateProcessorFactory" />
      </updateRequestProcessorChain>
     -->
+
+  <!-- Script update processor
+
+    This example hooks in an update processor implemented using JavaScript.
+
+    See more about the script update processor at http://wiki.apache.org/solr/ScriptUpdateProcessor
+  -->
+  <!--
+    <updateRequestProcessorChain name="script">
+      <processor class="solr.StatelessScriptUpdateProcessorFactory">
+        <str name="script">update-script.js</str>
+        <lst name="params">
+          <str name="config_param">example config parameter</str>
+        </lst>
+      </processor>
+      <processor class="solr.RunUpdateProcessorFactory" />
+    </updateRequestProcessorChain>
+  -->
  
   <!-- Response Writers
 

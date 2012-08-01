@@ -17,6 +17,13 @@ package org.apache.solr.update;
  * limitations under the License.
  */
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.core.SolrCore;
@@ -25,13 +32,6 @@ import org.apache.solr.request.SolrQueryRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-
 /**
  * Helper class for tracking autoCommit state.
  * 
@@ -39,6 +39,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * definitely change in the future, so the interface should not be relied-upon
  * 
  * Note: all access must be synchronized.
+ * 
+ * Public for tests.
  */
 public class CommitTracker implements Runnable {
   protected final static Logger log = LoggerFactory.getLogger(CommitTracker.class);
@@ -248,7 +250,8 @@ public class CommitTracker implements Runnable {
     this.docsUpperBound = docsUpperBound;
   }
 
-  void setTimeUpperBound(long timeUpperBound) {
+  // only for testing - not thread safe
+  public void setTimeUpperBound(long timeUpperBound) {
     this.timeUpperBound = timeUpperBound;
   }
 }

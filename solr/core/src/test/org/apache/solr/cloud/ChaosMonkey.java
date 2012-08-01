@@ -36,6 +36,8 @@ import org.apache.solr.core.CoreContainer;
 import org.apache.solr.servlet.SolrDispatchFilter;
 import org.apache.zookeeper.KeeperException;
 import org.eclipse.jetty.servlet.FilterHolder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The monkey can stop random or specific jetties used with SolrCloud.
@@ -45,7 +47,8 @@ import org.eclipse.jetty.servlet.FilterHolder;
  *
  */
 public class ChaosMonkey {
-
+  private static Logger log = LoggerFactory.getLogger(ChaosMonkey.class);
+  
   private static final int CONLOSS_PERCENT = 3; //30%
   private static final int EXPIRE_PERCENT = 4; //40%
   private Map<String,List<CloudJettyRunner>> shardToJetty;
@@ -63,18 +66,13 @@ public class ChaosMonkey {
   private boolean expireSessions;
   private boolean causeConnectionLoss;
   private boolean aggressivelyKillLeaders;
-  private Map<String,SolrServer> shardToLeaderClient;
   private Map<String,CloudJettyRunner> shardToLeaderJetty;
   private long startTime;
   
   public ChaosMonkey(ZkTestServer zkServer, ZkStateReader zkStateReader,
       String collection, Map<String,List<CloudJettyRunner>> shardToJetty,
-      Map<String,List<SolrServer>> shardToClient,
-      Map<String,SolrServer> shardToLeaderClient,
       Map<String,CloudJettyRunner> shardToLeaderJetty) {
     this.shardToJetty = shardToJetty;
-    this.shardToClient = shardToClient;
-    this.shardToLeaderClient = shardToLeaderClient;
     this.shardToLeaderJetty = shardToLeaderJetty;
     this.zkServer = zkServer;
     this.zkStateReader = zkStateReader;
@@ -82,9 +80,12 @@ public class ChaosMonkey {
     Random random = LuceneTestCase.random();
     expireSessions = random.nextBoolean();
     causeConnectionLoss = random.nextBoolean();
+    monkeyLog("init - expire sessions:" + expireSessions
+        + " cause connection loss:" + causeConnectionLoss);
   }
   
   public void expireSession(JettySolrRunner jetty) {
+    monkeyLog("expire session for " + jetty.getLocalPort() + " !");
     SolrDispatchFilter solrDispatchFilter = (SolrDispatchFilter) jetty.getDispatchFilter().getFilter();
     if (solrDispatchFilter != null) {
       CoreContainer cores = solrDispatchFilter.getCores();
@@ -98,19 +99,20 @@ public class ChaosMonkey {
   public void expireRandomSession() throws KeeperException, InterruptedException {
     String sliceName = getRandomSlice();
     
-    JettySolrRunner jetty = getRandomJetty(sliceName, aggressivelyKillLeaders);
+    CloudJettyRunner jetty = getRandomJetty(sliceName, aggressivelyKillLeaders);
     if (jetty != null) {
-      expireSession(jetty);
+      expireSession(jetty.jetty);
       expires.incrementAndGet();
     }
   }
   
   public void randomConnectionLoss() throws KeeperException, InterruptedException {
-    String sliceName = getRandomSlice();
+    monkeyLog("cause connection loss!");
     
-    JettySolrRunner jetty = getRandomJetty(sliceName, aggressivelyKillLeaders);
+    String sliceName = getRandomSlice();
+    CloudJettyRunner jetty = getRandomJetty(sliceName, aggressivelyKillLeaders);
     if (jetty != null) {
-      causeConnectionLoss(jetty);
+      causeConnectionLoss(jetty.jetty);
       connloss.incrementAndGet();
     }
   }
@@ -128,24 +130,30 @@ public class ChaosMonkey {
     }
   }
 
-  public JettySolrRunner stopShard(String slice, int index) throws Exception {
-    JettySolrRunner jetty = shardToJetty.get(slice).get(index).jetty;
-    stopJetty(jetty);
-    return jetty;
+  public CloudJettyRunner stopShard(String slice, int index) throws Exception {
+    CloudJettyRunner cjetty = shardToJetty.get(slice).get(index);
+    stopJetty(cjetty);
+    return cjetty;
   }
 
-  public void stopJetty(JettySolrRunner jetty) throws Exception {
-    stop(jetty);
+  public void stopJetty(CloudJettyRunner cjetty) throws Exception {
+    stop(cjetty.jetty);
     stops.incrementAndGet();
   }
 
-  public void killJetty(JettySolrRunner jetty) throws Exception {
-    kill(jetty);
+  public void killJetty(CloudJettyRunner cjetty) throws Exception {
+    kill(cjetty);
     stops.incrementAndGet();
   }
   
-  public static void stop(JettySolrRunner jetty) throws Exception {
+  public void stopJetty(JettySolrRunner jetty) throws Exception {
+    stops.incrementAndGet();
+    stopJettySolrRunner(jetty);
+  }
+  
+  private static void stopJettySolrRunner(JettySolrRunner jetty) throws Exception {
     
+    monkeyLog("stop shard! " + jetty.getLocalPort());
     // get a clean shutdown so that no dirs are left open...
     FilterHolder fh = jetty.getDispatchFilter();
     if (fh != null) {
@@ -161,7 +169,9 @@ public class ChaosMonkey {
     }
   }
   
-  public static void kill(JettySolrRunner jetty) throws Exception {
+  public static void kill(CloudJettyRunner cjetty) throws Exception {
+    JettySolrRunner jetty = cjetty.jetty;
+    monkeyLog("kill shard! " + jetty.getLocalPort());
     FilterHolder fh = jetty.getDispatchFilter();
     SolrDispatchFilter sdf = null;
     if (fh != null) {
@@ -181,7 +191,7 @@ public class ChaosMonkey {
   public void stopShard(String slice) throws Exception {
     List<CloudJettyRunner> jetties = shardToJetty.get(slice);
     for (CloudJettyRunner jetty : jetties) {
-      stopJetty(jetty.jetty);
+      stopJetty(jetty);
     }
   }
   
@@ -189,7 +199,7 @@ public class ChaosMonkey {
     List<CloudJettyRunner> jetties = shardToJetty.get(slice);
     for (CloudJettyRunner jetty : jetties) {
       if (!jetty.nodeName.equals(shardName)) {
-        stopJetty(jetty.jetty);
+        stopJetty(jetty);
       }
     }
   }
@@ -199,22 +209,22 @@ public class ChaosMonkey {
     return jetty;
   }
   
-  public JettySolrRunner stopRandomShard() throws Exception {
+  public CloudJettyRunner stopRandomShard() throws Exception {
     String sliceName = getRandomSlice();
     
     return stopRandomShard(sliceName);
   }
   
-  public JettySolrRunner stopRandomShard(String slice) throws Exception {
-    JettySolrRunner jetty = getRandomJetty(slice, aggressivelyKillLeaders);
-    if (jetty != null) {
-      stopJetty(jetty);
+  public CloudJettyRunner stopRandomShard(String slice) throws Exception {
+    CloudJettyRunner cjetty = getRandomJetty(slice, aggressivelyKillLeaders);
+    if (cjetty != null) {
+      stopJetty(cjetty);
     }
-    return jetty;
+    return cjetty;
   }
   
   
-  public JettySolrRunner killRandomShard() throws Exception {
+  public CloudJettyRunner killRandomShard() throws Exception {
     // add all the shards to a list
     String sliceName = getRandomSlice();
     
@@ -230,15 +240,15 @@ public class ChaosMonkey {
     return sliceName;
   }
   
-  public JettySolrRunner killRandomShard(String slice) throws Exception {
-    JettySolrRunner jetty = getRandomJetty(slice, aggressivelyKillLeaders);
-    if (jetty != null) {
-      killJetty(jetty);
+  public CloudJettyRunner killRandomShard(String slice) throws Exception {
+    CloudJettyRunner cjetty = getRandomJetty(slice, aggressivelyKillLeaders);
+    if (cjetty != null) {
+      killJetty(cjetty);
     }
-    return jetty;
+    return cjetty;
   }
   
-  public JettySolrRunner getRandomJetty(String slice, boolean aggressivelyKillLeaders) throws KeeperException, InterruptedException {
+  public CloudJettyRunner getRandomJetty(String slice, boolean aggressivelyKillLeaders) throws KeeperException, InterruptedException {
     
 
     int numRunning = 0;
@@ -288,36 +298,40 @@ public class ChaosMonkey {
     
     if (numActive < 2) {
       // we cannot kill anyone
+      monkeyLog("only one active node in shard - monkey cannot kill :(");
       return null;
     }
     Random random = LuceneTestCase.random();
     int chance = random.nextInt(10);
-    JettySolrRunner jetty;
+    CloudJettyRunner cjetty;
     if (chance <= 5 && aggressivelyKillLeaders) {
       // if killLeader, really aggressively go after leaders
-      jetty = shardToLeaderJetty.get(slice).jetty;
+      cjetty = shardToLeaderJetty.get(slice);
     } else {
       // get random shard
       List<CloudJettyRunner> jetties = shardToJetty.get(slice);
       int index = random.nextInt(jetties.size());
-      jetty = jetties.get(index).jetty;
+      cjetty = jetties.get(index);
       
       ZkNodeProps leader = zkStateReader.getLeaderProps(collection, slice);
       boolean isLeader = leader.get(ZkStateReader.NODE_NAME_PROP).equals(jetties.get(index).nodeName);
       if (!aggressivelyKillLeaders && isLeader) {
         // we don't kill leaders...
+        monkeyLog("abort! I don't kill leaders");
         return null;
       } 
     }
 
-    if (jetty.getLocalPort() == -1) {
+    if (cjetty.jetty.getLocalPort() == -1) {
       // we can't kill the dead
+      monkeyLog("abort! This guy is already dead");
       return null;
     }
     
     //System.out.println("num active:" + numActive + " for " + slice + " sac:" + jetty.getLocalPort());
-    
-    return jetty;
+    monkeyLog("chose a victim! " + cjetty.jetty.getLocalPort());
+  
+    return cjetty;
   }
   
   public SolrServer getRandomClient(String slice) throws KeeperException, InterruptedException {
@@ -335,13 +349,14 @@ public class ChaosMonkey {
   // synchronously starts and stops shards randomly, unless there is only one
   // active shard up for a slice or if there is one active and others recovering
   public void startTheMonkey(boolean killLeaders, final int roundPause) {
+    monkeyLog("starting");
     this.aggressivelyKillLeaders = killLeaders;
     startTime = System.currentTimeMillis();
     // TODO: when kill leaders is on, lets kill a higher percentage of leaders
     
     stop = false;
     new Thread() {
-      private List<JettySolrRunner> deadPool = new ArrayList<JettySolrRunner>();
+      private List<CloudJettyRunner> deadPool = new ArrayList<CloudJettyRunner>();
 
       @Override
       public void run() {
@@ -352,25 +367,9 @@ public class ChaosMonkey {
             if (random.nextBoolean()) {
              if (!deadPool.isEmpty()) {
                int index = random.nextInt(deadPool.size());
-               JettySolrRunner jetty = deadPool.get(index);
-               try {
-                 jetty.start();
-               } catch (BindException e) {
-                 jetty.stop();
-                 sleep(2000);
-                 try {
-                   jetty.start();
-                 } catch (BindException e2) {
-                   jetty.stop();
-                   sleep(5000);
-                   try {
-                     jetty.start();
-                   } catch (BindException e3) {
-                     // we coud not get the port
-                     jetty.stop();
-                     continue;
-                   }
-                 }
+               JettySolrRunner jetty = deadPool.get(index).jetty;
+               if (!ChaosMonkey.start(jetty)) {
+                 continue;
                }
                //System.out.println("started on port:" + jetty.getLocalPort());
                deadPool.remove(index);
@@ -390,16 +389,16 @@ public class ChaosMonkey {
               randomConnectionLoss();
             }
             
-            JettySolrRunner jetty;
+            CloudJettyRunner cjetty;
             if (random.nextBoolean()) {
-              jetty = stopRandomShard();
+              cjetty = stopRandomShard();
             } else {
-              jetty = killRandomShard();
+              cjetty = killRandomShard();
             }
-            if (jetty == null) {
+            if (cjetty == null) {
               // we cannot kill
             } else {
-              deadPool.add(jetty);
+              deadPool.add(cjetty);
             }
             
           } catch (InterruptedException e) {
@@ -409,12 +408,16 @@ public class ChaosMonkey {
             e.printStackTrace();
           }
         }
-        
-        System.out.println("I ran for " + (System.currentTimeMillis() - startTime)/1000.0f + "sec. I stopped " + stops + " and I started " + starts
+        monkeyLog("finished");
+        monkeyLog("I ran for " + (System.currentTimeMillis() - startTime)/1000.0f + "sec. I stopped " + stops + " and I started " + starts
             + ". I also expired " + expires.get() + " and caused " + connloss
             + " connection losses");
       }
     }.start();
+  }
+  
+  public static void monkeyLog(String msg) {
+    log.info("monkey: " + msg);
   }
   
   public void stopTheMonkey() {
@@ -423,6 +426,33 @@ public class ChaosMonkey {
 
   public int getStarts() {
     return starts.get();
+  }
+
+  public static void stop(JettySolrRunner jetty) throws Exception {
+    stopJettySolrRunner(jetty);
+  }
+  
+  public static boolean start(JettySolrRunner jetty) throws Exception {
+    try {
+      jetty.start();
+    } catch (BindException e) {
+      jetty.stop();
+      Thread.sleep(2000);
+      try {
+        jetty.start();
+      } catch (BindException e2) {
+        jetty.stop();
+        Thread.sleep(5000);
+        try {
+          jetty.start();
+        } catch (BindException e3) {
+          // we coud not get the port
+          jetty.stop();
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
 }

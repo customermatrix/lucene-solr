@@ -932,11 +932,9 @@ class Lucene3xFields extends FieldsProducer {
     }
 
     @Override
-    public DocsEnum docs(Bits liveDocs, DocsEnum reuse, boolean needsFreqs) throws IOException {
+    public DocsEnum docs(Bits liveDocs, DocsEnum reuse, int flags) throws IOException {
       PreDocsEnum docsEnum;
-      if (needsFreqs && fieldInfo.getIndexOptions() == IndexOptions.DOCS_ONLY) {
-        return null;
-      } else if (reuse == null || !(reuse instanceof PreDocsEnum)) {
+      if (reuse == null || !(reuse instanceof PreDocsEnum)) {
         docsEnum = new PreDocsEnum();
       } else {
         docsEnum = (PreDocsEnum) reuse;
@@ -948,12 +946,7 @@ class Lucene3xFields extends FieldsProducer {
     }
 
     @Override
-    public DocsAndPositionsEnum docsAndPositions(Bits liveDocs, DocsAndPositionsEnum reuse, boolean needsOffsets) throws IOException {
-      if (needsOffsets) {
-        // Pre-4.0 indices never have offsets:
-        return null;
-      }
-
+    public DocsAndPositionsEnum docsAndPositions(Bits liveDocs, DocsAndPositionsEnum reuse, int flags) throws IOException {
       PreDocsAndPositionsEnum docsPosEnum;
       if (fieldInfo.getIndexOptions() != IndexOptions.DOCS_AND_FREQS_AND_POSITIONS) {
         return null;
@@ -983,6 +976,7 @@ class Lucene3xFields extends FieldsProducer {
     public PreDocsEnum reset(SegmentTermEnum termEnum, Bits liveDocs) throws IOException {
       docs.setLiveDocs(liveDocs);
       docs.seek(termEnum);
+      docs.freq = 1;
       docID = -1;
       return this;
     }

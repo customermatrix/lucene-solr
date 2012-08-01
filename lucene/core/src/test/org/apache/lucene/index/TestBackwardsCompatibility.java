@@ -55,6 +55,7 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.store.BaseDirectoryWrapper;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.MockDirectoryWrapper;
 import org.apache.lucene.store.RAMDirectory;
@@ -174,7 +175,7 @@ public class TestBackwardsCompatibility extends LuceneTestCase {
       }
       File oldIndxeDir = _TestUtil.getTempDir(unsupportedNames[i]);
       _TestUtil.unzip(getDataFile("unsupported." + unsupportedNames[i] + ".zip"), oldIndxeDir);
-      MockDirectoryWrapper dir = newFSDirectory(oldIndxeDir);
+      BaseDirectoryWrapper dir = newFSDirectory(oldIndxeDir);
       // don't checkindex, these are intentionally not supported
       dir.setCheckIndexOnClose(false);
 
@@ -715,7 +716,7 @@ public class TestBackwardsCompatibility extends LuceneTestCase {
       // should be found exactly
       assertEquals(TermsEnum.SeekStatus.FOUND,
                    terms.seekCeil(aaaTerm));
-      assertEquals(35, countDocs(_TestUtil.docs(random(), terms, null, null, false)));
+      assertEquals(35, countDocs(_TestUtil.docs(random(), terms, null, null, 0)));
       assertNull(terms.next());
 
       // should hit end of field
@@ -727,12 +728,12 @@ public class TestBackwardsCompatibility extends LuceneTestCase {
       assertEquals(TermsEnum.SeekStatus.NOT_FOUND,
                    terms.seekCeil(new BytesRef("a")));
       assertTrue(terms.term().bytesEquals(aaaTerm));
-      assertEquals(35, countDocs(_TestUtil.docs(random(), terms, null, null, false)));
+      assertEquals(35, countDocs(_TestUtil.docs(random(), terms, null, null, 0)));
       assertNull(terms.next());
 
       assertEquals(TermsEnum.SeekStatus.FOUND,
                    terms.seekCeil(aaaTerm));
-      assertEquals(35, countDocs(_TestUtil.docs(random(), terms,null, null, false)));
+      assertEquals(35, countDocs(_TestUtil.docs(random(), terms,null, null, 0)));
       assertNull(terms.next());
 
       r.close();

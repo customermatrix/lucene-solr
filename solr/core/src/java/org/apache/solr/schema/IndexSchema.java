@@ -19,8 +19,6 @@ package org.apache.solr.schema;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.AnalyzerWrapper;
-import org.apache.lucene.analysis.util.ResourceLoader;
-import org.apache.lucene.analysis.util.ResourceLoaderAware;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.util.Version;
@@ -32,6 +30,7 @@ import org.apache.solr.core.SolrResourceLoader;
 import org.apache.solr.search.similarities.DefaultSimilarityFactory;
 import org.apache.solr.util.DOMUtil;
 import org.apache.solr.util.SystemIdResolver;
+import org.apache.solr.util.plugin.ResourceLoaderAware;
 import org.apache.solr.util.plugin.SolrCoreAware;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +39,7 @@ import org.xml.sax.InputSource;
 
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
+import java.io.IOException;
 import java.util.*;
 
 /**
@@ -84,7 +84,7 @@ public class IndexSchema {
   private Map<SchemaField, Integer> copyFieldTargetCounts;
   private List<ResourceLoaderAware> awareList;
 
-  /**
+    /**
    * Constructs a schema using the specified resource name and stream.
    * If the is stream is null, the resource loader will load the schema resource by name.
    * @see SolrResourceLoader#openSchema
@@ -105,18 +105,22 @@ public class IndexSchema {
       name = DEFAULT_SCHEMA_FILE;
     this.resourceName = name;
     loader = solrConfig.getResourceLoader();
-    if (is == null) {
-      is = new InputSource(loader.openSchema(name));
-      is.setSystemId(SystemIdResolver.createSystemIdFromResourceName(name));
+    try {
+      if (is == null) {
+        is = new InputSource(loader.openSchema(name));
+        is.setSystemId(SystemIdResolver.createSystemIdFromResourceName(name));
+      }
+      readSchema(is);
+      loader.inform( loader );
+    } catch (IOException e) {
+      throw new RuntimeException(e);
     }
-    readSchema(is);
-    awareList = loader.inform( loader );
   }
 
   public IndexSchema()
   {
   }
-
+  
   /**
    * @since solr 1.4
    */
@@ -511,7 +515,10 @@ public class IndexSchema {
         log.error("uniqueKey is not stored - distributed search will not work");
       }
       if (uniqueKeyField.multiValued()) {
-        log.error("uniqueKey should not be multivalued");
+        String msg = "uniqueKey field ("+uniqueKeyFieldName+
+          ") can not be configured to be multivalued";
+        log.error(msg);
+        throw new SolrException( SolrException.ErrorCode.SERVER_ERROR, msg );
       }
       uniqueKeyFieldName=uniqueKeyField.getName();
       uniqueKeyFieldType=uniqueKeyField.getType();
@@ -710,7 +717,7 @@ public class IndexSchema {
     return newArr;
   }
 
-  static SimilarityFactory readSimilarity(ResourceLoader loader, Node node) {
+  static SimilarityFactory readSimilarity(SolrResourceLoader loader, Node node) {
     if (node==null) {
       return null;
     } else {
@@ -1049,7 +1056,7 @@ public class IndexSchema {
       if (df.matches(fieldName)) return df.prototype.getType();
     }
     return null;
-  };
+  }
 
 
   /**

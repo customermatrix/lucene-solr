@@ -84,7 +84,7 @@ var sammy = $.sammy
                   {
                     if( app.timeout )
                     {
-                      if (console.debug) {
+                      if (console && console.debug) {
                         console.debug( 'Clearing Timeout #' + app.timeout );
                       }
                       clearTimeout( app.timeout );
@@ -133,26 +133,44 @@ var sammy = $.sammy
 
 var solr_admin = function( app_config )
 {
-  me = this;
+  self = this;
 
-  menu_element = null;
+      menu_element = null;
 
-  is_multicore = null;
-  cores_data = null;
-  active_core = null;
-  environment_basepath = null;
+      is_multicore = null;
+      cores_data = null;
+      active_core = null;
+      environment_basepath = null;
 
-  config = app_config;
-  params = null;
-  dashboard_values = null;
-  schema_browser_data = null;
+      config = app_config;
+      params = null;
+      dashboard_values = null;
+      schema_browser_data = null;
 
-  plugin_data = null;
+      plugin_data = null;
 
-  this.menu_element = $( "#menu-selector" );
+      this.menu_element = $( '#menu-selector' );
   this.config = config;
 
   this.timeout = null;
+
+  show_global_error = function( error )
+  {
+    var main = $( '#main' );
+
+    $( 'div[id$="-wrapper"]', main )
+        .remove();
+
+    main
+        .addClass( 'error' )
+        .append( error );
+
+    var pre_tags = $( 'pre', main );
+    if( 0 !== pre_tags.size() )
+    {
+      hljs.highlightBlock( pre_tags.get(0) );
+    }
+  };
 
   this.run = function()
   {
@@ -168,10 +186,12 @@ var solr_admin = function( app_config )
               },
               success : function( response )
               {
-                me.cores_data = response.status;
+                self.cores_data = response.status;
+                var core_count = 0;
 
                 for( var core_name in response.status )
                 {
+                  core_count++;
                   var core_path = config.solr_path + '/' + core_name;
                   var schema =  response['status'][core_name]['schema'];
                   var solrconfig =  response['status'][core_name]['config'];
@@ -209,23 +229,55 @@ var solr_admin = function( app_config )
                       + '    </ul>' + "\n"
                       + '</li>';
 
-                  if (me.menu_element) {
-                    me.menu_element
-                        .append( core_tpl );
+                  self.menu_element
+                      .append( core_tpl );
+                }
+
+                if( response.initFailures )
+                {
+                  var failures = [];
+                  for( var core_name in response.initFailures )
+                  {
+                    failures.push
+                        (
+                            '<li>' +
+                                '<strong>' + core_name.esc() + ':</strong>' + "\n" +
+                                response.initFailures[core_name].esc() + "\n" +
+                                '</li>'
+                        );
+                  }
+
+                  if( 0 !== failures.length )
+                  {
+                    var init_failures = $( '#init-failures' );
+
+                    init_failures.show();
+                    $( 'ul', init_failures ).html( failures.join( "\n" ) );
                   }
                 }
 
+                if( 0 === core_count )
+                {
+                  show_global_error
+                      (
+                          '<div class="message">There are no SolrCores running — for the currenct functionality ' +
+                              'we require at least one SolrCore, sorry :)</div>'
+                      );
+                  return;
+                } // else: we have at least one core....
+
+                var system_url = environment_basepath + '/admin/system?wt=json';
                 $.ajax
                     (
                         {
-                          url : environment_basepath + '/admin/system?wt=json',
+                          url : system_url,
                           dataType : 'json',
                           beforeSend : function( arr, form, options )
                           {
                           },
                           success : function( response )
                           {
-                            me.dashboard_values = response;
+                            self.dashboard_values = response;
 
                             var environment_args = null;
                             var cloud_args = null;
@@ -272,8 +324,11 @@ var solr_admin = function( app_config )
                             // cloud
 
                             var cloud_nav_element = $( '#menu #cloud' );
-                            cloud_nav_element
-                                .show();
+                            if( cloud_args )
+                            {
+                              cloud_nav_element
+                                  .show();
+                            }
 
                             // sammy
 
@@ -281,23 +336,17 @@ var solr_admin = function( app_config )
                           },
                           error : function()
                           {
-                            var main = $( '#main' );
-
-                            $( 'div[id$="-wrapper"]', main )
-                                .remove();
-
-                            main
-                                .addClass( 'error' )
-                                .append
+                            show_global_error
                                 (
-                                    '<div class="message">This interface requires that you activate the admin request handlers, add the following configuration to your <code>solrconfig.xml:</code></div>' +
+                                    '<div class="message"><p>Unable to load environment info from <code>' + system_url.esc() + '</code>.</p>' +
+                                        '<p>This interface requires that you activate the admin request handlers in all SolrCores by adding the ' +
+                                        'following configuration to your <code>solrconfig.xml</code>:</p></div>' + "\n" +
+
                                         '<div class="code"><pre class="syntax language-xml"><code>' +
                                         '<!-- Admin Handlers - This will register all the standard admin RequestHandlers. -->'.esc() + "\n" +
                                         '<requestHandler name="/admin/" class="solr.admin.AdminHandlers" />'.esc() +
                                         '</code></pre></div>'
                                 );
-
-                            hljs.highlightBlock( $( 'pre', main ).get(0) );
                           },
                           complete : function()
                           {
