@@ -19,6 +19,7 @@ package org.apache.solr.schema;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.AnalyzerWrapper;
+import org.apache.lucene.analysis.util.ResourceLoaderAware;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.util.Version;
@@ -30,7 +31,6 @@ import org.apache.solr.core.SolrResourceLoader;
 import org.apache.solr.search.similarities.DefaultSimilarityFactory;
 import org.apache.solr.util.DOMUtil;
 import org.apache.solr.util.SystemIdResolver;
-import org.apache.solr.util.plugin.ResourceLoaderAware;
 import org.apache.solr.util.plugin.SolrCoreAware;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -111,7 +111,7 @@ public class IndexSchema {
         is.setSystemId(SystemIdResolver.createSystemIdFromResourceName(name));
       }
       readSchema(is);
-      loader.inform( loader );
+      awareList = loader.inform( loader );
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
