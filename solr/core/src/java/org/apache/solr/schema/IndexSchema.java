@@ -71,8 +71,8 @@ public class IndexSchema {
   private Analyzer analyzer;
   private Analyzer queryAnalyzer;
 
-  private String defaultSearchFieldName;
-  private String queryParserDefaultOperator;
+  protected String defaultSearchFieldName;
+  protected String queryParserDefaultOperator;
 
 
   private Map<String, List<CopyField>> copyFieldsMap;

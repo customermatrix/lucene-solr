@@ -15,6 +15,14 @@ public class VirtualIndexSchema extends IndexSchema {
     this.uniqueKeyField = uniqueKeyField;
   }
 
+  public void setQueryParserDefaultOperator(String queryParserDefaultOperator) {
+    this.queryParserDefaultOperator = queryParserDefaultOperator;
+  }
+
+  public void setDefaultSearchFieldName(String defaultSearchFieldName) {
+    this.defaultSearchFieldName = defaultSearchFieldName;
+  }
+
   @Override
   public SchemaField getFieldOrNull(String fieldName) {
     return fields.get(fieldName);
