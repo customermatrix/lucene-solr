@@ -280,15 +280,7 @@ var solr_admin = function( app_config )
                             self.dashboard_values = response;
 
                             var environment_args = null;
-                            var cloud_args = null;
-
-                            if( response.jvm && response.jvm.jmx && response.jvm.jmx.commandLineArgs )
-                            {
-                              var command_line_args = response.jvm.jmx.commandLineArgs.join( ' | ' );
-
-                              environment_args = command_line_args.match( /-Dsolr.environment=((dev|test|prod)?[\w\d]*)/i );
-                              cloud_args = command_line_args.match( /-Dzk/i );
-                            }
+                            var cloud_args = true;
 
                             // title
 
