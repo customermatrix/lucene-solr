@@ -1,5 +1,6 @@
 package org.apache.solr.schema;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class VirtualIndexSchema extends IndexSchema {
@@ -31,5 +32,13 @@ public class VirtualIndexSchema extends IndexSchema {
   @Override
   protected FieldType dynFieldType(String fieldName) {
     return null;
+  }
+
+  @Override
+  public Map<String,SchemaField> getFields() {
+    if (fields == null) {
+      return new HashMap<String, SchemaField>();
+    }
+    return fields;
   }
 }
