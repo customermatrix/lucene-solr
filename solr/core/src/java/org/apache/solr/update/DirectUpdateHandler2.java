@@ -144,6 +144,8 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
     RefCounted<IndexWriter> iw = solrCoreState.getIndexWriter(core);
     try {
       iw.get().deleteAll();
+      iw.get().deleteUnusedFiles();
+
     } finally {
       iw.decref();
     }
