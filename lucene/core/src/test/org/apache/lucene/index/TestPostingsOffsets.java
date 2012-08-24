@@ -170,7 +170,7 @@ public class TestPostingsOffsets extends LuceneTestCase {
           assertTrue(storedNumbers.substring(start, end).equals(term));
           if (withPayloads) {
             // check that we have a payload and it starts with "pos"
-            assertTrue(dp.hasPayload());
+            assertNotNull(dp.getPayload());
             BytesRef payload = dp.getPayload();
             assertTrue(payload.utf8ToString().startsWith("pos:"));
           } // note: withPayloads=false doesnt necessarily mean we dont have them from MockAnalyzer!
@@ -198,7 +198,7 @@ public class TestPostingsOffsets extends LuceneTestCase {
         assertTrue(storedNumbers.substring(start, end).equals("hundred"));
         if (withPayloads) {
           // check that we have a payload and it starts with "pos"
-          assertTrue(dp.hasPayload());
+          assertNotNull(dp.getPayload());
           BytesRef payload = dp.getPayload();
           assertTrue(payload.utf8ToString().startsWith("pos:"));
         } // note: withPayloads=false doesnt necessarily mean we dont have them from MockAnalyzer!
@@ -289,9 +289,9 @@ public class TestPostingsOffsets extends LuceneTestCase {
     w.close();
 
     final String[] terms = new String[] {"a", "b", "c", "d"};
-    for(IndexReader reader : r.getSequentialSubReaders()) {
+    for(AtomicReaderContext ctx : r.leaves()) {
       // TODO: improve this
-      AtomicReader sub = (AtomicReader) reader;
+      AtomicReader sub = ctx.reader();
       //System.out.println("\nsub=" + sub);
       final TermsEnum termsEnum = sub.fields().terms("content").iterator(null);
       DocsEnum docs = null;
@@ -444,9 +444,9 @@ public class TestPostingsOffsets extends LuceneTestCase {
         makeToken("foo", 1, 0, 3),
         makeToken("foo", 0, 0, 3),
         makeToken("foo", 0, 0, 3)
-     });
+      });
   }
-  
+
   public void testLegalbutVeryLargeOffsets() throws Exception {
     Directory dir = newDirectory();
     IndexWriter iw = new IndexWriter(dir, newIndexWriterConfig(TEST_VERSION_CURRENT, null));

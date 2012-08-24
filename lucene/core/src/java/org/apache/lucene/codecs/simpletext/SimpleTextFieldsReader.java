@@ -18,16 +18,20 @@ package org.apache.lucene.codecs.simpletext;
  */
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.TreeMap;
+import java.util.TreeSet;
 
 import org.apache.lucene.codecs.FieldsProducer;
 import org.apache.lucene.index.DocsAndPositionsEnum;
 import org.apache.lucene.index.DocsEnum;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.FieldInfo.IndexOptions;
 import org.apache.lucene.index.FieldInfos;
-import org.apache.lucene.index.FieldsEnum;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
@@ -48,7 +52,7 @@ import org.apache.lucene.util.fst.PositiveIntOutputs;
 import org.apache.lucene.util.fst.Util;
 
 class SimpleTextFieldsReader extends FieldsProducer {
-
+  private final TreeMap<String,Long> fields;
   private final IndexInput in;
   private final FieldInfos fieldInfos;
 
@@ -66,34 +70,21 @@ class SimpleTextFieldsReader extends FieldsProducer {
     in = state.dir.openInput(SimpleTextPostingsFormat.getPostingsFileName(state.segmentInfo.name, state.segmentSuffix), state.context);
    
     fieldInfos = state.fieldInfos;
+    fields = readFields(in.clone());
   }
-
-  private class SimpleTextFieldsEnum extends FieldsEnum {
-    private final IndexInput in;
-    private final BytesRef scratch = new BytesRef(10);
-    private String current;
-
-    public SimpleTextFieldsEnum() {
-      this.in = (IndexInput) SimpleTextFieldsReader.this.in.clone();
-    }
-
-    @Override
-    public String next() throws IOException {
-      while(true) {
-        SimpleTextUtil.readLine(in, scratch);
-        if (scratch.equals(END)) {
-          current = null;
-          return null;
-        }
-        if (StringHelper.startsWith(scratch, FIELD)) {
-          return current = new String(scratch.bytes, scratch.offset + FIELD.length, scratch.length - FIELD.length, "UTF-8");
-        }
+  
+  private TreeMap<String,Long> readFields(IndexInput in) throws IOException {
+    BytesRef scratch = new BytesRef(10);
+    TreeMap<String,Long> fields = new TreeMap<String,Long>();
+    
+    while (true) {
+      SimpleTextUtil.readLine(in, scratch);
+      if (scratch.equals(END)) {
+        return fields;
+      } else if (StringHelper.startsWith(scratch, FIELD)) {
+        String fieldName = new String(scratch.bytes, scratch.offset + FIELD.length, scratch.length - FIELD.length, "UTF-8");
+        fields.put(fieldName, in.getFilePointer());
       }
-    }
-
-    @Override
-    public Terms terms() throws IOException {
-      return SimpleTextFieldsReader.this.terms(current);
     }
   }
 
@@ -239,7 +230,7 @@ class SimpleTextFieldsReader extends FieldsProducer {
     
     public SimpleTextDocsEnum() {
       this.inStart = SimpleTextFieldsReader.this.in;
-      this.in = (IndexInput) this.inStart.clone();
+      this.in = this.inStart.clone();
     }
 
     public boolean canReuse(IndexInput in) {
@@ -339,7 +330,7 @@ class SimpleTextFieldsReader extends FieldsProducer {
 
     public SimpleTextDocsAndPositionsEnum() {
       this.inStart = SimpleTextFieldsReader.this.in;
-      this.in = (IndexInput) inStart.clone();
+      this.in = inStart.clone();
     }
 
     public boolean canReuse(IndexInput in) {
@@ -471,18 +462,7 @@ class SimpleTextFieldsReader extends FieldsProducer {
 
     @Override
     public BytesRef getPayload() {
-      // Some tests rely on only being able to retrieve the
-      // payload once
-      try {
-        return payload;
-      } finally {
-        payload = null;
-      }
-    }
-
-    @Override
-    public boolean hasPayload() {
-      return payload != null;
+      return payload;
     }
   }
 
@@ -498,7 +478,7 @@ class SimpleTextFieldsReader extends FieldsProducer {
 
   private class SimpleTextTerms extends Terms {
     private final long termsStart;
-    private final IndexOptions indexOptions;
+    private final FieldInfo fieldInfo;
     private long sumTotalTermFreq;
     private long sumDocFreq;
     private int docCount;
@@ -509,7 +489,7 @@ class SimpleTextFieldsReader extends FieldsProducer {
 
     public SimpleTextTerms(String field, long termsStart) throws IOException {
       this.termsStart = termsStart;
-      indexOptions = fieldInfos.fieldInfo(field).getIndexOptions();
+      fieldInfo = fieldInfos.fieldInfo(field);
       loadTerms();
     }
 
@@ -520,7 +500,7 @@ class SimpleTextFieldsReader extends FieldsProducer {
       final PairOutputs<Long,PairOutputs.Pair<Long,Long>> outputs = new PairOutputs<Long,PairOutputs.Pair<Long,Long>>(posIntOutputs,
                                                                                                                       outputsInner);
       b = new Builder<PairOutputs.Pair<Long,PairOutputs.Pair<Long,Long>>>(FST.INPUT_TYPE.BYTE1, outputs);
-      IndexInput in = (IndexInput) SimpleTextFieldsReader.this.in.clone();
+      IndexInput in = SimpleTextFieldsReader.this.in.clone();
       in.seek(termsStart);
       final BytesRef lastTerm = new BytesRef(10);
       long lastDocsStart = -1;
@@ -579,7 +559,7 @@ class SimpleTextFieldsReader extends FieldsProducer {
     @Override
     public TermsEnum iterator(TermsEnum reuse) throws IOException {
       if (fst != null) {
-        return new SimpleTextTermsEnum(fst, indexOptions);
+        return new SimpleTextTermsEnum(fst, fieldInfo.getIndexOptions());
       } else {
         return TermsEnum.EMPTY;
       }
@@ -597,7 +577,7 @@ class SimpleTextFieldsReader extends FieldsProducer {
 
     @Override
     public long getSumTotalTermFreq() {
-      return indexOptions == IndexOptions.DOCS_ONLY ? -1 : sumTotalTermFreq;
+      return fieldInfo.getIndexOptions() == IndexOptions.DOCS_ONLY ? -1 : sumTotalTermFreq;
     }
 
     @Override
@@ -609,11 +589,26 @@ class SimpleTextFieldsReader extends FieldsProducer {
     public int getDocCount() throws IOException {
       return docCount;
     }
+
+    @Override
+    public boolean hasOffsets() {
+      return fieldInfo.getIndexOptions().compareTo(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS) >= 0;
+    }
+
+    @Override
+    public boolean hasPositions() {
+      return fieldInfo.getIndexOptions().compareTo(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS) >= 0;
+    }
+    
+    @Override
+    public boolean hasPayloads() {
+      return fieldInfo.hasPayloads();
+    }
   }
 
   @Override
-  public FieldsEnum iterator() throws IOException {
-    return new SimpleTextFieldsEnum();
+  public Iterator<String> iterator() {
+    return Collections.unmodifiableSet(fields.keySet()).iterator();
   }
 
   private final Map<String,Terms> termsCache = new HashMap<String,Terms>();
@@ -622,15 +617,13 @@ class SimpleTextFieldsReader extends FieldsProducer {
   synchronized public Terms terms(String field) throws IOException {
     Terms terms = termsCache.get(field);
     if (terms == null) {
-      SimpleTextFieldsEnum fe = (SimpleTextFieldsEnum) iterator();
-      String fieldUpto;
-      while((fieldUpto = fe.next()) != null) {
-        if (fieldUpto.equals(field)) {
-          terms = new SimpleTextTerms(field, fe.in.getFilePointer());
-          break;
-        }
+      Long fp = fields.get(field);
+      if (fp == null) {
+        return null;
+      } else {
+        terms = new SimpleTextTerms(field, fp);
+        termsCache.put(field, terms);
       }
-      termsCache.put(field, terms);
     }
     return terms;
   }

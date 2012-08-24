@@ -70,6 +70,7 @@ import org.apache.solr.update.processor.LogUpdateProcessorFactory;
 import org.apache.solr.update.processor.RunUpdateProcessorFactory;
 import org.apache.solr.update.processor.UpdateRequestProcessorChain;
 import org.apache.solr.update.processor.UpdateRequestProcessorFactory;
+import org.apache.solr.util.DefaultSolrThreadFactory;
 import org.apache.solr.util.RefCounted;
 import org.apache.solr.util.plugin.NamedListInitializedPlugin;
 import org.apache.solr.util.plugin.PluginInfoInitialized;
@@ -478,6 +479,13 @@ public class SolrCore implements SolrInfoMBean {
     } catch (SolrException e) {
       throw e;
     } catch (Exception e) {
+      // The JVM likes to wrap our helpful SolrExceptions in things like
+      // "InvocationTargetException" that have no useful getMessage
+      if (null != e.getCause() && e.getCause() instanceof SolrException) {
+        SolrException inner = (SolrException) e.getCause();
+        throw inner;
+      }
+
       throw new SolrException(SolrException.ErrorCode.SERVER_ERROR,"Error Instantiating "+msg+", "+className+ " failed to instantiate " +cast.getName(), e);
     }
   }
@@ -501,6 +509,13 @@ public class SolrCore implements SolrInfoMBean {
     } catch (SolrException e) {
       throw e;
     } catch (Exception e) {
+      // The JVM likes to wrap our helpful SolrExceptions in things like
+      // "InvocationTargetException" that have no useful getMessage
+      if (null != e.getCause() && e.getCause() instanceof SolrException) {
+        SolrException inner = (SolrException) e.getCause();
+        throw inner;
+      }
+
       throw new SolrException(SolrException.ErrorCode.SERVER_ERROR,"Error Instantiating "+msg+", "+className+ " failed to instantiate " + UpdateHandler.class.getName(), e);
     }
   }
@@ -1070,7 +1085,8 @@ public class SolrCore implements SolrInfoMBean {
   private final LinkedList<RefCounted<SolrIndexSearcher>> _searchers = new LinkedList<RefCounted<SolrIndexSearcher>>();
   private final LinkedList<RefCounted<SolrIndexSearcher>> _realtimeSearchers = new LinkedList<RefCounted<SolrIndexSearcher>>();
 
-  final ExecutorService searcherExecutor = Executors.newSingleThreadExecutor();
+  final ExecutorService searcherExecutor = Executors.newSingleThreadExecutor(
+      new DefaultSolrThreadFactory("searcherExecutor"));
   private int onDeckSearchers;  // number of searchers preparing
   // Lock ordering: one can acquire the openSearcherLock and then the searcherLock, but not vice-versa.
   private Object searcherLock = new Object();  // the sync object for the searcher
@@ -1552,7 +1568,7 @@ public class SolrCore implements SolrInfoMBean {
         } catch (Throwable e) {
           // do not allow decref() operations to fail since they are typically called in finally blocks
           // and throwing another exception would be very unexpected.
-          SolrException.log(log, "Error closing searcher:", e);
+          SolrException.log(log, "Error closing searcher:" + this, e);
         }
       }
     };

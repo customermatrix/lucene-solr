@@ -94,7 +94,7 @@ public class _TestUtil {
     try {
       File f = createTempFile(desc, "tmp", LuceneTestCase.TEMP_DIR);
       f.delete();
-      LuceneTestCase.closeAfterSuite(new CloseableFile(f));
+      LuceneTestCase.closeAfterSuite(new CloseableFile(f, LuceneTestCase.suiteFailureMarker));
       return f;
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -136,7 +136,7 @@ public class _TestUtil {
     rmDir(destDir);
 
     destDir.mkdir();
-    LuceneTestCase.closeAfterSuite(new CloseableFile(destDir));
+    LuceneTestCase.closeAfterSuite(new CloseableFile(destDir, LuceneTestCase.suiteFailureMarker));
 
     while (entries.hasMoreElements()) {
       ZipEntry entry = entries.nextElement();
@@ -956,9 +956,18 @@ public class _TestUtil {
     while (true) {
       try {
         Pattern p = Pattern.compile(_TestUtil.randomRegexpishString(random));
+        String replacement = null;
+        // ignore bugs in Sun's regex impl
+        try {
+          replacement = p.matcher(nonBmpString).replaceAll("_");
+        } catch (StringIndexOutOfBoundsException jdkBug) {
+          System.out.println("WARNING: your jdk is buggy!");
+          System.out.println("Pattern.compile(\"" + p.pattern() + 
+              "\").matcher(\"AB\\uD840\\uDC00C\").replaceAll(\"_\"); should not throw IndexOutOfBounds!");
+        }
         // Make sure the result of applying the pattern to a string with extended
         // unicode characters is a valid utf16 string. See LUCENE-4078 for discussion.
-        if (UnicodeUtil.validUTF16String(p.matcher(nonBmpString).replaceAll("_"))) {
+        if (replacement != null && UnicodeUtil.validUTF16String(replacement)) {
           return p;
         }
       } catch (PatternSyntaxException ignored) {

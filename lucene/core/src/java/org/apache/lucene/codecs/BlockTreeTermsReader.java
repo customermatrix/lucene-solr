@@ -21,6 +21,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Locale;
@@ -31,7 +32,6 @@ import org.apache.lucene.index.DocsEnum;
 import org.apache.lucene.index.FieldInfo.IndexOptions;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.FieldInfos;
-import org.apache.lucene.index.FieldsEnum;
 import org.apache.lucene.index.IndexFileNames;
 import org.apache.lucene.index.TermState;
 import org.apache.lucene.index.Terms;
@@ -199,8 +199,8 @@ public class BlockTreeTermsReader extends FieldsProducer {
   }
 
   @Override
-  public FieldsEnum iterator() {
-    return new TermFieldsEnum();
+  public Iterator<String> iterator() {
+    return Collections.unmodifiableSet(fields.keySet()).iterator();
   }
 
   @Override
@@ -212,32 +212,6 @@ public class BlockTreeTermsReader extends FieldsProducer {
   @Override
   public int size() {
     return fields.size();
-  }
-
-  // Iterates through all fields
-  private class TermFieldsEnum extends FieldsEnum {
-    final Iterator<FieldReader> it;
-    FieldReader current;
-
-    TermFieldsEnum() {
-      it = fields.values().iterator();
-    }
-
-    @Override
-    public String next() {
-      if (it.hasNext()) {
-        current = it.next();
-        return current.fieldInfo.name;
-      } else {
-        current = null;
-        return null;
-      }
-    }
-    
-    @Override
-    public Terms terms() throws IOException {
-      return current;
-    }
   }
 
   // for debugging
@@ -426,7 +400,7 @@ public class BlockTreeTermsReader extends FieldsProducer {
       rootBlockFP = (new ByteArrayDataInput(rootCode.bytes, rootCode.offset, rootCode.length)).readVLong() >>> BlockTreeTermsWriter.OUTPUT_FLAGS_NUM_BITS;
 
       if (indexIn != null) {
-        final IndexInput clone = (IndexInput) indexIn.clone();
+        final IndexInput clone = indexIn.clone();
         //System.out.println("start=" + indexStartFP + " field=" + fieldInfo.name);
         clone.seek(indexStartFP);
         index = new FST<BytesRef>(clone, ByteSequenceOutputs.getSingleton());
@@ -454,6 +428,21 @@ public class BlockTreeTermsReader extends FieldsProducer {
     @Override
     public Comparator<BytesRef> getComparator() {
       return BytesRef.getUTF8SortedAsUnicodeComparator();
+    }
+
+    @Override
+    public boolean hasOffsets() {
+      return fieldInfo.getIndexOptions().compareTo(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS) >= 0;
+    }
+
+    @Override
+    public boolean hasPositions() {
+      return fieldInfo.getIndexOptions().compareTo(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS) >= 0;
+    }
+    
+    @Override
+    public boolean hasPayloads() {
+      return fieldInfo.hasPayloads();
     }
 
     @Override
@@ -757,7 +746,7 @@ public class BlockTreeTermsReader extends FieldsProducer {
         // }
         runAutomaton = compiled.runAutomaton;
         compiledAutomaton = compiled;
-        in = (IndexInput) BlockTreeTermsReader.this.in.clone();
+        in = BlockTreeTermsReader.this.in.clone();
         stack = new Frame[5];
         for(int idx=0;idx<stack.length;idx++) {
           stack[idx] = new Frame(idx);
@@ -1247,7 +1236,7 @@ public class BlockTreeTermsReader extends FieldsProducer {
       // Not private to avoid synthetic access$NNN methods
       void initIndexInput() {
         if (this.in == null) {
-          this.in = (IndexInput) BlockTreeTermsReader.this.in.clone();
+          this.in = BlockTreeTermsReader.this.in.clone();
         }
       }
 

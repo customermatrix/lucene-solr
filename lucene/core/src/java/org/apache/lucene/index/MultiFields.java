@@ -19,6 +19,7 @@ package org.apache.lucene.index;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Collection;
@@ -37,7 +38,7 @@ import org.apache.lucene.util.BytesRef;
  *
  * <p><b>NOTE</b>: for composite readers, you'll get better
  * performance by gathering the sub readers using
- * {@link IndexReader#getTopReaderContext()} to get the
+ * {@link IndexReader#getContext()} to get the
  * atomic leaves and then operate per-AtomicReader,
  * instead of using this class.
  *
@@ -58,7 +59,7 @@ public final class MultiFields extends Fields {
    *  It's better to get the sub-readers and iterate through them
    *  yourself. */
   public static Fields getFields(IndexReader reader) throws IOException {
-    final List<AtomicReaderContext> leaves = reader.getTopReaderContext().leaves();
+    final List<AtomicReaderContext> leaves = reader.leaves();
     switch (leaves.size()) {
       case 0:
         // no fields
@@ -90,7 +91,7 @@ public final class MultiFields extends Fields {
 
   public static Bits getLiveDocs(IndexReader reader) {
     if (reader.hasDeletions()) {
-      final List<AtomicReaderContext> leaves = reader.getTopReaderContext().leaves();
+      final List<AtomicReaderContext> leaves = reader.leaves();
       final int size = leaves.size();
       assert size > 0 : "A reader with deletions must have at least one leave";
       if (size == 1) {
@@ -125,7 +126,7 @@ public final class MultiFields extends Fields {
    *  term.  This will return null if the field or term does
    *  not exist. */
   public static DocsEnum getTermDocsEnum(IndexReader r, Bits liveDocs, String field, BytesRef term) throws IOException {
-    return getTermDocsEnum(r, liveDocs, field, term);
+    return getTermDocsEnum(r, liveDocs, field, term, DocsEnum.FLAG_FREQS);
   }
   
   /** Returns {@link DocsEnum} for the specified field &
@@ -180,22 +181,14 @@ public final class MultiFields extends Fields {
     this.subSlices = subSlices;
   }
 
+  @SuppressWarnings({"unchecked","rawtypes"})
   @Override
-  public FieldsEnum iterator() throws IOException {
-
-    final List<FieldsEnum> fieldsEnums = new ArrayList<FieldsEnum>();
-    final List<ReaderSlice> fieldsSlices = new ArrayList<ReaderSlice>();
+  public Iterator<String> iterator() {
+    Iterator<String> subIterators[] = new Iterator[subs.length];
     for(int i=0;i<subs.length;i++) {
-      fieldsEnums.add(subs[i].iterator());
-      fieldsSlices.add(subSlices[i]);
+      subIterators[i] = subs[i].iterator();
     }
-    if (fieldsEnums.size() == 0) {
-      return FieldsEnum.EMPTY;
-    } else {
-      return new MultiFieldsEnum(this,
-                                 fieldsEnums.toArray(FieldsEnum.EMPTY_ARRAY),
-                                 fieldsSlices.toArray(ReaderSlice.EMPTY_ARRAY));
-    }
+    return new MergedIterator<String>(subIterators);
   }
 
   @Override
@@ -257,7 +250,7 @@ public final class MultiFields extends Fields {
    */
   public static FieldInfos getMergedFieldInfos(IndexReader reader) {
     final FieldInfos.Builder builder = new FieldInfos.Builder();
-    for(final AtomicReaderContext ctx : reader.getTopReaderContext().leaves()) {
+    for(final AtomicReaderContext ctx : reader.leaves()) {
       builder.add(ctx.reader().getFieldInfos());
     }
     return builder.finish();

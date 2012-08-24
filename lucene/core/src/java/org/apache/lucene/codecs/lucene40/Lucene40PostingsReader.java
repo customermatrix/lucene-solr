@@ -325,7 +325,7 @@ public class Lucene40PostingsReader extends PostingsReaderBase {
     
     SegmentDocsEnumBase(IndexInput startFreqIn, Bits liveDocs) {
       this.startFreqIn = startFreqIn;
-      this.freqIn = (IndexInput)startFreqIn.clone();
+      this.freqIn = startFreqIn.clone();
       this.liveDocs = liveDocs;
       
     }
@@ -474,7 +474,7 @@ public class Lucene40PostingsReader extends PostingsReaderBase {
 
         if (skipper == null) {
           // This is the first time this enum has ever been used for skipping -- do lazy init
-          skipper = new Lucene40SkipListReader((IndexInput) freqIn.clone(), maxSkipLevels, skipInterval);
+          skipper = new Lucene40SkipListReader(freqIn.clone(), maxSkipLevels, skipInterval);
         }
 
         if (!skipped) {
@@ -705,8 +705,8 @@ public class Lucene40PostingsReader extends PostingsReaderBase {
 
     public SegmentDocsAndPositionsEnum(IndexInput freqIn, IndexInput proxIn) {
       startFreqIn = freqIn;
-      this.freqIn = (IndexInput) freqIn.clone();
-      this.proxIn = (IndexInput) proxIn.clone();
+      this.freqIn = freqIn.clone();
+      this.proxIn = proxIn.clone();
     }
 
     public SegmentDocsAndPositionsEnum reset(FieldInfo fieldInfo, StandardTermState termState, Bits liveDocs) throws IOException {
@@ -795,7 +795,7 @@ public class Lucene40PostingsReader extends PostingsReaderBase {
 
         if (skipper == null) {
           // This is the first time this enum has ever been used for skipping -- do lazy init
-          skipper = new Lucene40SkipListReader((IndexInput) freqIn.clone(), maxSkipLevels, skipInterval);
+          skipper = new Lucene40SkipListReader(freqIn.clone(), maxSkipLevels, skipInterval);
         }
 
         if (!skipped) {
@@ -873,12 +873,7 @@ public class Lucene40PostingsReader extends PostingsReaderBase {
      *  payload was indexed. */
     @Override
     public BytesRef getPayload() throws IOException {
-      throw new IOException("No payloads exist for this field!");
-    }
-
-    @Override
-    public boolean hasPayload() {
-      return false;
+      return null;
     }
   }
   
@@ -918,8 +913,8 @@ public class Lucene40PostingsReader extends PostingsReaderBase {
 
     public SegmentFullPositionsEnum(IndexInput freqIn, IndexInput proxIn) {
       startFreqIn = freqIn;
-      this.freqIn = (IndexInput) freqIn.clone();
-      this.proxIn = (IndexInput) proxIn.clone();
+      this.freqIn = freqIn.clone();
+      this.proxIn = proxIn.clone();
     }
 
     public SegmentFullPositionsEnum reset(FieldInfo fieldInfo, StandardTermState termState, Bits liveDocs) throws IOException {
@@ -1014,7 +1009,7 @@ public class Lucene40PostingsReader extends PostingsReaderBase {
 
         if (skipper == null) {
           // This is the first time this enum has ever been used for skipping -- do lazy init
-          skipper = new Lucene40SkipListReader((IndexInput) freqIn.clone(), maxSkipLevels, skipInterval);
+          skipper = new Lucene40SkipListReader(freqIn.clone(), maxSkipLevels, skipInterval);
         }
 
         if (!skipped) {
@@ -1152,28 +1147,26 @@ public class Lucene40PostingsReader extends PostingsReaderBase {
     @Override
     public BytesRef getPayload() throws IOException {
       if (storePayloads) {
+        if (payloadLength <= 0) {
+          return null;
+        }
         assert lazyProxPointer == -1;
         assert posPendingCount < freq;
-        if (!payloadPending) {
-          throw new IOException("Either no payload exists at this term position or an attempt was made to load it more than once.");
-        }
-        if (payloadLength > payload.bytes.length) {
-          payload.grow(payloadLength);
-        }
+        
+        if (payloadPending) {
+          if (payloadLength > payload.bytes.length) {
+            payload.grow(payloadLength);
+          }
 
-        proxIn.readBytes(payload.bytes, 0, payloadLength);
-        payload.length = payloadLength;
-        payloadPending = false;
+          proxIn.readBytes(payload.bytes, 0, payloadLength);
+          payload.length = payloadLength;
+          payloadPending = false;
+        }
 
         return payload;
       } else {
-        throw new IOException("No payloads exist for this field!");
+        return null;
       }
-    }
-
-    @Override
-    public boolean hasPayload() {
-      return payloadPending && payloadLength > 0;
     }
   }
 }

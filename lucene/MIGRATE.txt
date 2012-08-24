@@ -9,7 +9,7 @@ enumeration APIs.  Here are the major changes:
     by the BytesRef class (which provides an offset + length "slice"
     into an existing byte[]).
 
-  * Fields are separately enumerated (FieldsEnum) from the terms
+  * Fields are separately enumerated (Fields.iterator()) from the terms
     within each field (TermEnum).  So instead of this:
 
         TermEnum termsEnum = ...;
@@ -20,10 +20,8 @@ enumeration APIs.  Here are the major changes:
 
     Do this:
 
-        FieldsEnum fieldsEnum = ...;
-        String field;
-        while((field = fieldsEnum.next()) != null) {
-            TermsEnum termsEnum = fieldsEnum.terms();
+        for(String field : fields) {
+            TermsEnum termsEnum = fields.terms(field);
             BytesRef text;
             while((text = termsEnum.next()) != null) {
               System.out.println("field=" + field + "; text=" + text.utf8ToString());
@@ -315,6 +313,16 @@ utility wrappers like SlowCompositeReaderWrapper (LUCENE-2597) emulating
 an AtomicReader. Note: using "atomicity emulators" can cause serious 
 slowdowns due to the need to merge terms, postings, DocValues, and 
 FieldCache, use them with care! 
+
+## LUCENE-4306: getSequentialSubReaders(), ReaderUtil.Gather
+
+The method IndexReader#getSequentialSubReaders() was moved to CompositeReader
+(see LUCENE-2858, LUCENE-3733) and made protected. It is solely used by
+CompositeReader itsself to build its reader tree. To get all atomic leaves
+of a reader, use IndexReader#leaves(), which also provides the doc base
+of each leave. Readers that are already atomic return itsself as leaf with
+doc base 0. To emulate Lucene 3.x getSequentialSubReaders(),
+use getContext().children().
 
 ## LUCENE-2413,LUCENE-3396: Analyzer package changes
 
@@ -611,3 +619,10 @@ you can now do this:
   postings in simple arrrays (byte[] for terms, int[] for docs, freqs,
   positions, offsets).  Note that this only covers postings, whereas
   Instantiated covered all other parts of the index as well.
+
+* LUCENE-3309: The expert FieldSelector API has been replaced with
+  StoredFieldVisitor.  The idea is the same (you have full control
+  over which fields should be loaded).  Instead of a single accept
+  method, StoredFieldVisitor has a needsField method: if that method
+  returns true then the field will be loaded and the appropriate
+  type-specific method will be invoked with that fields's value.

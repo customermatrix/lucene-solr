@@ -139,29 +139,6 @@
 
   <target name="compile-core" depends="compile-lucene-core"/>
 
-  <!--
-   Run after Junit tests.
-   -->
-  <target name="generate-clover-reports" depends="clover">
-    <fail unless="run.clover">Clover not enabled!</fail>
-    <mkdir dir="${clover.report.dir}"/>
-    <fileset dir="build" id="clover.test.result.files">
-      <include name="**/test/TEST-*.xml"/>
-      <!-- do not include BW tests -->
-      <exclude name="backwards/**"/>
-    </fileset>
-    <clover-report>
-      <current outfile="${clover.report.dir}" title="${final.name}" numThreads="0">
-        <format type="html" filter="assert"/>
-        <testresults refid="clover.test.result.files"/>
-      </current>
-      <current outfile="${clover.report.dir}/clover.xml" title="${final.name}">
-        <format type="xml" filter="assert"/>
-        <testresults refid="clover.test.result.files"/>
-      </current>
-    </clover-report>
-  </target>
-
   <!-- Validation (license/notice/api checks). -->
   <target name="validate" depends="check-licenses,rat-sources,check-forbidden-apis" description="Validate stuff." />
 
@@ -176,6 +153,7 @@
       <apiFileSet dir="${custom-tasks.dir}/forbiddenApis">
         <include name="jdk.txt" />
         <include name="jdk-deprecated.txt" />
+        <include name="executors.txt" />
       </apiFileSet>
       <fileset dir="${basedir}/build" includes="**/*.class" />
     </forbidden-apis>
@@ -256,11 +234,11 @@
       <check-missing-javadocs dir="build/docs/analyzers-stempel" level="class"/>
       <check-missing-javadocs dir="build/docs/analyzers-uima" level="class"/>
       <check-missing-javadocs dir="build/docs/benchmark" level="class"/>
-      <!-- core: problems -->
+      <check-missing-javadocs dir="build/docs/core" level="class"/>
       <check-missing-javadocs dir="build/docs/demo" level="class"/>
       <check-missing-javadocs dir="build/docs/facet" level="class"/>
-      <!-- grouping: problems -->
-      <!-- highlighter: problems -->
+      <check-missing-javadocs dir="build/docs/grouping" level="class"/>
+      <check-missing-javadocs dir="build/docs/highlighter" level="class"/>
       <check-missing-javadocs dir="build/docs/join" level="class"/>
       <check-missing-javadocs dir="build/docs/memory" level="class"/>
       <check-missing-javadocs dir="build/docs/misc" level="class"/>
@@ -269,7 +247,7 @@
       <check-missing-javadocs dir="build/docs/sandbox" level="class"/>
       <!-- spatial: problems -->
       <check-missing-javadocs dir="build/docs/suggest" level="class"/>
-      <!-- test-framework: problems -->
+      <check-missing-javadocs dir="build/docs/test-framework" level="class"/>
     </sequential>
   </target>
   

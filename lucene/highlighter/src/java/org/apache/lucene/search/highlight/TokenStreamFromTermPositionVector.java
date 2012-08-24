@@ -33,6 +33,9 @@ import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.CollectionUtil;
 
+/**
+ * TokenStream created from a term vector field.
+ */
 public final class TokenStreamFromTermPositionVector extends TokenStream {
 
   private final List<Token> positionedTokens = new ArrayList<Token>();
@@ -56,18 +59,17 @@ public final class TokenStreamFromTermPositionVector extends TokenStream {
     termAttribute = addAttribute(CharTermAttribute.class);
     positionIncrementAttribute = addAttribute(PositionIncrementAttribute.class);
     offsetAttribute = addAttribute(OffsetAttribute.class);
+    final boolean hasOffsets = vector.hasOffsets();
     final TermsEnum termsEnum = vector.iterator(null);
     BytesRef text;
     DocsAndPositionsEnum dpEnum = null;
     while((text = termsEnum.next()) != null) {
       dpEnum = termsEnum.docsAndPositions(null, dpEnum);
       assert dpEnum != null; // presumably checked by TokenSources.hasPositions earlier
-      boolean hasOffsets = true;
       dpEnum.nextDoc();
       final int freq = dpEnum.freq();
       for (int j = 0; j < freq; j++) {
         int pos = dpEnum.nextPosition();
-        hasOffsets &= dpEnum.startOffset() >= 0;
         Token token;
         if (hasOffsets) {
           token = new Token(text.utf8ToString(),

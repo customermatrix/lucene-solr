@@ -32,7 +32,6 @@ import java.util.LinkedList;
 import org.apache.lucene.analysis.MockAnalyzer;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
 import org.apache.lucene.search.DocIdSetIterator;
@@ -205,7 +204,7 @@ public class TestDoc extends LuceneTestCase {
       final SegmentInfo si = new SegmentInfo(si1.info.dir, Constants.LUCENE_MAIN_VERSION, merged, -1, false, codec, null, null);
 
       SegmentMerger merger = new SegmentMerger(si, InfoStream.getDefault(), trackingDir, IndexWriterConfig.DEFAULT_TERM_INDEX_INTERVAL,
-                                               MergeState.CheckAbort.NONE, null, new FieldInfos.FieldNumbers(), context);
+                                               MergeState.CheckAbort.NONE, new FieldInfos.FieldNumbers(), context);
 
       merger.add(r1);
       merger.add(r2);
@@ -236,10 +235,9 @@ public class TestDoc extends LuceneTestCase {
       for (int i = 0; i < reader.numDocs(); i++)
         out.println(reader.document(i));
 
-      FieldsEnum fis = reader.fields().iterator();
-      String field = fis.next();
-      while(field != null)  {
-        Terms terms = fis.terms();
+      Fields fields = reader.fields();
+      for (String field : fields)  {
+        Terms terms = fields.terms(field);
         assertNotNull(terms);
         TermsEnum tis = terms.iterator(null);
         while(tis.next() != null) {
@@ -259,7 +257,6 @@ public class TestDoc extends LuceneTestCase {
             out.println("");
           }
         }
-        field = fis.next();
       }
       reader.close();
     }

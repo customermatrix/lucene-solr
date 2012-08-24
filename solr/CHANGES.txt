@@ -22,12 +22,66 @@ $Id$
 
 ==================  4.0.0 ==================
 
+Upgrading from Solr 4.0.0-BETA
+----------------------
+
+In order to better support distributed search mode, the TermVectorComponent's response format has been changed so that if the schema defines a uniqueKeyField, then that field value is used as the "key" for each document in it's response section, instead of the internal lucene doc id.  Users w/o a uniqueKeyField will continue to see the same response format.  See SOLR-3229 for more details.
+
+Detailed Change List
+----------------------
+
+New Features
+----------------------
+
+* SOLR-3670: New CountFieldValuesUpdateProcessorFactory makes it easy to index 
+  the number of values in another field for later use at query time. (hossman)
+
+Optimizations
+----------------------
+
+* SOLR-3715: improve concurrency of the transaction log by removing
+  synchronization around log record serialization. (yonik)
+
+
 Bug Fixes
 ----------------------
 
 * SOLR-3685: Solr Cloud sometimes skipped peersync attempt and replicated instead due
   to tlog flags not being cleared when no updates were buffered during a previous
   replication.  (Markus Jelsma, Mark Miller, yonik)
+
+* SOLR-3229: Fixed TermVectorComponent to work with distributed search
+  (Hang Xie, hossman)
+
+* SOLR-3725: Fixed package-local-src-tgz target to not bring in unnecessary jars
+  and binary contents.  (Michael Dodsworth via rmuir)
+
+* SOLR-3649: Fixed bug in JavabinLoader that caused deleteById(List<String> ids)
+  to not work in SolrJ (siren)
+
+* SOLR-3730: Rollback is not implemented quite right and can cause corner case fails in 
+  SolrCloud tests. (rmuir, Mark Miller)
+
+* SOLR-2981: Fixed StatsComponent to no longer return duplicated information 
+  when requesting multiple stats.facet fields.
+  (Roman Kliewer via hossman)
+
+* SOLR-3743: Fixed issues with atomic updates and optimistic concurrency in
+  conjunction with stored copyField targets by making real-time get never
+  return copyField targets. (yonik)
+
+* SOLR-3746: Proper error reporting if updateLog is configured w/o necessary 
+  "_version_" field in schema.xml (hossman)
+
+
+Other Changes
+----------------------
+
+* SOLR-3690: Fixed binary release packages to include dependencie needed for 
+  the solr-test-framework (hossman)
+
+* SOLR-2857: The /update/json and /update/csv URLs were restored to aid
+  in the migration of existing clients.  (yonik)
 
 
 ==================  4.0.0-BETA ===================

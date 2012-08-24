@@ -18,6 +18,7 @@ package org.apache.lucene.codecs.lucene3x;
  */
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -30,7 +31,6 @@ import org.apache.lucene.index.DocsEnum;
 import org.apache.lucene.index.FieldInfo.IndexOptions;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.FieldInfos;
-import org.apache.lucene.index.FieldsEnum;
 import org.apache.lucene.index.IndexFileNames;
 import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.index.Term;
@@ -133,8 +133,8 @@ class Lucene3xFields extends FieldsProducer {
   }
 
   @Override
-  public FieldsEnum iterator() throws IOException {
-    return new PreFlexFieldsEnum();
+  public Iterator<String> iterator() {
+    return Collections.unmodifiableSet(fields.keySet()).iterator();
   }
 
   @Override
@@ -144,7 +144,8 @@ class Lucene3xFields extends FieldsProducer {
 
   @Override
   public int size() {
-    return preTerms.size();
+    assert preTerms.size() == fields.size();
+    return fields.size();
   }
 
   @Override
@@ -176,30 +177,6 @@ class Lucene3xFields extends FieldsProducer {
     }
     if (proxStream != null) {
       proxStream.close();
-    }
-  }
-
-  private class PreFlexFieldsEnum extends FieldsEnum {
-    final Iterator<FieldInfo> it;
-    FieldInfo current;
-
-    public PreFlexFieldsEnum() throws IOException {
-      it = fields.values().iterator();
-    }
-
-    @Override
-    public String next() {
-      if (it.hasNext()) {
-        current = it.next();
-        return current.name;
-      } else {
-        return null;
-      }
-    }
-
-    @Override
-    public Terms terms() throws IOException {
-      return Lucene3xFields.this.terms(current.name);
     }
   }
   
@@ -245,6 +222,23 @@ class Lucene3xFields extends FieldsProducer {
     @Override
     public int getDocCount() throws IOException {
       return -1;
+    }
+
+    @Override
+    public boolean hasOffsets() {
+      // preflex doesn't support this
+      assert fieldInfo.getIndexOptions().compareTo(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS) < 0;
+      return false;
+    }
+
+    @Override
+    public boolean hasPositions() {
+      return fieldInfo.getIndexOptions().compareTo(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS) >= 0;
+    }
+
+    @Override
+    public boolean hasPayloads() {
+      return fieldInfo.hasPayloads();
     }
   }
 
@@ -1073,28 +1067,8 @@ class Lucene3xFields extends FieldsProducer {
     }
 
     @Override
-    public boolean hasPayload() {
-      assert docID != NO_MORE_DOCS;
-      return pos.isPayloadAvailable();
-    }
-
-    private BytesRef payload;
-
-    @Override
     public BytesRef getPayload() throws IOException {
-      final int len = pos.getPayloadLength();
-      if (payload == null) {
-        payload = new BytesRef();
-        payload.bytes = new byte[len];
-      } else {
-        if (payload.bytes.length < len) {
-          payload.grow(len);
-        }
-      }
-      
-      payload.bytes = pos.getPayload(payload.bytes, 0);
-      payload.length = len;
-      return payload;
+      return pos.getPayload();
     }
   }
 }

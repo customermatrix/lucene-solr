@@ -160,13 +160,13 @@ public class SepPostingsReader extends PostingsReaderBase {
       if (docIndex == null) {
         docIndex = other.docIndex.clone();
       } else {
-        docIndex.set(other.docIndex);
+        docIndex.copyFrom(other.docIndex);
       }
       if (other.freqIndex != null) {
         if (freqIndex == null) {
           freqIndex = other.freqIndex.clone();
         } else {
-          freqIndex.set(other.freqIndex);
+          freqIndex.copyFrom(other.freqIndex);
         }
       } else {
         freqIndex = null;
@@ -175,7 +175,7 @@ public class SepPostingsReader extends PostingsReaderBase {
         if (posIndex == null) {
           posIndex = other.posIndex.clone();
         } else {
-          posIndex.set(other.posIndex);
+          posIndex.copyFrom(other.posIndex);
         }
       } else {
         posIndex = null;
@@ -352,11 +352,11 @@ public class SepPostingsReader extends PostingsReaderBase {
 
       // TODO: can't we only do this if consumer
       // skipped consuming the previous docs?
-      docIndex.set(termState.docIndex);
+      docIndex.copyFrom(termState.docIndex);
       docIndex.seek(docReader);
 
       if (!omitTF) {
-        freqIndex.set(termState.freqIndex);
+        freqIndex.copyFrom(termState.freqIndex);
         freqIndex.seek(freqReader);
       }
 
@@ -418,7 +418,7 @@ public class SepPostingsReader extends PostingsReaderBase {
 
         if (skipper == null) {
           // This DocsEnum has never done any skipping
-          skipper = new SepSkipListReader((IndexInput) skipIn.clone(),
+          skipper = new SepSkipListReader(skipIn.clone(),
                                           freqIn,
                                           docIn,
                                           posIn,
@@ -506,7 +506,7 @@ public class SepPostingsReader extends PostingsReaderBase {
       freqIndex = freqIn.index();
       posReader = posIn.reader();
       posIndex = posIn.index();
-      payloadIn = (IndexInput) SepPostingsReader.this.payloadIn.clone();
+      payloadIn = SepPostingsReader.this.payloadIn.clone();
     }
 
     SepDocsAndPositionsEnum init(FieldInfo fieldInfo, SepTermState termState, Bits liveDocs) throws IOException {
@@ -516,15 +516,15 @@ public class SepPostingsReader extends PostingsReaderBase {
 
       // TODO: can't we only do this if consumer
       // skipped consuming the previous docs?
-      docIndex.set(termState.docIndex);
+      docIndex.copyFrom(termState.docIndex);
       docIndex.seek(docReader);
       //System.out.println("  docIndex=" + docIndex);
 
-      freqIndex.set(termState.freqIndex);
+      freqIndex.copyFrom(termState.freqIndex);
       freqIndex.seek(freqReader);
       //System.out.println("  freqIndex=" + freqIndex);
 
-      posIndex.set(termState.posIndex);
+      posIndex.copyFrom(termState.posIndex);
       //System.out.println("  posIndex=" + posIndex);
       posSeekPending = true;
       payloadPending = false;
@@ -597,7 +597,7 @@ public class SepPostingsReader extends PostingsReaderBase {
         if (skipper == null) {
           //System.out.println("  create skipper");
           // This DocsEnum has never done any skipping
-          skipper = new SepSkipListReader((IndexInput) skipIn.clone(),
+          skipper = new SepSkipListReader(skipIn.clone(),
                                           freqIn,
                                           docIn,
                                           posIn,
@@ -629,7 +629,7 @@ public class SepPostingsReader extends PostingsReaderBase {
           // NOTE: don't seek pos here; do it lazily
           // instead.  Eg a PhraseQuery may skip to many
           // docs before finally asking for positions...
-          posIndex.set(skipper.getPosIndex());
+          posIndex.copyFrom(skipper.getPosIndex());
           posSeekPending = true;
           count = newCount;
           doc = accum = skipper.getDoc();
@@ -714,7 +714,11 @@ public class SepPostingsReader extends PostingsReaderBase {
     @Override
     public BytesRef getPayload() throws IOException {
       if (!payloadPending) {
-        throw new IOException("Either no payload exists at this term position or an attempt was made to load it more than once.");
+        return null;
+      }
+      
+      if (pendingPayloadBytes == 0) {
+        return payload;
       }
 
       assert pendingPayloadBytes >= payloadLength;
@@ -731,15 +735,9 @@ public class SepPostingsReader extends PostingsReaderBase {
       }
 
       payloadIn.readBytes(payload.bytes, 0, payloadLength);
-      payloadPending = false;
       payload.length = payloadLength;
       pendingPayloadBytes = 0;
       return payload;
-    }
-
-    @Override
-    public boolean hasPayload() {
-      return payloadPending && payloadLength > 0;
     }
   }
 }

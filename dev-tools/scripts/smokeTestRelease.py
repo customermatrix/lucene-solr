@@ -58,7 +58,7 @@ def javaExe(version):
 
 def verifyJavaVersion(version):
   s = os.popen('%s; java -version 2>&1' % javaExe(version)).read()
-  if s.find('java version "%s.' % version) == -1:
+  if s.find(' version "%s.' % version) == -1:
     raise RuntimeError('got wrong version for java %s:\n%s' % (version, s))
 
 # http://s.apache.org/lusolr32rc2
@@ -363,6 +363,10 @@ def verifyDigests(artifact, urlString, tmpDir):
     raise RuntimeError('SHA1 digest mismatch for %s: expected %s but got %s' % (artifact, sha1Expected, sha1Actual))
 
 def getDirEntries(urlString):
+  if urlString.startswith('file:/') and not urlString.startswith('file://'):
+    # stupid bogus ant URI
+    urlString = "file:///" + urlString[6:]
+
   if urlString.startswith('file://'):
     path = urlString[7:]
     if path.endswith('/'):
@@ -542,7 +546,7 @@ def testNotice(unpackPath):
   if solrNotice.find(expected) == -1:
     raise RuntimeError('Solr\'s NOTICE.txt does not have the verbatim copy, plus header/footer, of Lucene\'s NOTICE.txt')
   
-def readSolrOutput(p, startupEvent, logFile):
+def readSolrOutput(p, startupEvent, failureEvent, logFile):
   f = open(logFile, 'wb')
   try:
     while True:
@@ -552,8 +556,13 @@ def readSolrOutput(p, startupEvent, logFile):
       f.write(line)
       f.flush()
       # print 'SOLR: %s' % line.strip()
-      if line.decode('UTF-8').find('Started SocketConnector@0.0.0.0:8983') != -1:
+      if not startupEvent.isSet() and line.find(b'Started SocketConnector@0.0.0.0:8983') != -1:
         startupEvent.set()
+  except:
+    print()
+    print('Exception reading Solr output:')
+    traceback.print_exc()
+    failureEvent.set()
   finally:
     f.close()
     
@@ -568,7 +577,8 @@ def testSolrExample(unpackPath, javaPath, isSrc):
   server = subprocess.Popen(['java', '-jar', 'start.jar'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
 
   startupEvent = threading.Event()
-  serverThread = threading.Thread(target=readSolrOutput, args=(server.stderr, startupEvent, logFile))
+  failureEvent = threading.Event()
+  serverThread = threading.Thread(target=readSolrOutput, args=(server.stderr, startupEvent, failureEvent, logFile))
   serverThread.setDaemon(True)
   serverThread.start()
 
@@ -605,6 +615,9 @@ def testSolrExample(unpackPath, javaPath, isSrc):
         # Shouldn't happen unless something is seriously wrong...
         print('***WARNING***: Solr instance didn\'t respond to SIGKILL; ignoring...')
 
+  if failureEvent.isSet():
+    raise RuntimeError('exception while reading Solr output')
+    
   os.chdir('..')
     
 def checkJavadocpath(path):
@@ -1026,7 +1039,7 @@ def crawl(downloadedFiles, urlString, targetDir, exclusions=set()):
 
 def main():
 
-  if len(sys.argv) != 4:
+  if len(sys.argv) < 4:
     print()
     print('Usage python -u %s BaseURL version tmpDir' % sys.argv[0])
     print()
@@ -1035,8 +1048,11 @@ def main():
   baseURL = sys.argv[1]
   version = sys.argv[2]
   tmpDir = os.path.abspath(sys.argv[3])
+  isSigned = True 
+  if len(sys.argv) == 5:
+    isSigned = (sys.argv[4] == "True")
 
-  smokeTest(baseURL, version, tmpDir, True)
+  smokeTest(baseURL, version, tmpDir, isSigned)
 
 def smokeTest(baseURL, version, tmpDir, isSigned):
 
@@ -1090,4 +1106,5 @@ if __name__ == '__main__':
   except:
     import traceback
     traceback.print_exc()
-  
+    sys.exit(1)
+  sys.exit(0)
