@@ -17,17 +17,6 @@
 
 package org.apache.solr;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.StringWriter;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.List;
-import java.util.LinkedList;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexWriter;
@@ -53,11 +42,19 @@ import org.apache.solr.search.DocIterator;
 import org.apache.solr.search.DocList;
 import org.apache.solr.update.DirectUpdateHandler2;
 import org.apache.solr.util.RefCounted;
-
-
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.StringWriter;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Tests some basic functionality of Solr while demonstrating good
@@ -751,6 +748,7 @@ public class BasicFunctionalityTest extends SolrTestCaseJ4 {
             "*[count(//doc)=1]");
   }
 
+  @Ignore
   @Test
   public void testAbuseOfSort() {
 

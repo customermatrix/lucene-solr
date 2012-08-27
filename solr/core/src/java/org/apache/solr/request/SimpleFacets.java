@@ -293,13 +293,13 @@ public class SimpleFacets {
     }
     boolean missing = params.getFieldBool(field, FacetParams.FACET_MISSING, false);
     // default to sorting if there is a limit.
-    String sort = params.getFieldParam(field, FacetParams.FACET_SORT, limit>0 ? FacetParams.FACET_SORT_COUNT : FacetParams.FACET_SORT_INDEX);
+    String sort = params.getFieldParam(field, FacetParams.FACET_SORT, limit > 0 ? FacetParams.FACET_SORT_COUNT : FacetParams.FACET_SORT_INDEX);
     String prefix = params.getFieldParam(field,FacetParams.FACET_PREFIX);
 
 
     NamedList<Integer> counts;
 		try {
-    	SchemaField sf = searcher.getSchema().getVirtualField(field);
+    	SchemaField sf = getField(field);
 
       if (!sf.getName().equals(field)) {
         field = sf.getName();
@@ -357,6 +357,15 @@ public class SimpleFacets {
     } 
 
     return counts;
+  }
+
+  private SchemaField getField(String field) {
+    IndexSchema schema = searcher.getSchema();
+    SchemaField virtualField = schema.getVirtualField(field);
+    if (virtualField != null) {
+      return virtualField;
+    }
+    return schema.getField(field);
   }
 
   public NamedList<Integer> getGroupedCounts(SolrIndexSearcher searcher,
@@ -880,7 +889,7 @@ public class SimpleFacets {
 
     final NamedList<Object> resInner = new SimpleOrderedMap<Object>();
     resOuter.add(key, resInner);
-    final SchemaField sf = schema.getVirtualField(f);
+    final SchemaField sf = getField(f);
     if (! (sf.getType() instanceof DateField)) {
       throw new SolrException
           (SolrException.ErrorCode.BAD_REQUEST,
@@ -1054,7 +1063,7 @@ public class SimpleFacets {
     parseParams(FacetParams.FACET_RANGE, facetRange);
     String f = facetValue;
 
-    final SchemaField sf = schema.getVirtualField(f);
+    final SchemaField sf = getField(f);
     final FieldType ft = sf.getType();
 
     RangeEndpointCalculator<?> calc = null;
@@ -1233,7 +1242,7 @@ public class SimpleFacets {
    */
   protected int rangeCount(SchemaField sf, String low, String high,
                            boolean iLow, boolean iHigh) throws IOException {
-    Query rangeQ = sf.getType().getRangeQuery(null, sf,low,high,iLow,iHigh);
+    Query rangeQ = sf.getType().getRangeQuery(null, sf, low, high, iLow, iHigh);
     if (params.getBool(GroupParams.GROUP_FACET, false)) {
       return getGroupedFacetQueryCount(rangeQ);
     } else {

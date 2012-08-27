@@ -287,9 +287,7 @@ public abstract class QParser {
       try {
         sort = QueryParsing.parseSort(sortStr, req);
       } catch (Exception e) {
-        if (logger.isWarnEnabled()) {
-          logger.warn("Invalid sort '" + sort + "' field requested", e);
-        }
+        logger.warn("Invalid sort '" + sort + "' field requested", e);
       }
     }
     return new SortSpec( sort, start, rows );

@@ -17,9 +17,10 @@ package org.apache.lucene.util;
  * limitations under the License.
  */
 
+import org.apache.lucene.LucenePackage;
+
 import java.lang.reflect.Field;
 import java.util.Collections;
-import org.apache.lucene.LucenePackage;
 
 /**
  * Some useful constants.
@@ -136,9 +137,9 @@ public final class Constants {
       if (parts.length == 4) {
         // alpha/beta
         assert parts[2].equals("0");
-        v = parts[0] + "." + parts[1] + "-PES-SNAPSHOT";
+        v = parts[0] + "." + parts[1] + "-SNAPSHOT";
       } else {
-        v = LUCENE_MAIN_VERSION + "-PES-SNAPSHOT";
+        v = LUCENE_MAIN_VERSION + "-SNAPSHOT";
       }
     }
     LUCENE_VERSION = ident(v);
