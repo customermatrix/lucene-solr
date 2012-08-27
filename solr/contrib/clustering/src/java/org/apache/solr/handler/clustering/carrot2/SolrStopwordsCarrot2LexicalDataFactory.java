@@ -17,14 +17,13 @@ package org.apache.solr.handler.clustering.carrot2;
  * limitations under the License.
  */
 
-import java.util.Collection;
-import java.util.Set;
-
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.util.CharArraySet;
-import org.apache.lucene.analysis.util.TokenFilterFactory;
 import org.apache.lucene.analysis.commongrams.CommonGramsFilterFactory;
 import org.apache.lucene.analysis.core.StopFilterFactory;
+import org.apache.lucene.analysis.util.CharArraySet;
+import org.apache.lucene.analysis.util.TokenFilterFactory;
 import org.apache.solr.analysis.TokenizerChain;
 import org.apache.solr.schema.IndexSchema;
 import org.carrot2.core.LanguageCode;
@@ -37,10 +36,11 @@ import org.carrot2.text.util.MutableCharArray;
 import org.carrot2.util.attribute.Attribute;
 import org.carrot2.util.attribute.Bindable;
 import org.carrot2.util.attribute.Input;
+import org.carrot2.util.attribute.constraint.ImplementingClasses;
 import org.slf4j.Logger;
 
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.Multimap;
+import java.util.Collection;
+import java.util.Set;
 
 /**
  * An implementation of Carrot2's {@link ILexicalDataFactory} that adds stop
@@ -60,6 +60,7 @@ public class SolrStopwordsCarrot2LexicalDataFactory implements
   @Init
   @Input
   @Attribute(key = "solrIndexSchema")
+  @ImplementingClasses(classes={IndexSchema.class})
   private IndexSchema schema;
 
   @Processing
