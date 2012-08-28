@@ -71,10 +71,22 @@ public abstract class Analyzer {
 
   private final ReuseStrategy reuseStrategy;
 
+  /**
+   * Create a new Analyzer, reusing the same set of components per-thread
+   * across calls to {@link #tokenStream(String, Reader)}. 
+   */
   public Analyzer() {
     this(new GlobalReuseStrategy());
   }
 
+  /**
+   * Expert: create a new Analyzer with a custom {@link ReuseStrategy}.
+   * <p>
+   * NOTE: if you just want to reuse on a per-field basis, its easier to
+   * use a subclass of {@link AnalyzerWrapper} such as 
+   * <a href="{@docRoot}/../analyzers-common/org/apache/lucene/analysis/miscellaneous/PerFieldAnalyzerWrapper.html">
+   * PerFieldAnalyerWrapper</a> instead.
+   */
   public Analyzer(ReuseStrategy reuseStrategy) {
     this.reuseStrategy = reuseStrategy;
   }
@@ -171,7 +183,14 @@ public abstract class Analyzer {
    * {@link Analyzer#tokenStream(String, Reader)}.
    */
   public static class TokenStreamComponents {
+    /**
+     * Original source of the tokens.
+     */
     protected final Tokenizer source;
+    /**
+     * Sink tokenstream, such as the outer tokenfilter decorating
+     * the chain. This can be the source if there are no filters.
+     */
     protected final TokenStream sink;
 
     /**
@@ -307,16 +326,12 @@ public abstract class Analyzer {
    */
   public final static class GlobalReuseStrategy extends ReuseStrategy {
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
     public TokenStreamComponents getReusableComponents(String fieldName) {
       return (TokenStreamComponents) getStoredValue();
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
     public void setReusableComponents(String fieldName, TokenStreamComponents components) {
       setStoredValue(components);
     }
@@ -328,19 +343,15 @@ public abstract class Analyzer {
    */
   public static class PerFieldReuseStrategy extends ReuseStrategy {
 
-    /**
-     * {@inheritDoc}
-     */
     @SuppressWarnings("unchecked")
+    @Override
     public TokenStreamComponents getReusableComponents(String fieldName) {
       Map<String, TokenStreamComponents> componentsPerField = (Map<String, TokenStreamComponents>) getStoredValue();
       return componentsPerField != null ? componentsPerField.get(fieldName) : null;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @SuppressWarnings("unchecked")
+    @Override
     public void setReusableComponents(String fieldName, TokenStreamComponents components) {
       Map<String, TokenStreamComponents> componentsPerField = (Map<String, TokenStreamComponents>) getStoredValue();
       if (componentsPerField == null) {

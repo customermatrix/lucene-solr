@@ -713,6 +713,7 @@
     <or>
       <isset property="tests.class" />
       <isset property="tests.method" />
+      <istrue value="${tests.showSuccess}"/>
     </or>
   </condition>
   <property name="tests.showOutput" value="onerror"/>
@@ -1696,7 +1697,7 @@ ${tests-output}/junit4-*.suites     - per-JVM executed suites
     <element name="nested" optional="false" implicit="true"/>
     <sequential>
       <copy todir="@{todir}" flatten="@{flatten}" overwrite="@{overwrite}" verbose="true"
-        preservelastmodified="false" encoding="UTF-8" outputencoding="UTF-8"
+        preservelastmodified="false" encoding="UTF-8" outputencoding="UTF-8" taskname="pegdown"
       >
         <filterchain>
           <tokenfilter>

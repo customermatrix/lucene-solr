@@ -60,23 +60,37 @@ import org.apache.lucene.index.FieldInvertState; // javadocs
  */
 public class Field implements IndexableField {
 
+  /**
+   * Field's type
+   */
   protected final FieldType type;
+  /**
+   * Field's name
+   */
   protected final String name;
 
-  // Field's value:
+  /** Field's value */
   protected Object fieldsData;
 
-  // Pre-analyzed tokenStream for indexed fields; this is
-  // separate from fieldsData because you are allowed to
-  // have both; eg maybe field has a String value but you
-  // customize how it's tokenized:
+  /** Pre-analyzed tokenStream for indexed fields; this is
+   * separate from fieldsData because you are allowed to
+   * have both; eg maybe field has a String value but you
+   * customize how it's tokenized */
   protected TokenStream tokenStream;
 
   private transient TokenStream internalTokenStream;
   private transient ReusableStringReader internalReader;
 
+  /**
+   * Field's boost
+   * @see #boost()
+   */
   protected float boost = 1.0f;
 
+  /**
+   * Expert: creates a field with no initial value.
+   * Intended only for custom Field subclasses.
+   */
   protected Field(String name, FieldType type) {
     if (name == null) {
       throw new IllegalArgumentException("name cannot be null");
@@ -213,7 +227,7 @@ public class Field implements IndexableField {
   }
   
   /**
-   * The TokesStream for this field to be used when indexing, or null. If null,
+   * The TokenStream for this field to be used when indexing, or null. If null,
    * the Reader value or String value is analyzed to produce the indexed tokens.
    */
   public TokenStream tokenStreamValue() {
@@ -279,6 +293,10 @@ public class Field implements IndexableField {
     fieldsData = value;
   }
 
+  /**
+   * Expert: change the value of this field. See 
+   * {@link #setStringValue(String)}.
+   */
   public void setByteValue(byte value) {
     if (!(fieldsData instanceof Byte)) {
       throw new IllegalArgumentException("cannot change value type from " + fieldsData.getClass().getSimpleName() + " to Byte");
@@ -286,6 +304,10 @@ public class Field implements IndexableField {
     fieldsData = Byte.valueOf(value);
   }
 
+  /**
+   * Expert: change the value of this field. See 
+   * {@link #setStringValue(String)}.
+   */
   public void setShortValue(short value) {
     if (!(fieldsData instanceof Short)) {
       throw new IllegalArgumentException("cannot change value type from " + fieldsData.getClass().getSimpleName() + " to Short");
@@ -293,6 +315,10 @@ public class Field implements IndexableField {
     fieldsData = Short.valueOf(value);
   }
 
+  /**
+   * Expert: change the value of this field. See 
+   * {@link #setStringValue(String)}.
+   */
   public void setIntValue(int value) {
     if (!(fieldsData instanceof Integer)) {
       throw new IllegalArgumentException("cannot change value type from " + fieldsData.getClass().getSimpleName() + " to Integer");
@@ -300,6 +326,10 @@ public class Field implements IndexableField {
     fieldsData = Integer.valueOf(value);
   }
 
+  /**
+   * Expert: change the value of this field. See 
+   * {@link #setStringValue(String)}.
+   */
   public void setLongValue(long value) {
     if (!(fieldsData instanceof Long)) {
       throw new IllegalArgumentException("cannot change value type from " + fieldsData.getClass().getSimpleName() + " to Long");
@@ -307,6 +337,10 @@ public class Field implements IndexableField {
     fieldsData = Long.valueOf(value);
   }
 
+  /**
+   * Expert: change the value of this field. See 
+   * {@link #setStringValue(String)}.
+   */
   public void setFloatValue(float value) {
     if (!(fieldsData instanceof Float)) {
       throw new IllegalArgumentException("cannot change value type from " + fieldsData.getClass().getSimpleName() + " to Float");
@@ -314,6 +348,10 @@ public class Field implements IndexableField {
     fieldsData = Float.valueOf(value);
   }
 
+  /**
+   * Expert: change the value of this field. See 
+   * {@link #setStringValue(String)}.
+   */
   public void setDoubleValue(double value) {
     if (!(fieldsData instanceof Double)) {
       throw new IllegalArgumentException("cannot change value type from " + fieldsData.getClass().getSimpleName() + " to Double");
@@ -340,23 +378,19 @@ public class Field implements IndexableField {
     return name;
   }
   
+  /** 
+   * {@inheritDoc}
+   * <p>
+   * The default value is <code>1.0f</code> (no boost).
+   * @see #setBoost(float)
+   */
   public float boost() {
     return boost;
   }
 
-  /** Sets the boost factor hits on this field.  This value will be
-   * multiplied into the score of all hits on this this field of this
-   * document.
-   *
-   * <p>The boost is used to compute the norm factor for the field.  By
-   * default, in the {@link org.apache.lucene.search.similarities.Similarity#computeNorm(FieldInvertState, Norm)} method, 
-   * the boost value is multiplied by the length normalization factor and then
-   * rounded by {@link org.apache.lucene.search.similarities.DefaultSimilarity#encodeNormValue(float)} before it is stored in the
-   * index.  One should attempt to ensure that this product does not overflow
-   * the range of that encoding.
-   *
-   * @see org.apache.lucene.search.similarities.Similarity#computeNorm(FieldInvertState, Norm)
-   * @see org.apache.lucene.search.similarities.DefaultSimilarity#encodeNormValue(float)
+  /** 
+   * Sets the boost factor on this field. 
+   * @see #boost()
    */
   public void setBoost(float boost) {
     if (boost != 1.0f) {
@@ -405,9 +439,6 @@ public class Field implements IndexableField {
     return type;
   }
 
-  /**
-   * {@inheritDoc}
-   */
   public TokenStream tokenStream(Analyzer analyzer) throws IOException {
     if (!fieldType().indexed()) {
       return null;

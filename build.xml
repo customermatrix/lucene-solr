@@ -74,6 +74,12 @@
     </pathconvert>
     <fail if="validate.patternsFound">The following files contain @author tags or nocommits:${line.separator}${validate.patternsFound}</fail>
   </target>
+	
+  <target name="check-svn-properties">
+  	<subant target="-check-svn-properties" inheritall="false" failonerror="true">
+  	  <fileset dir="lucene" includes="build.xml" />
+  	</subant>
+  </target>
 
   <target name="rat-sources" description="Runs rat across all sources and tests">
     <sequential><subant target="rat-sources" inheritall="false" failonerror="true">
@@ -256,6 +262,8 @@
   </target>
 
   <!-- Jenkins tasks -->
+  <!-- TODO: figure out how to run check-svn-properties for the various jenkins' that
+       are configured in slow ways / have slow i/o systems -->
   <target name="jenkins-hourly" depends="clean,test,validate,-jenkins-javadocs-lint,-svn-status"/>
   
   <target name="jenkins-clover">
@@ -275,7 +283,7 @@
   <!-- we need this extra condition, as we want to match only on "true", not solely if property is set: -->
   <property name="disable.javadocs-lint" value="false" />
   <condition property="-disable.javadocs-lint">
-    <equals arg1="${disable.javadocs-lint}" arg2="true"/>
+    <istrue value="${disable.javadocs-lint}"/>
   </condition>
   <target name="-jenkins-javadocs-lint" unless="-disable.javadocs-lint">
     <antcall target="javadocs-lint"/> 
