@@ -17,11 +17,11 @@ package org.apache.lucene.search;
  * limitations under the License.
  */
 
-import java.io.IOException;
-import java.util.Comparator;
-
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.StringHelper;
+
+import java.io.IOException;
+import java.util.Comparator;
 
 // TODO(simonw) -- for cleaner transition, maybe we should make
 // a new SortField that subclasses this one and always uses
@@ -223,6 +223,10 @@ public class SortField {
    */
   public String getField() {
     return field;
+  }
+
+  public void setField(String name) {
+    field = name;
   }
 
   /** Returns the type of contents in the field.

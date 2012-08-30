@@ -24,7 +24,12 @@ import org.apache.lucene.index.IndexReaderContext;
 import org.apache.lucene.index.ReaderUtil;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.ParseException;
-import org.apache.lucene.search.*;
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.FieldComparator;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.grouping.GroupDocs;
 import org.apache.lucene.search.grouping.SearchGroup;
 import org.apache.lucene.search.grouping.TopGroups;
@@ -35,7 +40,12 @@ import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
-import org.apache.solr.common.params.*;
+import org.apache.solr.common.params.CommonParams;
+import org.apache.solr.common.params.GroupParams;
+import org.apache.solr.common.params.ModifiableSolrParams;
+import org.apache.solr.common.params.MoreLikeThisParams;
+import org.apache.solr.common.params.ShardParams;
+import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.common.util.StrUtils;
@@ -44,7 +54,17 @@ import org.apache.solr.response.ResultContext;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.schema.FieldType;
 import org.apache.solr.schema.SchemaField;
-import org.apache.solr.search.*;
+import org.apache.solr.search.DocIterator;
+import org.apache.solr.search.DocList;
+import org.apache.solr.search.DocListAndSet;
+import org.apache.solr.search.DocSlice;
+import org.apache.solr.search.Grouping;
+import org.apache.solr.search.QParser;
+import org.apache.solr.search.QParserPlugin;
+import org.apache.solr.search.QueryParsing;
+import org.apache.solr.search.ReturnFields;
+import org.apache.solr.search.SolrIndexSearcher;
+import org.apache.solr.search.SortSpec;
 import org.apache.solr.search.grouping.CommandHandler;
 import org.apache.solr.search.grouping.GroupingSpecification;
 import org.apache.solr.search.grouping.distributed.ShardRequestFactory;
@@ -70,7 +90,15 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.URL;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * TODO!
@@ -116,12 +144,13 @@ public class QueryComponent extends SearchComponent
     try {
       QParser parser = QParser.getParser(rb.getQueryString(), defType, req);
       Query q = parser.getQuery();
+
       if (q == null) {
         // normalize a null query to a query that matches nothing
         q = new BooleanQuery();        
       }
       rb.setQuery( q );
-      rb.setSortSpec( parser.getSort(true) );
+      rb.setSortSpec( parser.getSort(true, req.getSchema()) );
       rb.setQparser(parser);
       rb.setScoreDoc(parser.getPaging());
       

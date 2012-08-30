@@ -24,6 +24,7 @@ import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.schema.IndexSchema;
 
 import java.util.List;
 /**
@@ -117,8 +118,8 @@ class OldLuceneQParser extends LuceneQParser {
   }
 
   @Override
-  public SortSpec getSort(boolean useGlobal) throws ParseException {
-    SortSpec sort = super.getSort(useGlobal);
+  public SortSpec getSort(boolean useGlobal, IndexSchema schema) throws ParseException {
+    SortSpec sort = super.getSort(useGlobal, schema);
     if (sortStr != null && sortStr.length()>0 && sort.getSort()==null) {
       Sort oldSort = QueryParsing.parseSort(sortStr, getReq());
       if( oldSort != null ) {

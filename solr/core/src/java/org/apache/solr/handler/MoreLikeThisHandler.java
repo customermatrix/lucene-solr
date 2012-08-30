@@ -17,30 +17,21 @@
 
 package org.apache.solr.handler;
 
-import java.io.IOException;
-import java.io.Reader;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Comparator;
-
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Pattern;
-
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.queryparser.classic.ParseException;
-import org.apache.lucene.search.*;
 import org.apache.lucene.queries.mlt.MoreLikeThis;
+import org.apache.lucene.queryparser.classic.ParseException;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.TermQuery;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.FacetParams;
 import org.apache.solr.common.params.MoreLikeThisParams;
-import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.params.MoreLikeThisParams.TermStyle;
+import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.ContentStream;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SimpleOrderedMap;
@@ -50,9 +41,27 @@ import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.SchemaField;
-import org.apache.solr.search.*;
-
+import org.apache.solr.search.DocIterator;
+import org.apache.solr.search.DocList;
+import org.apache.solr.search.DocListAndSet;
+import org.apache.solr.search.QParser;
+import org.apache.solr.search.QParserPlugin;
+import org.apache.solr.search.QueryParsing;
+import org.apache.solr.search.ReturnFields;
+import org.apache.solr.search.SolrIndexSearcher;
+import org.apache.solr.search.SortSpec;
 import org.apache.solr.util.SolrPluginUtils;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Solr MoreLikeThis --
@@ -94,7 +103,7 @@ public class MoreLikeThisHandler extends RequestHandlerBase
       if (q != null) {
         QParser parser = QParser.getParser(q, defType, req);
         query = parser.getQuery();
-        sortSpec = parser.getSort(true);
+        sortSpec = parser.getSort(true, req.getSchema());
       }
 
       String[] fqs = req.getParams().getParams(CommonParams.FQ);

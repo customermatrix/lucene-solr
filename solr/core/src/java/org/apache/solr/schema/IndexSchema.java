@@ -307,6 +307,10 @@ public class IndexSchema {
     return getFields().get(f);
   }
 
+  public SchemaField getPMField(String field) {
+    return getFields().get(field + ".pm");
+  }
+
   private class SolrIndexAnalyzer extends AnalyzerWrapper {
     protected final HashMap<String, Analyzer> analyzers;
 

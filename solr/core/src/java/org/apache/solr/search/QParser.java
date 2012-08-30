@@ -18,18 +18,25 @@ package org.apache.solr.search;
 
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreDoc; //Issue 1726
+import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.SortField;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.MapSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.schema.IndexSchema;
+import org.apache.solr.schema.SchemaField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * <b>Note: This API is experimental and may change in non backward-compatible ways in the future</b>
@@ -246,10 +253,12 @@ public abstract class QParser {
   }
   
   /**
+   *
    * @param useGlobalParams look up sort, start, rows in global params if not in local params
+   * @param schema
    * @return the sort specification
    */
-  public SortSpec getSort(boolean useGlobalParams) throws ParseException {
+  public SortSpec getSort(boolean useGlobalParams, IndexSchema schema) throws ParseException {
     getQuery(); // ensure query is parsed first
 
     String sortStr = null;
@@ -286,6 +295,16 @@ public abstract class QParser {
     if( sortStr != null ) {
       try {
         sort = QueryParsing.parseSort(sortStr, req);
+
+        if (sort != null && schema != null) {
+          for (SortField sortField : sort.getSort()) {
+            SchemaField pmField = schema.getPMField(sortField.getField());
+            if (pmField != null) {
+              sortField.setField(pmField.getName());
+            }
+          }
+        }
+
       } catch (Exception e) {
         logger.warn("Invalid sort '" + sort + "' field requested", e);
       }
