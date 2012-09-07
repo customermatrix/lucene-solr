@@ -85,6 +85,8 @@ import org.apache.solr.search.grouping.endresulttransformer.GroupedEndResultTran
 import org.apache.solr.search.grouping.endresulttransformer.MainEndResultTransformer;
 import org.apache.solr.search.grouping.endresulttransformer.SimpleEndResultTransformer;
 import org.apache.solr.util.SolrPluginUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -108,6 +110,7 @@ import java.util.Map;
  */
 public class QueryComponent extends SearchComponent
 {
+  private Logger logger = LoggerFactory.getLogger(QueryComponent.class);
   public static final String COMPONENT_NAME = "query";
   
   @Override
@@ -906,7 +909,11 @@ public class QueryComponent extends SearchComponent
         shardDoc.positionInResponse = i;
         // Need the toString() for correlation with other lists that must
         // be strings (like keys in highlighting, explain, etc)
-        resultIds.put(shardDoc.id.toString(), shardDoc);
+        if (shardDoc.id != null) {
+          resultIds.put(shardDoc.id.toString(), shardDoc);
+        } else {
+          logger.error("Invalid document detected in the shard results. Check if there is empty documents!");
+        }
       }
 
 
