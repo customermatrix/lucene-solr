@@ -316,7 +316,7 @@ public class TermsComponent extends SearchComponent {
     sreq.params.remove(TermsParams.TERMS_MAXCOUNT);
     sreq.params.remove(TermsParams.TERMS_MINCOUNT);
 
-    int limit = params.get(TermsParams.TERMS_LIMIT,1000);
+    int limit = params.getInt(TermsParams.TERMS_LIMIT, 10);
     sreq.params.set(TermsParams.TERMS_LIMIT, Math.max(limit * 3,100));
 
     sreq.params.set(TermsParams.TERMS_SORT, TermsParams.TERMS_SORT_INDEX);
