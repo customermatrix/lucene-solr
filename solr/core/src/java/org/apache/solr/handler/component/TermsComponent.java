@@ -33,6 +33,7 @@ import org.apache.solr.util.BoundedTreeSet;
 import org.apache.solr.client.solrj.response.TermsResponse;
 
 import java.io.IOException;
+import java.lang.Math;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -314,7 +315,10 @@ public class TermsComponent extends SearchComponent {
     // dont sort by count to avoid that unnecessary overhead on the shards
     sreq.params.remove(TermsParams.TERMS_MAXCOUNT);
     sreq.params.remove(TermsParams.TERMS_MINCOUNT);
-    sreq.params.set(TermsParams.TERMS_LIMIT, -1);
+
+    int limit = params.get(TermsParams.TERMS_LIMIT,1000);
+    sreq.params.set(TermsParams.TERMS_LIMIT, Math.max(limit * 3,100));
+
     sreq.params.set(TermsParams.TERMS_SORT, TermsParams.TERMS_SORT_INDEX);
 
     return sreq;
