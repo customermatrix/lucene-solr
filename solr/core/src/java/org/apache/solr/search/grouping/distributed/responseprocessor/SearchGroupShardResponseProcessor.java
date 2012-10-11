@@ -21,6 +21,7 @@ import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.grouping.SearchGroup;
 import org.apache.lucene.util.BytesRef;
 import org.apache.solr.common.SolrException;
+import org.apache.solr.common.params.ShardParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.handler.component.ResponseBuilder;
 import org.apache.solr.handler.component.ShardRequest;
@@ -55,7 +56,7 @@ public class SearchGroupShardResponseProcessor implements ShardResponseProcessor
         rb.searchGroupToShards.put(field, new HashMap<SearchGroup<BytesRef>, Set<String>>());
       }
     }
-
+    boolean tolerant = rb.req.getParams().getBool(ShardParams.SHARDS_TOLERANT, false);
     SearchGroupsResultTransformer serializer = new SearchGroupsResultTransformer(rb.req.getSearcher());
     try {
       int maxElapsedTime = 0;
@@ -67,6 +68,9 @@ public class SearchGroupShardResponseProcessor implements ShardResponseProcessor
         Map<String, Pair<Integer, Collection<SearchGroup<BytesRef>>>> result = serializer.transformToNative(firstPhaseResult, groupSort, null, srsp.getShard());
         for (String field : commandSearchGroups.keySet()) {
           Pair<Integer, Collection<SearchGroup<BytesRef>>> firstPhaseCommandResult = result.get(field);
+          if(tolerant && firstPhaseCommandResult ==null ) {
+            continue;
+          }
           Integer groupCount = firstPhaseCommandResult.getA();
           if (groupCount != null) {
             Integer existingGroupCount = rb.mergedGroupCounts.get(field);

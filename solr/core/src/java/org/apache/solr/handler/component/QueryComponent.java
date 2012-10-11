@@ -40,6 +40,7 @@ import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
+import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.GroupParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
@@ -307,13 +308,20 @@ public class QueryComponent extends SearchComponent
               .setSearcher(searcher);
 
           for (String field : groupingSpec.getFields()) {
-            topsGroupsActionBuilder.addCommandField(new SearchGroupsFieldCommand.Builder()
-                .setField(searcher.getSchema().getField(field))
-                .setGroupSort(groupingSpec.getGroupSort())
-                .setTopNGroups(cmd.getOffset() + cmd.getLen())
-                .setIncludeGroupCount(groupingSpec.isIncludeGroupCount())
-                .build()
-            );
+            try {
+              topsGroupsActionBuilder.addCommandField(new SearchGroupsFieldCommand.Builder()
+                  .setField(searcher.getSchema().getField(field))
+                  .setGroupSort(groupingSpec.getGroupSort())
+                  .setTopNGroups(cmd.getOffset() + cmd.getLen())
+                  .setIncludeGroupCount(groupingSpec.isIncludeGroupCount())
+                  .build()
+              );
+            } catch (Exception e) {
+              boolean tolerant = rb.req.getParams().getBool(ShardParams.SHARDS_TOLERANT, false);
+              if(!tolerant) {
+                throw new SolrException(ErrorCode.BAD_REQUEST, e); //grouping on inexisting field ?
+              }
+            }
           }
 
           CommandHandler commandHandler = topsGroupsActionBuilder.build();
