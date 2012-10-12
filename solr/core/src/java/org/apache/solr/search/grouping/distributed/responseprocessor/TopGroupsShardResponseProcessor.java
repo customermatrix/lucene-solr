@@ -76,17 +76,21 @@ public class TopGroupsShardResponseProcessor implements ShardResponseProcessor {
 
     TopGroupsResultTransformer serializer = new TopGroupsResultTransformer(rb);
     for (ShardResponse srsp : shardRequest.responses) {
-      NamedList<NamedList> secondPhaseResult = (NamedList<NamedList>) srsp.getSolrResponse().getResponse().get("secondPhase");
-      Map<String, ?> result = serializer.transformToNative(secondPhaseResult, groupSort, sortWithinGroup, srsp.getShard());
-      for (String field : commandTopGroups.keySet()) {
-        TopGroups<BytesRef> topGroups = (TopGroups<BytesRef>) result.get(field);
-        if (topGroups == null) {
-          continue;
+      try {
+        NamedList<NamedList> secondPhaseResult = (NamedList<NamedList>) srsp.getSolrResponse().getResponse().get("secondPhase");
+        Map<String, ?> result = serializer.transformToNative(secondPhaseResult, groupSort, sortWithinGroup, srsp.getShard());
+        for (String field : commandTopGroups.keySet()) {
+          TopGroups<BytesRef> topGroups = (TopGroups<BytesRef>) result.get(field);
+          if (topGroups == null) {
+            continue;
+          }
+          commandTopGroups.get(field).add(topGroups);
         }
-        commandTopGroups.get(field).add(topGroups);
-      }
-      for (String query : queries) {
-        commandTopDocs.get(query).add((QueryCommandResult) result.get(query));
+        for (String query : queries) {
+          commandTopDocs.get(query).add((QueryCommandResult) result.get(query));
+        }
+      } catch (Exception e) {
+        //if there is a problem on a response, just do nothing (SEA-400)
       }
     }
     try {
