@@ -44,6 +44,9 @@ public class FieldInfos implements Iterable<FieldInfo> {
   private final HashMap<String,FieldInfo> byName = new HashMap<String,FieldInfo>();
   private final Collection<FieldInfo> values; // for an unmodifiable iterator
   
+  /**
+   * Constructs a new FieldInfos from an array of FieldInfo objects
+   */
   public FieldInfos(FieldInfo[] infos) {
     boolean hasVectors = false;
     boolean hasProx = false;
@@ -54,10 +57,14 @@ public class FieldInfos implements Iterable<FieldInfo> {
     boolean hasDocValues = false;
     
     for (FieldInfo info : infos) {
-      assert !byNumber.containsKey(info.number);
-      byNumber.put(info.number, info);
-      assert !byName.containsKey(info.name);
-      byName.put(info.name, info);
+      FieldInfo previous = byNumber.put(info.number, info);
+      if (previous != null) {
+        throw new IllegalArgumentException("duplicate field numbers: " + previous.name + " and " + info.name + " have: " + info.number);
+      }
+      previous = byName.put(info.name, info);
+      if (previous != null) {
+        throw new IllegalArgumentException("duplicate field names: " + previous.number + " and " + info.number + " have: " + info.name);
+      }
       
       hasVectors |= info.hasVectors();
       hasProx |= info.isIndexed() && info.getIndexOptions().compareTo(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS) >= 0;
@@ -98,30 +105,22 @@ public class FieldInfos implements Iterable<FieldInfo> {
     return hasOffsets;
   }
   
-  /**
-   * @return true if at least one field has any vectors
-   */
+  /** Returns true if any fields have vectors */
   public boolean hasVectors() {
     return hasVectors;
   }
   
-  /**
-   * @return true if at least one field has any norms
-   */
+  /** Returns true if any fields have norms */
   public boolean hasNorms() {
     return hasNorms;
   }
   
-  /**
-   * @return true if at least one field has doc values
-   */
+  /** Returns true if any fields have DocValues */
   public boolean hasDocValues() {
     return hasDocValues;
   }
   
-  /**
-   * @return number of fields
-   */
+  /** Returns the number of fields */
   public int size() {
     assert byNumber.size() == byName.size();
     return byNumber.size();
@@ -147,10 +146,13 @@ public class FieldInfos implements Iterable<FieldInfo> {
 
   /**
    * Return the fieldinfo object referenced by the fieldNumber.
-   * @param fieldNumber
+   * @param fieldNumber field's number. if this is negative, this method
+   *        always returns null.
    * @return the FieldInfo object or null when the given fieldNumber
    * doesn't exist.
    */  
+  // TODO: fix this negative behavior, this was something related to Lucene3x?
+  // if the field name is empty, i think it writes the fieldNumber as -1
   public FieldInfo fieldInfo(int fieldNumber) {
     return (fieldNumber >= 0) ? byNumber.get(fieldNumber) : null;
   }

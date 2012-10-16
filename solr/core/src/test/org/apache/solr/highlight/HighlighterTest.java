@@ -299,6 +299,22 @@ public class HighlighterTest extends SolrTestCaseJ4 {
     );
   }
 
+
+  @Test
+  public void testPreserveMulti() throws Exception {
+    assertU(adoc("id","1", "cat", "electronics", "cat", "monitor"));
+    assertU(commit());
+
+    assertJQ(req("q", "cat:monitor", "hl", "true", "hl.fl", "cat", "hl.snippets", "2", "f.cat.hl.preserveMulti", "true"),
+        "/highlighting/1/cat==['electronics','<em>monitor</em>']"
+    );
+
+    // No match still lists all snippets?
+    assertJQ(req("q", "id:1 OR cat:duuuude", "hl", "true", "hl.fl", "cat", "hl.snippets", "2", "f.cat.hl.preserveMulti", "true"),
+        "/highlighting/1/cat==['electronics','monitor']"
+    );
+  }
+
   @Test
   public void testDefaultFieldHighlight() {
 

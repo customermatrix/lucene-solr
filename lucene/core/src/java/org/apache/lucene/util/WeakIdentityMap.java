@@ -65,35 +65,51 @@ public final class WeakIdentityMap<K,V> {
     this.backingStore = backingStore;
   }
 
+  /** Removes all of the mappings from this map. */
   public void clear() {
     backingStore.clear();
     reap();
   }
 
+  /** Returns {@code true} if this map contains a mapping for the specified key. */
   public boolean containsKey(Object key) {
     reap();
     return backingStore.containsKey(new IdentityWeakReference(key, null));
   }
 
+  /** Returns the value to which the specified key is mapped. */
   public V get(Object key) {
     reap();
     return backingStore.get(new IdentityWeakReference(key, null));
   }
 
+  /** Associates the specified value with the specified key in this map.
+   * If the map previously contained a mapping for this key, the old value
+   * is replaced. */
   public V put(K key, V value) {
     reap();
     return backingStore.put(new IdentityWeakReference(key, queue), value);
   }
 
+  /** Returns {@code true} if this map contains no key-value mappings. */
   public boolean isEmpty() {
     return size() == 0;
   }
 
+  /** Removes the mapping for a key from this weak hash map if it is present.
+   * Returns the value to which this map previously associated the key,
+   * or {@code null} if the map contained no mapping for the key.
+   * A return value of {@code null} does not necessarily indicate that
+   * the map contained.*/
   public V remove(Object key) {
     reap();
     return backingStore.remove(new IdentityWeakReference(key, null));
   }
 
+  /** Returns the number of key-value mappings in this map. This result is a snapshot,
+   * and may not reflect unprocessed entries that will be removed before next
+   * attempted access because they are no longer referenced.
+   */
   public int size() {
     if (backingStore.isEmpty())
       return 0;
@@ -117,22 +133,22 @@ public final class WeakIdentityMap<K,V> {
     
       @Override
       public boolean hasNext() {
-        return nextIsSet ? true : setNext();
+        return nextIsSet || setNext();
       }
       
       @Override @SuppressWarnings("unchecked")
       public K next() {
-        if (nextIsSet || setNext()) {
-          try {
-            assert nextIsSet;
-            return (K) next;
-          } finally {
-             // release strong reference and invalidate current value:
-            nextIsSet = false;
-            next = null;
-          }
+        if (!hasNext()) {
+          throw new NoSuchElementException();
         }
-        throw new NoSuchElementException();
+        assert nextIsSet;
+        try {
+          return (K) next;
+        } finally {
+           // release strong reference and invalidate current value:
+          nextIsSet = false;
+          next = null;
+        }
       }
       
       @Override
@@ -145,14 +161,15 @@ public final class WeakIdentityMap<K,V> {
         while (iterator.hasNext()) {
           next = iterator.next().get();
           if (next == null) {
-            // already garbage collected!
-            continue;
+            // the key was already GCed, we can remove it from backing map:
+            iterator.remove();
+          } else {
+            // unfold "null" special value:
+            if (next == NULL) {
+              next = null;
+            }
+            return nextIsSet = true;
           }
-          // unfold "null" special value
-          if (next == NULL) {
-            next = null;
-          }
-          return nextIsSet = true;
         }
         return false;
       }

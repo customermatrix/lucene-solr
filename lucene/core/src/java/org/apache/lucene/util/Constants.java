@@ -27,7 +27,7 @@ import java.util.Collections;
  **/
 
 public final class Constants {
-  private Constants() {}			  // can't construct
+  private Constants() {}  // can't construct
 
   /** JVM vendor info. */
   public static final String JVM_VENDOR = System.getProperty("java.vm.vendor");
@@ -123,7 +123,7 @@ public final class Constants {
   /**
    * This is the internal Lucene version, recorded into each segment.
    */
-  public static final String LUCENE_MAIN_VERSION = ident("4.0.0.2");
+  public static final String LUCENE_MAIN_VERSION = ident("4.1");
 
   /**
    * This is the Lucene version for display purposes.

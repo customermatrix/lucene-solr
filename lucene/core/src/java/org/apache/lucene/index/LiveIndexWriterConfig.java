@@ -19,7 +19,7 @@ package org.apache.lucene.index;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.codecs.Codec;
-import org.apache.lucene.codecs.lucene40.Lucene40PostingsFormat; // javadocs
+import org.apache.lucene.codecs.lucene41.Lucene41PostingsFormat; // javadocs
 import org.apache.lucene.index.DocumentsWriterPerThread.IndexingChain;
 import org.apache.lucene.index.IndexWriter.IndexReaderWarmer;
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
@@ -46,21 +46,56 @@ public class LiveIndexWriterConfig {
   private volatile int termIndexInterval; // TODO: this should be private to the codec, not settable here
 
   // modified by IndexWriterConfig
+  /** {@link IndexDeletionPolicy} controlling when commit
+   *  points are deleted. */
   protected volatile IndexDeletionPolicy delPolicy;
+
+  /** {@link IndexCommit} that {@link IndexWriter} is
+   *  opened on. */
   protected volatile IndexCommit commit;
+
+  /** {@link OpenMode} that {@link IndexWriter} is opened
+   *  with. */
   protected volatile OpenMode openMode;
+
+  /** {@link Similarity} to use when encoding norms. */
   protected volatile Similarity similarity;
+
+  /** {@link MergeScheduler} to use for running merges. */
   protected volatile MergeScheduler mergeScheduler;
+
+  /** Timeout when trying to obtain the write lock on init. */
   protected volatile long writeLockTimeout;
+
+  /** {@link IndexingChain} that determines how documents are
+   *  indexed. */
   protected volatile IndexingChain indexingChain;
+
+  /** {@link Codec} used to write new segments. */
   protected volatile Codec codec;
+
+  /** {@link InfoStream} for debugging messages. */
   protected volatile InfoStream infoStream;
+
+  /** {@link MergePolicy} for selecting merges. */
   protected volatile MergePolicy mergePolicy;
+
+  /** {@code DocumentsWriterPerThreadPool} to control how
+   *  threads are allocated to {@code DocumentsWriterPerThread}. */
   protected volatile DocumentsWriterPerThreadPool indexerThreadPool;
+
+  /** True if readers should be pooled. */
   protected volatile boolean readerPooling;
+
+  /** {@link FlushPolicy} to control when segments are
+   *  flushed. */
   protected volatile FlushPolicy flushPolicy;
+
+  /** Sets the hard upper bound on RAM usage for a single
+   *  segment, after which the segment is forced to flush. */
   protected volatile int perThreadHardLimitMB;
 
+  /** {@link Version} that {@link IndexWriter} should emulate. */
   protected final Version matchVersion;
 
   // used by IndexWriterConfig
@@ -156,14 +191,14 @@ public class LiveIndexWriterConfig {
    * <b>NOTE:</b> This parameter does not apply to all PostingsFormat implementations,
    * including the default one in this release. It only makes sense for term indexes
    * that are implemented as a fixed gap between terms. For example, 
-   * {@link Lucene40PostingsFormat} implements the term index instead based upon how
+   * {@link Lucene41PostingsFormat} implements the term index instead based upon how
    * terms share prefixes. To configure its parameters (the minimum and maximum size
-   * for a block), you would instead use  {@link Lucene40PostingsFormat#Lucene40PostingsFormat(int, int)}.
+   * for a block), you would instead use  {@link Lucene41PostingsFormat#Lucene41PostingsFormat(int, int)}.
    * which can also be configured on a per-field basis:
    * <pre class="prettyprint">
-   * //customize Lucene40PostingsFormat, passing minBlockSize=50, maxBlockSize=100
-   * final PostingsFormat tweakedPostings = new Lucene40PostingsFormat(50, 100);
-   * iwc.setCodec(new Lucene40Codec() {
+   * //customize Lucene41PostingsFormat, passing minBlockSize=50, maxBlockSize=100
+   * final PostingsFormat tweakedPostings = new Lucene41PostingsFormat(50, 100);
+   * iwc.setCodec(new Lucene41Codec() {
    *   &#64;Override
    *   public PostingsFormat getPostingsFormatForField(String field) {
    *     if (field.equals("fieldWithTonsOfTerms"))
@@ -377,7 +412,9 @@ public class LiveIndexWriterConfig {
     return this;
   }
 
-  /** @see #setReaderTermsIndexDivisor(int) */
+  /** Returns the {@code termInfosIndexDivisor}.
+   * 
+   * @see #setReaderTermsIndexDivisor(int) */
   public int getReaderTermsIndexDivisor() {
     return readerTermsIndexDivisor;
   }
@@ -499,7 +536,8 @@ public class LiveIndexWriterConfig {
     return flushPolicy;
   }
   
-  /**
+  /** Returns {@link InfoStream} used for debugging.
+   *
    * @see IndexWriterConfig#setInfoStream(InfoStream)
    */
   public InfoStream getInfoStream() {
@@ -514,7 +552,7 @@ public class LiveIndexWriterConfig {
     sb.append("ramBufferSizeMB=").append(getRAMBufferSizeMB()).append("\n");
     sb.append("maxBufferedDocs=").append(getMaxBufferedDocs()).append("\n");
     sb.append("maxBufferedDeleteTerms=").append(getMaxBufferedDeleteTerms()).append("\n");
-    sb.append("mergedSegmentWarmer=").append(getMergeScheduler()).append("\n");
+    sb.append("mergedSegmentWarmer=").append(getMergedSegmentWarmer()).append("\n");
     sb.append("readerTermsIndexDivisor=").append(getReaderTermsIndexDivisor()).append("\n");
     sb.append("termIndexInterval=").append(getTermIndexInterval()).append("\n"); // TODO: this should be private to the codec, not settable here
     sb.append("delPolicy=").append(getIndexDeletionPolicy().getClass().getName()).append("\n");

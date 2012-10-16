@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.lucene.analysis.*;
 import org.apache.lucene.analysis.tokenattributes.PayloadAttribute;
-import org.apache.lucene.codecs.lucene40.Lucene40PostingsFormat;
+import org.apache.lucene.codecs.lucene41.Lucene41PostingsFormat;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.store.Directory;
@@ -69,7 +69,7 @@ public class TestMultiLevelSkipList extends LuceneTestCase {
 
   public void testSimpleSkip() throws IOException {
     Directory dir = new CountingRAMDirectory(new RAMDirectory());
-    IndexWriter writer = new IndexWriter(dir, newIndexWriterConfig( TEST_VERSION_CURRENT, new PayloadAnalyzer()).setCodec(_TestUtil.alwaysPostingsFormat(new Lucene40PostingsFormat())).setMergePolicy(newLogMergePolicy()));
+    IndexWriter writer = new IndexWriter(dir, newIndexWriterConfig( TEST_VERSION_CURRENT, new PayloadAnalyzer()).setCodec(_TestUtil.alwaysPostingsFormat(new Lucene41PostingsFormat())).setMergePolicy(newLogMergePolicy()));
     Term term = new Term("test", "a");
     for (int i = 0; i < 5000; i++) {
       Document d1 = new Document();
@@ -84,10 +84,7 @@ public class TestMultiLevelSkipList extends LuceneTestCase {
     
     for (int i = 0; i < 2; i++) {
       counter = 0;
-      DocsAndPositionsEnum tp = reader.termPositionsEnum(reader.getLiveDocs(),
-                                                         term.field(),
-                                                         new BytesRef(term.text()));
-
+      DocsAndPositionsEnum tp = reader.termPositionsEnum(term);
       checkSkipTo(tp, 14, 185); // no skips
       checkSkipTo(tp, 17, 190); // one skip on level 0
       checkSkipTo(tp, 287, 200); // one skip on level 1, two on level 0

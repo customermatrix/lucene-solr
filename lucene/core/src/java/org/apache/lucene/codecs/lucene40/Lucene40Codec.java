@@ -20,6 +20,7 @@ package org.apache.lucene.codecs.lucene40;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.DocValuesFormat;
 import org.apache.lucene.codecs.FieldInfosFormat;
+import org.apache.lucene.codecs.FilterCodec;
 import org.apache.lucene.codecs.LiveDocsFormat;
 import org.apache.lucene.codecs.NormsFormat;
 import org.apache.lucene.codecs.PostingsFormat;
@@ -30,14 +31,18 @@ import org.apache.lucene.codecs.perfield.PerFieldPostingsFormat;
 
 /**
  * Implements the Lucene 4.0 index format, with configurable per-field postings formats.
- * 
+ * <p>
+ * If you want to reuse functionality of this codec in another codec, extend
+ * {@link FilterCodec}.
+ *
  * @see org.apache.lucene.codecs.lucene40 package documentation for file format details.
- * @lucene.experimental
+ * @deprecated Only for reading old 4.0 segments
  */
 // NOTE: if we make largish changes in a minor release, easier to just make Lucene42Codec or whatever
 // if they are backwards compatible or smallish we can probably do the backwards in the postingsreader
 // (it writes a minor version, etc).
-public class Lucene40Codec extends Codec {
+@Deprecated
+public final class Lucene40Codec extends Codec {
   private final StoredFieldsFormat fieldsFormat = new Lucene40StoredFieldsFormat();
   private final TermVectorsFormat vectorsFormat = new Lucene40TermVectorsFormat();
   private final FieldInfosFormat fieldInfosFormat = new Lucene40FieldInfosFormat();
@@ -53,47 +58,48 @@ public class Lucene40Codec extends Codec {
     }
   };
 
+  /** Sole constructor. */
   public Lucene40Codec() {
     super("Lucene40");
   }
   
   @Override
-  public StoredFieldsFormat storedFieldsFormat() {
+  public final StoredFieldsFormat storedFieldsFormat() {
     return fieldsFormat;
   }
   
   @Override
-  public TermVectorsFormat termVectorsFormat() {
+  public final TermVectorsFormat termVectorsFormat() {
     return vectorsFormat;
   }
 
   @Override
-  public DocValuesFormat docValuesFormat() {
+  public final DocValuesFormat docValuesFormat() {
     return docValuesFormat;
   }
 
   @Override
-  public PostingsFormat postingsFormat() {
+  public final PostingsFormat postingsFormat() {
     return postingsFormat;
   }
   
   @Override
-  public FieldInfosFormat fieldInfosFormat() {
+  public final FieldInfosFormat fieldInfosFormat() {
     return fieldInfosFormat;
   }
   
   @Override
-  public SegmentInfoFormat segmentInfoFormat() {
+  public final SegmentInfoFormat segmentInfoFormat() {
     return infosFormat;
   }
 
   @Override
-  public NormsFormat normsFormat() {
+  public final NormsFormat normsFormat() {
     return normsFormat;
   }
   
   @Override
-  public LiveDocsFormat liveDocsFormat() {
+  public final LiveDocsFormat liveDocsFormat() {
     return liveDocsFormat;
   }
 

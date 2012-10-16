@@ -21,7 +21,6 @@ import java.util.Map;
 
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.uima.processor.SolrUIMAConfiguration.MapField;
-import org.apache.solr.uima.processor.exception.FieldMappingException;
 import org.apache.uima.cas.FSIterator;
 import org.apache.uima.cas.FeatureStructure;
 import org.apache.uima.cas.Type;
@@ -52,9 +51,8 @@ public class UIMAToSolrMapper {
    * map features of a certain UIMA type to corresponding Solr fields based on the mapping
    *
    * @param typeName             name of UIMA type to map
-   * @param featureFieldsmapping
    */
-  public void map(String typeName, Map<String, MapField> featureFieldsmapping) throws FieldMappingException {
+  void map(String typeName, Map<String, MapField> featureFieldsmapping) throws FieldMappingException {
     try {
       Type type = cas.getTypeSystem().getType(typeName);
       for (FSIterator<FeatureStructure> iterator = cas.getFSIndexRepository().getAllIndexedFS(type); iterator

@@ -25,23 +25,10 @@ import java.util.List;
 
 import org.apache.lucene.analysis.MockAnalyzer;
 import org.apache.lucene.codecs.Codec;
-import org.apache.lucene.codecs.DocValuesFormat;
-import org.apache.lucene.codecs.FieldInfosFormat;
-import org.apache.lucene.codecs.LiveDocsFormat;
-import org.apache.lucene.codecs.NormsFormat;
+import org.apache.lucene.codecs.FilterCodec;
 import org.apache.lucene.codecs.PostingsFormat;
-import org.apache.lucene.codecs.SegmentInfoFormat;
-import org.apache.lucene.codecs.StoredFieldsFormat;
-import org.apache.lucene.codecs.TermVectorsFormat;
-import org.apache.lucene.codecs.lucene40.Lucene40Codec;
-import org.apache.lucene.codecs.lucene40.Lucene40DocValuesFormat;
-import org.apache.lucene.codecs.lucene40.Lucene40FieldInfosFormat;
-import org.apache.lucene.codecs.lucene40.Lucene40LiveDocsFormat;
-import org.apache.lucene.codecs.lucene40.Lucene40NormsFormat;
-import org.apache.lucene.codecs.lucene40.Lucene40SegmentInfoFormat;
-import org.apache.lucene.codecs.lucene40.Lucene40StoredFieldsFormat;
-import org.apache.lucene.codecs.lucene40.Lucene40TermVectorsFormat;
-import org.apache.lucene.codecs.pulsing.Pulsing40PostingsFormat;
+import org.apache.lucene.codecs.lucene41.Lucene41Codec;
+import org.apache.lucene.codecs.pulsing.Pulsing41PostingsFormat;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
@@ -1071,9 +1058,9 @@ public class TestAddIndexes extends LuceneTestCase {
     aux2.close();
   }
 
-  private static final class CustomPerFieldCodec extends Lucene40Codec {
+  private static final class CustomPerFieldCodec extends Lucene41Codec {
     private final PostingsFormat simpleTextFormat = PostingsFormat.forName("SimpleText");
-    private final PostingsFormat defaultFormat = PostingsFormat.forName("Lucene40");
+    private final PostingsFormat defaultFormat = PostingsFormat.forName("Lucene41");
     private final PostingsFormat mockSepFormat = PostingsFormat.forName("MockSep");
 
     @Override
@@ -1120,49 +1107,9 @@ public class TestAddIndexes extends LuceneTestCase {
     dir.close();
   }
   
-  private static class UnRegisteredCodec extends Codec {
+  private static final class UnRegisteredCodec extends FilterCodec {
     public UnRegisteredCodec() {
-      super("NotRegistered");
-    }
-
-    @Override
-    public PostingsFormat postingsFormat() {
-      return PostingsFormat.forName("Lucene40");
-    }
-
-    @Override
-    public DocValuesFormat docValuesFormat() {
-      return new Lucene40DocValuesFormat();
-    }
-
-    @Override
-    public StoredFieldsFormat storedFieldsFormat() {
-      return new Lucene40StoredFieldsFormat();
-    }
-    
-    @Override
-    public TermVectorsFormat termVectorsFormat() {
-      return new Lucene40TermVectorsFormat();
-    }
-    
-    @Override
-    public FieldInfosFormat fieldInfosFormat() {
-      return new Lucene40FieldInfosFormat();
-    }
-
-    @Override
-    public SegmentInfoFormat segmentInfoFormat() {
-      return new Lucene40SegmentInfoFormat();
-    }
-
-    @Override
-    public NormsFormat normsFormat() {
-      return new Lucene40NormsFormat();
-    }
-    
-    @Override
-    public LiveDocsFormat liveDocsFormat() {
-      return new Lucene40LiveDocsFormat();
+      super("NotRegistered", new Lucene41Codec());
     }
   }
   
@@ -1191,7 +1138,7 @@ public class TestAddIndexes extends LuceneTestCase {
       Directory dir = newDirectory();
       IndexWriterConfig conf = newIndexWriterConfig(TEST_VERSION_CURRENT,
           new MockAnalyzer(random()));
-      conf.setCodec(_TestUtil.alwaysPostingsFormat(new Pulsing40PostingsFormat(1 + random().nextInt(20))));
+      conf.setCodec(_TestUtil.alwaysPostingsFormat(new Pulsing41PostingsFormat(1 + random().nextInt(20))));
       IndexWriter w = new IndexWriter(dir, conf);
       try {
         w.addIndexes(toAdd);

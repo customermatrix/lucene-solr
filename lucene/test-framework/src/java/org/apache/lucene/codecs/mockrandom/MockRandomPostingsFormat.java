@@ -22,24 +22,24 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import org.apache.lucene.codecs.BlockTermsReader;
-import org.apache.lucene.codecs.BlockTermsWriter;
 import org.apache.lucene.codecs.BlockTreeTermsReader;
 import org.apache.lucene.codecs.BlockTreeTermsWriter;
 import org.apache.lucene.codecs.FieldsConsumer;
 import org.apache.lucene.codecs.FieldsProducer;
-import org.apache.lucene.codecs.FixedGapTermsIndexReader;
-import org.apache.lucene.codecs.FixedGapTermsIndexWriter;
 import org.apache.lucene.codecs.PostingsFormat;
 import org.apache.lucene.codecs.PostingsReaderBase;
 import org.apache.lucene.codecs.PostingsWriterBase;
 import org.apache.lucene.codecs.TermStats;
-import org.apache.lucene.codecs.TermsIndexReaderBase;
-import org.apache.lucene.codecs.TermsIndexWriterBase;
-import org.apache.lucene.codecs.VariableGapTermsIndexReader;
-import org.apache.lucene.codecs.VariableGapTermsIndexWriter;
-import org.apache.lucene.codecs.lucene40.Lucene40PostingsReader;
-import org.apache.lucene.codecs.lucene40.Lucene40PostingsWriter;
+import org.apache.lucene.codecs.blockterms.BlockTermsReader;
+import org.apache.lucene.codecs.blockterms.BlockTermsWriter;
+import org.apache.lucene.codecs.blockterms.FixedGapTermsIndexReader;
+import org.apache.lucene.codecs.blockterms.FixedGapTermsIndexWriter;
+import org.apache.lucene.codecs.blockterms.TermsIndexReaderBase;
+import org.apache.lucene.codecs.blockterms.TermsIndexWriterBase;
+import org.apache.lucene.codecs.blockterms.VariableGapTermsIndexReader;
+import org.apache.lucene.codecs.blockterms.VariableGapTermsIndexWriter;
+import org.apache.lucene.codecs.lucene41.Lucene41PostingsReader;
+import org.apache.lucene.codecs.lucene41.Lucene41PostingsWriter;
 import org.apache.lucene.codecs.mockintblock.MockFixedIntBlockPostingsFormat;
 import org.apache.lucene.codecs.mockintblock.MockVariableIntBlockPostingsFormat;
 import org.apache.lucene.codecs.mocksep.MockSingleIntFactory;
@@ -66,7 +66,7 @@ import org.apache.lucene.util._TestUtil;
  * Randomly combines terms index impl w/ postings impls.
  */
 
-public class MockRandomPostingsFormat extends PostingsFormat {
+public final class MockRandomPostingsFormat extends PostingsFormat {
   private final Random seedRandom;
   private final String SEED_EXT = "sd";
   
@@ -133,9 +133,17 @@ public class MockRandomPostingsFormat extends PostingsFormat {
 
   @Override
   public FieldsConsumer fieldsConsumer(SegmentWriteState state) throws IOException {
+    int minSkipInterval;
+    if (state.segmentInfo.getDocCount() > 1000000) {
+      // Test2BPostings can OOME otherwise:
+      minSkipInterval = 3;
+    } else {
+      minSkipInterval = 2;
+    }
+
     // we pull this before the seed intentionally: because its not consumed at runtime
     // (the skipInterval is written into postings header)
-    int skipInterval = _TestUtil.nextInt(seedRandom, 2, 10);
+    int skipInterval = _TestUtil.nextInt(seedRandom, minSkipInterval, 10);
     
     if (LuceneTestCase.VERBOSE) {
       System.out.println("MockRandomCodec: skipInterval=" + skipInterval);
@@ -166,7 +174,8 @@ public class MockRandomPostingsFormat extends PostingsFormat {
       if (LuceneTestCase.VERBOSE) {
         System.out.println("MockRandomCodec: writing Standard postings");
       }
-      postingsWriter = new Lucene40PostingsWriter(state, skipInterval);
+      // TODO: randomize variables like acceptibleOverHead?!
+      postingsWriter = new Lucene41PostingsWriter(state, skipInterval);
     }
 
     if (random.nextBoolean()) {
@@ -305,7 +314,7 @@ public class MockRandomPostingsFormat extends PostingsFormat {
       if (LuceneTestCase.VERBOSE) {
         System.out.println("MockRandomCodec: reading Standard postings");
       }
-      postingsReader = new Lucene40PostingsReader(state.dir, state.fieldInfos, state.segmentInfo, state.context, state.segmentSuffix);
+      postingsReader = new Lucene41PostingsReader(state.dir, state.fieldInfos, state.segmentInfo, state.context, state.segmentSuffix);
     }
 
     if (random.nextBoolean()) {
@@ -328,7 +337,7 @@ public class MockRandomPostingsFormat extends PostingsFormat {
       try {
         fields = new BlockTreeTermsReader(state.dir,
                                           state.fieldInfos,
-                                          state.segmentInfo.name,
+                                          state.segmentInfo,
                                           postingsReader,
                                           state.context,
                                           state.segmentSuffix,
@@ -398,7 +407,7 @@ public class MockRandomPostingsFormat extends PostingsFormat {
         fields = new BlockTermsReader(indexReader,
                                       state.dir,
                                       state.fieldInfos,
-                                      state.segmentInfo.name,
+                                      state.segmentInfo,
                                       postingsReader,
                                       state.context,
                                       termsCacheSize,

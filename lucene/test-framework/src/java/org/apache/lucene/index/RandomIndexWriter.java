@@ -106,7 +106,7 @@ public class RandomIndexWriter implements Closeable {
     flushAt = _TestUtil.nextInt(r, 10, 1000);
     codec = w.getConfig().getCodec();
     if (LuceneTestCase.VERBOSE) {
-      System.out.println("RIW config=" + w.getConfig());
+      System.out.println("RIW dir=" + dir + " config=" + w.getConfig());
       System.out.println("codec default=" + codec.getName());
     }
     /* TODO: find some way to make this random...
@@ -126,8 +126,23 @@ public class RandomIndexWriter implements Closeable {
     // any forced merges:
     doRandomForceMerge = r.nextBoolean();
   } 
+  
+  private boolean addDocValuesFields = true;
+  
+  /**
+   * set to false if you don't want RandomIndexWriter
+   * adding docvalues fields.
+   */
+  public void setAddDocValuesFields(boolean v) {
+    addDocValuesFields = v;
+    switchDoDocValues();
+  }
 
   private void switchDoDocValues() {
+    if (addDocValuesFields == false) {
+      doDocValues = false;
+      return;
+    }
     // randomly enable / disable docValues 
     doDocValues = LuceneTestCase.rarely(r);
     if (LuceneTestCase.VERBOSE) {
@@ -387,10 +402,16 @@ public class RandomIndexWriter implements Closeable {
       final int segCount = w.getSegmentCount();
       if (r.nextBoolean() || segCount == 0) {
         // full forceMerge
+        if (LuceneTestCase.VERBOSE) {
+          System.out.println("RIW: doRandomForceMerge(1)");
+        }
         w.forceMerge(1);
       } else {
         // partial forceMerge
         final int limit = _TestUtil.nextInt(r, 1, segCount);
+        if (LuceneTestCase.VERBOSE) {
+          System.out.println("RIW: doRandomForceMerge(" + limit + ")");
+        }
         w.forceMerge(limit);
         assert !doRandomForceMergeAssert || w.getSegmentCount() <= limit: "limit=" + limit + " actual=" + w.getSegmentCount();
       }

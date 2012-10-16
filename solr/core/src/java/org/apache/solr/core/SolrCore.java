@@ -62,10 +62,13 @@ import org.apache.solr.search.QParserPlugin;
 import org.apache.solr.search.SolrFieldCacheMBean;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.search.ValueSourceParser;
+import org.apache.solr.update.DefaultSolrCoreState;
 import org.apache.solr.update.DirectUpdateHandler2;
+import org.apache.solr.update.SolrCoreState;
 import org.apache.solr.update.SolrIndexWriter;
 import org.apache.solr.update.UpdateHandler;
 import org.apache.solr.update.VersionInfo;
+import org.apache.solr.update.SolrCoreState.IndexWriterCloser;
 import org.apache.solr.update.processor.DistributedUpdateProcessorFactory;
 import org.apache.solr.update.processor.LogUpdateProcessorFactory;
 import org.apache.solr.update.processor.RunUpdateProcessorFactory;
@@ -140,6 +143,9 @@ public class SolrCore implements SolrInfoMBean {
   private final IndexSchema schema;
   private final String dataDir;
   private final UpdateHandler updateHandler;
+  private final SolrCoreState solrCoreState;
+  private int solrCoreStateRefCnt = 1;
+  
   private final long startTime;
   private final RequestHandlers reqHandlers;
   private final Map<String,SearchComponent> searchComponents;
@@ -248,7 +254,7 @@ public class SolrCore implements SolrInfoMBean {
       }
     }
     if (!result.equals(lastNewIndexDir)) {
-      log.warn("New index directory detected: old="+lastNewIndexDir + " new=" + result);
+      log.info("New index directory detected: old="+lastNewIndexDir + " new=" + result);
     }
     lastNewIndexDir = result;
     return result;
@@ -369,7 +375,8 @@ public class SolrCore implements SolrInfoMBean {
     IndexSchema schema = new IndexSchema(config,
         getSchema().getResourceName(), null);
     
-    updateHandler.incref();
+    increfSolrCoreState();
+    
     SolrCore core = new SolrCore(getName(), getDataDir(), config,
         schema, coreDescriptor, updateHandler, prev);
     return core;
@@ -410,7 +417,7 @@ public class SolrCore implements SolrInfoMBean {
   // protect via synchronized(SolrCore.class)
   private static Set<String> dirs = new HashSet<String>();
 
-  void initIndex() {
+  void initIndex(boolean reload) {
     try {
       String indexDir = getNewIndexDir();
       boolean indexExists = getDirectoryFactory().exists(indexDir);
@@ -422,7 +429,7 @@ public class SolrCore implements SolrInfoMBean {
 
       initIndexReaderFactory();
 
-      if (indexExists && firstTime) {
+      if (indexExists && firstTime && !reload) {
         // to remove locks, the directory must already exist... so we create it
         // if it didn't exist already...
         Directory dir = directoryFactory.get(indexDir, getSolrConfig().indexConfig.lockType);
@@ -445,7 +452,7 @@ public class SolrCore implements SolrInfoMBean {
         log.info(logid+"Solr index directory '" + new File(indexDir) + "' doesn't exist."
                 + " Creating new index...");
 
-        SolrIndexWriter writer = new SolrIndexWriter("SolrCore.initIndex", indexDir, getDirectoryFactory(), true, schema, solrConfig.indexConfig, solrDelPolicy, codec, false);
+        SolrIndexWriter writer = SolrIndexWriter.create("SolrCore.initIndex", indexDir, getDirectoryFactory(), true, schema, solrConfig.indexConfig, solrDelPolicy, codec, false);
         writer.close();
       }
 
@@ -556,7 +563,6 @@ public class SolrCore implements SolrInfoMBean {
    * Creates a new core and register it in the list of cores.
    * If a core with the same name already exists, it will be stopped and replaced by this one.
    *
-   * @param name
    * @param dataDir the index directory
    * @param config a solr config instance
    * @param schema a solr schema instance
@@ -573,7 +579,6 @@ public class SolrCore implements SolrInfoMBean {
    *@param dataDir the index directory
    *@param config a solr config instance
    *@param schema a solr schema instance
-   *@param updateHandler
    *
    *@since solr 1.3
    */
@@ -639,12 +644,14 @@ public class SolrCore implements SolrInfoMBean {
     
     if (updateHandler == null) {
       initDirectoryFactory();
+      solrCoreState = new DefaultSolrCoreState(getDirectoryFactory());
     } else {
-      directoryFactory = updateHandler.getSolrCoreState().getDirectoryFactory();
+      solrCoreState = updateHandler.getSolrCoreState();
+      directoryFactory = solrCoreState.getDirectoryFactory();
       this.isReloaded = true;
     }
     
-    initIndex();
+    initIndex(prev != null);
 
     initWriters();
     initQParsers();
@@ -792,6 +799,36 @@ public class SolrCore implements SolrInfoMBean {
     map.put("", def);
     return map;
   }
+   
+  public SolrCoreState getSolrCoreState() {
+    return solrCoreState;
+  }  
+  
+  private void increfSolrCoreState() {
+    synchronized (solrCoreState) {
+      if (solrCoreStateRefCnt == 0) {
+        throw new IllegalStateException("IndexWriter has been closed");
+      }
+      solrCoreStateRefCnt++;
+    }
+  }
+  
+  private void decrefSolrCoreState(IndexWriterCloser closer) {
+    synchronized (solrCoreState) {
+      
+      solrCoreStateRefCnt--;
+      if (solrCoreStateRefCnt == 0) {
+
+        try {
+          log.info("Closing SolrCoreState");
+          solrCoreState.close(closer);
+        } catch (Throwable t) {
+          log.error("Error closing SolrCoreState", t);
+        }
+        
+      }
+    }
+  }
 
   /**
    * @return an update processor registered to the given name.  Throw an exception if this chain is undefined
@@ -809,7 +846,8 @@ public class SolrCore implements SolrInfoMBean {
   // this core current usage count
   private final AtomicInteger refCount = new AtomicInteger(1);
 
-  final void open() {
+  /** expert: increments the core reference count */
+  public void open() {
     refCount.incrementAndGet();
   }
   
@@ -825,7 +863,7 @@ public class SolrCore implements SolrInfoMBean {
    * <p>   
    * <p>
    * The behavior of this method is determined by the result of decrementing
-   * the core's reference count (A core is created with a refrence count of 1)...
+   * the core's reference count (A core is created with a reference count of 1)...
    * </p>
    * <ul>
    *   <li>If reference count is > 0, the usage count is decreased by 1 and no
@@ -866,6 +904,21 @@ public class SolrCore implements SolrInfoMBean {
     }
 
     try {
+      if (null != updateHandler) {
+        updateHandler.close();
+      }
+    } catch (Throwable e) {
+      SolrException.log(log,e);
+    }
+    
+    
+    if (updateHandler instanceof IndexWriterCloser) {
+      decrefSolrCoreState((IndexWriterCloser)updateHandler);
+    } else {
+      decrefSolrCoreState(null);
+    }
+    
+    try {
       searcherExecutor.shutdown();
       if (!searcherExecutor.awaitTermination(60, TimeUnit.SECONDS)) {
         log.error("Timeout waiting for searchExecutor to terminate");
@@ -894,12 +947,17 @@ public class SolrCore implements SolrInfoMBean {
     } catch (Throwable e) {
       SolrException.log(log,e);
     }
-
-    try {
-      if (updateHandler != null) updateHandler.close();
-    } catch (Throwable e) {
-      SolrException.log(log,e);
+    
+    synchronized (solrCoreState) {
+      if (solrCoreStateRefCnt == 0) {
+        try {
+          directoryFactory.close();
+        } catch (Throwable t) {
+          SolrException.log(log, t);
+        }
+      }
     }
+
     
     if( closeHooks != null ) {
        for( CloseHook hook : closeHooks ) {
@@ -982,14 +1040,14 @@ public class SolrCore implements SolrInfoMBean {
   }
 
   /**
-   * Returns an unmodifieable Map containing the registered handlers of the specified type.
+   * Returns an unmodifiable Map containing the registered handlers of the specified type.
    */
   public Map<String,SolrRequestHandler> getRequestHandlers(Class clazz) {
     return reqHandlers.getAll(clazz);
   }
   
   /**
-   * Returns an unmodifieable Map containing the registered handlers
+   * Returns an unmodifiable Map containing the registered handlers
    */
   public Map<String,SolrRequestHandler> getRequestHandlers() {
     return reqHandlers.getRequestHandlers();
@@ -1007,8 +1065,8 @@ public class SolrCore implements SolrInfoMBean {
    *   http://${host}:${port}/${context}/select?qt=${handlerName}
    * </pre>  
    * 
-   * Handlers <em>must</em> be initalized before getting registered.  Registered
-   * handlers can immediatly accept requests.
+   * Handlers <em>must</em> be initialized before getting registered.  Registered
+   * handlers can immediately accept requests.
    * 
    * This call is thread safe.
    *  
@@ -1194,7 +1252,7 @@ public class SolrCore implements SolrInfoMBean {
   }
 
 
-  /** Opens a new searcher and returns a RefCounted<SolrIndexSearcher> with it's reference incremented.
+  /** Opens a new searcher and returns a RefCounted&lt;SolrIndexSearcher&gt; with it's reference incremented.
    *
    * "realtime" means that we need to open quickly for a realtime view of the index, hence don't do any
    * autowarming and add to the _realtimeSearchers queue rather than the _searchers queue (so it won't
@@ -1203,7 +1261,7 @@ public class SolrCore implements SolrInfoMBean {
    *
    * realtimeSearcher is updated to the latest opened searcher, regardless of the value of "realtime".
    *
-   * This method aquires openSearcherLock - do not call with searckLock held!
+   * This method acquires openSearcherLock - do not call with searckLock held!
    */
   public RefCounted<SolrIndexSearcher> openNewSearcher(boolean updateHandlerReopens, boolean realtime) {
     SolrIndexSearcher tmp;
@@ -1975,7 +2033,7 @@ public class SolrCore implements SolrInfoMBean {
   /**
    *
    * @param registry The map to which the instance should be added to. The key is the name attribute
-   * @param type The type of the Plugin. These should be standard ones registerd by type.getName() in SolrConfig
+   * @param type The type of the Plugin. These should be standard ones registered by type.getName() in SolrConfig
    * @return     The default if any
    */
   public <T> T initPlugins(Map<String, T> registry, Class<T> type) {

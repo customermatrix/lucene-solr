@@ -48,7 +48,20 @@ public abstract class FilteredTermsEnum extends TermsEnum {
    * the enum should call {@link #nextSeekTerm} and step forward.
    * @see #accept(BytesRef)
    */
-  protected static enum AcceptStatus {YES, YES_AND_SEEK, NO, NO_AND_SEEK, END};
+  protected static enum AcceptStatus {
+    /** Accept the term and position the enum at the next term. */
+    YES, 
+    /** Accept the term and advance ({@link FilteredTermsEnum#nextSeekTerm(BytesRef)})
+     * to the next term. */
+    YES_AND_SEEK, 
+    /** Reject the term and position the enum at the next term. */
+    NO, 
+    /** Reject the term and advance ({@link FilteredTermsEnum#nextSeekTerm(BytesRef)})
+     * to the next term. */
+    NO_AND_SEEK, 
+    /** Reject the term and stop enumerating. */
+    END
+  };
   
   /** Return if term is accepted, not accepted or the iteration should ended
    * (and possibly seek).
@@ -137,7 +150,8 @@ public abstract class FilteredTermsEnum extends TermsEnum {
   }
 
   /** This enum does not support seeking!
-   * @throws UnsupportedOperationException
+   * @throws UnsupportedOperationException In general, subclasses do not
+   *         support seeking.
    */
   @Override
   public boolean seekExact(BytesRef term, boolean useCache) throws IOException {
@@ -145,7 +159,8 @@ public abstract class FilteredTermsEnum extends TermsEnum {
   }
 
   /** This enum does not support seeking!
-   * @throws UnsupportedOperationException
+   * @throws UnsupportedOperationException In general, subclasses do not
+   *         support seeking.
    */
   @Override
   public SeekStatus seekCeil(BytesRef term, boolean useCache) throws IOException {
@@ -153,7 +168,8 @@ public abstract class FilteredTermsEnum extends TermsEnum {
   }
 
   /** This enum does not support seeking!
-   * @throws UnsupportedOperationException
+   * @throws UnsupportedOperationException In general, subclasses do not
+   *         support seeking.
    */
   @Override
   public void seekExact(long ord) throws IOException {
@@ -176,7 +192,8 @@ public abstract class FilteredTermsEnum extends TermsEnum {
   }
   
   /** This enum does not support seeking!
-   * @throws UnsupportedOperationException
+   * @throws UnsupportedOperationException In general, subclasses do not
+   *         support seeking.
    */
   @Override
   public void seekExact(BytesRef term, TermState state) throws IOException {

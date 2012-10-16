@@ -17,6 +17,7 @@
 package org.apache.solr.handler.dataimport;
 
 import org.apache.solr.common.util.XMLErrorLogger;
+import org.apache.solr.util.EmptyEntityResolver;
 import javax.xml.stream.XMLInputFactory;
 import static javax.xml.stream.XMLStreamConstants.*;
 import javax.xml.stream.XMLStreamException;
@@ -105,7 +106,7 @@ public class XPathRecordReader {
    * @param name The name for this field in the emitted record
    * @param xpath The xpath expression for this field
    * @param multiValued If 'true' then the emitted record will have values in 
-   *                    a List<String>
+   *                    a List&lt;String&gt;
    */
   public synchronized XPathRecordReader addField(String name, String xpath, boolean multiValued) {
     addField0(xpath, name, multiValued, false, 0);
@@ -120,8 +121,8 @@ public class XPathRecordReader {
    * @param name The name for this field in the emitted record
    * @param xpath The xpath expression for this field
    * @param multiValued If 'true' then the emitted record will have values in 
-   *                    a List<String>
-   * @param flags FLATTEN: Recursivly combine text from all child XML elements
+   *                    a List&lt;String&gt;
+   * @param flags FLATTEN: Recursively combine text from all child XML elements
    */
   public synchronized XPathRecordReader addField(String name, String xpath, boolean multiValued, int flags) {
     addField0(xpath, name, multiValued, false, flags);
@@ -136,7 +137,7 @@ public class XPathRecordReader {
    * @param xpath The xpath expression for this field
    * @param name The name for this field in the emitted record
    * @param multiValued If 'true' then the emitted record will have values in 
-   *                    a List<String>
+   *                    a List&lt;String&gt;
    * @param isRecord Flags that this XPATH is from a forEach statement
    * @param flags The only supported flag is 'FLATTEN'
    */
@@ -625,10 +626,22 @@ public class XPathRecordReader {
   }
 
   static XMLInputFactory factory = XMLInputFactory.newInstance();
-  static{
-    factory.setProperty(XMLInputFactory.IS_VALIDATING , Boolean.FALSE); 
-    factory.setProperty(XMLInputFactory.SUPPORT_DTD , Boolean.FALSE);
+  static {
+    EmptyEntityResolver.configureXMLInputFactory(factory);
     factory.setXMLReporter(XMLLOG);
+    try {
+      // The java 1.6 bundled stax parser (sjsxp) does not currently have a thread-safe
+      // XMLInputFactory, as that implementation tries to cache and reuse the
+      // XMLStreamReader.  Setting the parser-specific "reuse-instance" property to false
+      // prevents this.
+      // All other known open-source stax parsers (and the bea ref impl)
+      // have thread-safe factories.
+      factory.setProperty("reuse-instance", Boolean.FALSE);
+    } catch (IllegalArgumentException ex) {
+      // Other implementations will likely throw this exception since "reuse-instance"
+      // isimplementation specific.
+      LOG.debug("Unable to set the 'reuse-instance' property for the input chain: " + factory);
+    }
   }
 
   /**Implement this interface to stream records as and when one is found.

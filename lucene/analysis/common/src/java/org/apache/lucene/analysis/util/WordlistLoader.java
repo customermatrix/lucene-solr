@@ -36,7 +36,10 @@ import org.apache.lucene.util.Version;
  */
 public class WordlistLoader {
   
-  private static final int INITITAL_CAPACITY = 16;
+  private static final int INITIAL_CAPACITY = 16;
+  
+  /** no instance */
+  private WordlistLoader() {}
   
   /**
    * Reads lines from a Reader and adds every line as an entry to a CharArraySet (omitting
@@ -74,7 +77,7 @@ public class WordlistLoader {
    * @return A {@link CharArraySet} with the reader's words
    */
   public static CharArraySet getWordSet(Reader reader, Version matchVersion) throws IOException {
-    return getWordSet(reader, new CharArraySet(matchVersion, INITITAL_CAPACITY, false));
+    return getWordSet(reader, new CharArraySet(matchVersion, INITIAL_CAPACITY, false));
   }
 
   /**
@@ -89,7 +92,7 @@ public class WordlistLoader {
    * @return A CharArraySet with the reader's words
    */
   public static CharArraySet getWordSet(Reader reader, String comment, Version matchVersion) throws IOException {
-    return getWordSet(reader, comment, new CharArraySet(matchVersion, INITITAL_CAPACITY, false));
+    return getWordSet(reader, comment, new CharArraySet(matchVersion, INITIAL_CAPACITY, false));
   }
 
   /**
@@ -171,7 +174,7 @@ public class WordlistLoader {
    * @return A {@link CharArraySet} with the reader's words
    */
   public static CharArraySet getSnowballWordSet(Reader reader, Version matchVersion) throws IOException {
-    return getSnowballWordSet(reader, new CharArraySet(matchVersion, INITITAL_CAPACITY, false));
+    return getSnowballWordSet(reader, new CharArraySet(matchVersion, INITIAL_CAPACITY, false));
   }
 
 
@@ -181,7 +184,7 @@ public class WordlistLoader {
    * (i.e. two tab separated words)
    *
    * @return stem dictionary that overrules the stemming algorithm
-   * @throws IOException 
+   * @throws IOException If there is a low-level I/O error.
    */
   public static CharArrayMap<String> getStemDict(Reader reader, CharArrayMap<String> result) throws IOException {
     BufferedReader br = null;
@@ -207,7 +210,7 @@ public class WordlistLoader {
    * </p>
    *
    * @return a list of non-blank non-comment lines with whitespace trimmed
-   * @throws IOException
+   * @throws IOException If there is a low-level I/O error.
    */
   public static List<String> getLines(InputStream stream, Charset charset) throws IOException{
     BufferedReader input = null;
