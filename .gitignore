@@ -20,6 +20,7 @@ maven-build
 /bin
 /bin.*
 /pom.xml
+idea-build
 
 
 # ./lucene

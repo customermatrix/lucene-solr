@@ -71,13 +71,11 @@
     <!-- Need log4j api so long as Zookeeper does; see https://issues.apache.org/jira/browse/ZOOKEEPER-850 -->
     <dependency>
       <groupId>org.slf4j</groupId>
-      <artifactId>log4j-over-slf4j</artifactId>
-      <optional>true</optional>  <!-- let the end user decide... they may be using log4j directly! -->
+      <artifactId>slf4j-log4j12</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>jcl-over-slf4j</artifactId>
-      <optional>true</optional>
+      <groupId>log4j</groupId>
+      <artifactId>log4j</artifactId>
     </dependency>
     <dependency>
       <groupId>commons-io</groupId>
