@@ -116,7 +116,7 @@ public class DebugComponent extends SearchComponent
   @Override
   public void finishStage(ResponseBuilder rb) {
     if (rb.isDebug() && rb.stage == ResponseBuilder.STAGE_GET_FIELDS) {
-      NamedList<Object> info = null;
+      NamedList<Object> info = rb.getDebugInfo();
       NamedList explain = new SimpleOrderedMap();
 
       Map.Entry<String, Object>[]  arr =  new NamedList.NamedListEntry[rb.resultIds.size()];
