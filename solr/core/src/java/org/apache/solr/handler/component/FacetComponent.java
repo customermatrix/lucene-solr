@@ -30,6 +30,7 @@ import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.request.SimpleFacets;
+import org.apache.solr.request.TermValidator;
 import org.apache.solr.schema.FieldType;
 import org.apache.solr.search.QueryParsing;
 import org.slf4j.Logger;
@@ -91,7 +92,14 @@ public class FacetComponent extends SearchComponent
   }
 
   protected SimpleFacets newSimpleFacets(ResponseBuilder rb, SolrParams params) {
-    return new SimpleFacets(rb.req, rb.getResults().docSet, params, rb);
+    SimpleFacets simpleFacets = new SimpleFacets(rb.req, rb.getResults().docSet, params, rb);
+    simpleFacets.setTermValidator(new TermValidator() {
+      @Override
+      public boolean validate(String term) {
+        return true;
+      }
+    });
+    return simpleFacets;
   }
 
   private static final String commandPrefix = "{!" + CommonParams.TERMS + "=$";
