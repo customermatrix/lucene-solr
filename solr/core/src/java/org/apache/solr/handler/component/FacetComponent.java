@@ -30,7 +30,6 @@ import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.request.SimpleFacets;
-import org.apache.solr.request.TermValidator;
 import org.apache.solr.schema.FieldType;
 import org.apache.solr.search.QueryParsing;
 import org.slf4j.Logger;
@@ -38,7 +37,13 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * TODO!
@@ -92,14 +97,7 @@ public class FacetComponent extends SearchComponent
   }
 
   protected SimpleFacets newSimpleFacets(ResponseBuilder rb, SolrParams params) {
-    SimpleFacets simpleFacets = new SimpleFacets(rb.req, rb.getResults().docSet, params, rb);
-    simpleFacets.setTermValidator(new TermValidator() {
-      @Override
-      public boolean validate(String term) {
-        return true;
-      }
-    });
-    return simpleFacets;
+    return new SimpleFacets(rb.req, rb.getResults().docSet, params, rb);
   }
 
   private static final String commandPrefix = "{!" + CommonParams.TERMS + "=$";

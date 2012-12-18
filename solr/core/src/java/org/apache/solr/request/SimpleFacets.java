@@ -104,6 +104,14 @@ import java.util.concurrent.TimeUnit;
  */
 public class SimpleFacets {
   private Logger logger = LoggerFactory.getLogger(SimpleFacets.class);
+
+  public static final TermValidator DEFAULT_TERM_VALIDATOR = new TermValidator() {
+    @Override
+    public boolean validate(String term) {
+      return true;
+    }
+  };
+
   /** The main set of documents all facet counts should be relative to */
   protected DocSet docsOrig;
   /** Configuration params behavior should be driven by */
@@ -140,6 +148,7 @@ public class SimpleFacets {
     this.params = params;
     this.required = new RequiredSolrParams(params);
     this.rb = rb;
+    this.termValidator = DEFAULT_TERM_VALIDATOR;
   }
 
   public void setTermValidator(TermValidator termValidator) {
