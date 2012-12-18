@@ -70,10 +70,7 @@ public class FacetComponent extends SearchComponent
   {
     if (rb.doFacets) {
       SolrParams params = rb.req.getParams();
-      SimpleFacets f = new SimpleFacets(rb.req,
-          rb.getResults().docSet,
-          params,
-          rb );
+      SimpleFacets f = newSimpleFacets(rb, params);
 
       NamedList<Object> counts = f.getFacetCounts();
       String[] pivots = params.getParams( FacetParams.FACET_PIVOT );
@@ -91,6 +88,10 @@ public class FacetComponent extends SearchComponent
       // TODO ???? add this directly to the response, or to the builder?
       rb.rsp.add( "facet_counts", counts );
     }
+  }
+
+  protected SimpleFacets newSimpleFacets(ResponseBuilder rb, SolrParams params) {
+    return new SimpleFacets(rb.req, rb.getResults().docSet, params, rb);
   }
 
   private static final String commandPrefix = "{!" + CommonParams.TERMS + "=$";

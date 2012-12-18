@@ -43,7 +43,6 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.UnicodeUtil;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -202,7 +201,7 @@ public class UnInvertedField extends DocTermOrds {
     return numTermsInField;
   }
 
-  public NamedList<Integer> getCounts(SolrIndexSearcher searcher, DocSet baseDocs, int offset, int limit, Integer mincount, boolean missing, String sort, String prefix) throws IOException {
+  public NamedList<Integer> getCounts(TermValidator termValidator, SolrIndexSearcher searcher, DocSet baseDocs, int offset, int limit, Integer mincount, boolean missing, String sort, String prefix) throws IOException {
     use.incrementAndGet();
 
     FieldType ft = searcher.getSchema().getFieldType(field);
@@ -410,8 +409,10 @@ public class UnInvertedField extends DocTermOrds {
           int idx = indirect[i];
           int tnum = (int)sorted[idx];
           final String label = getReadableValue(getTermValue(te, tnum), ft, charsRef);
-          //System.out.println("  label=" + label);
-          res.setName(idx - sortedIdxStart, label);
+          if (termValidator.validate(label)) {
+            //System.out.println("  label=" + label);
+            res.setName(idx - sortedIdxStart, label);
+          }
         }
 
       } else {
@@ -430,7 +431,9 @@ public class UnInvertedField extends DocTermOrds {
           if (--lim<0) break;
 
           final String label = getReadableValue(getTermValue(te, i), ft, charsRef);
-          res.add(label, c);
+          if (termValidator.validate(label)) {
+            res.add(label, c);
+          }
         }
       }
     }
@@ -447,7 +450,7 @@ public class UnInvertedField extends DocTermOrds {
   }
 
   /**
-   * Collect statistics about the UninvertedField.  Code is very similar to {@link #getCounts(org.apache.solr.search.SolrIndexSearcher, org.apache.solr.search.DocSet, int, int, Integer, boolean, String, String)}
+   * Collect statistics about the UninvertedField.  Code is very similar to {@link #getCounts(TermValidator, org.apache.solr.search.SolrIndexSearcher, org.apache.solr.search.DocSet, int, int, Integer, boolean, String, String)}
    * It can be used to calculate stats on multivalued fields.
    * <p/>
    * This method is mainly used by the {@link org.apache.solr.handler.component.StatsComponent}.

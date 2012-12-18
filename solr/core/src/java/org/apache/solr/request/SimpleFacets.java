@@ -122,6 +122,7 @@ public class SimpleFacets {
   protected DocSet docs;            // the base docset for this particular facet
   protected String key;             // what name should the results be stored under
   protected int threads;
+  protected TermValidator termValidator;
 
   public SimpleFacets(SolrQueryRequest req,
                       DocSet docs,
@@ -141,6 +142,9 @@ public class SimpleFacets {
     this.rb = rb;
   }
 
+  public void setTermValidator(TermValidator termValidator) {
+    this.termValidator = termValidator;
+  }
 
   protected void parseParams(String type, String param) throws ParseException, IOException {
     localParams = QueryParsing.getLocalParams(param, req.getParams());
@@ -380,12 +384,13 @@ public class SimpleFacets {
         } else {
           if (multiToken) {
             UnInvertedField uif = UnInvertedField.getUnInvertedField(field, searcher);
-            counts = uif.getCounts(searcher, docs, offset, limit, mincount,missing,sort,prefix);
+            counts = uif.getCounts(termValidator, searcher, docs, offset, limit, mincount,missing,sort,prefix);
           } else {
             // TODO: future logic could use filters instead of the fieldcache if
             // the number of terms in the field is small enough.
             if (per_segment) {
-              PerSegmentSingleValuedFaceting ps = new PerSegmentSingleValuedFaceting(searcher, docs, field, offset,limit, mincount, missing, sort, prefix);
+              PerSegmentSingleValuedFaceting ps = new PerSegmentSingleValuedFaceting(termValidator, searcher, docs,
+                  field, offset,limit, mincount, missing, sort, prefix);
               Executor executor = threads == 0 ? directExecutor : facetExecutor;
               ps.setNumThreads(threads);
               counts = ps.getFacetCounts(executor);
@@ -508,7 +513,9 @@ public class SimpleFacets {
     for (String term : terms) {
       String internal = ft.toInternal(term);
       int count = searcher.numDocs(new TermQuery(new Term(field, internal)), docs);
-      res.add(term, count);
+      if (termValidator.validate(term)) {
+        res.add(term, count);
+      }
     }
     return res;    
   }
@@ -533,7 +540,7 @@ public class SimpleFacets {
    * Use the Lucene FieldCache to get counts for each unique field value in <code>docs</code>.
    * The field must have at most one indexed token per document.
    */
-  public static NamedList<Integer> getFieldCacheCounts(SolrIndexSearcher searcher, DocSet docs, String fieldName, int offset, int limit, int mincount, boolean missing, String sort, String prefix) throws IOException {
+  public NamedList<Integer> getFieldCacheCounts(SolrIndexSearcher searcher, DocSet docs, String fieldName, int offset, int limit, int mincount, boolean missing, String sort, String prefix) throws IOException {
     // TODO: If the number of terms is high compared to docs.size(), and zeros==false,
     //  we should use an alternate strategy to avoid
     //  1) creating another huge int[] for the counts
@@ -687,7 +694,9 @@ public class SimpleFacets {
           int c = (int)(pair >>> 32);
           int tnum = Integer.MAX_VALUE - (int)pair;
           ft.indexedToReadable(si.lookup(startTermIndex+tnum, br), charsRef);
-          res.add(charsRef.toString(), c);
+          if (termValidator.validate(charsRef.toString())) {
+            res.add(charsRef.toString(), c);
+          }
         }
       
       } else {
@@ -705,7 +714,9 @@ public class SimpleFacets {
           if (c<mincount || --off>=0) continue;
           if (--lim<0) break;
           ft.indexedToReadable(si.lookup(startTermIndex+i, br), charsRef);
-          res.add(charsRef.toString(), c);
+          if (termValidator.validate(charsRef.toString())) {
+            res.add(charsRef.toString(), c);
+          }
         }
       }
     }
@@ -797,6 +808,9 @@ public class SimpleFacets {
 
     if (docs.size() >= mincount) {
       while (term != null) {
+        if (termValidator != null && !termValidator.validate(term.utf8ToString())) {
+          break;
+        }
 
         if (startTermBytes != null && !StringHelper.startsWith(term, startTermBytes))
           break;
@@ -1147,18 +1161,18 @@ public class SimpleFacets {
     resOuter.add(key, getFacetRangeCounts(sf, calc));
   }
 
-  private <T extends Comparable<T>> NamedList getFacetRangeCounts
+  private NamedList getFacetRangeCounts
     (final SchemaField sf, 
-     final RangeEndpointCalculator<T> calc) throws IOException {
+     final RangeEndpointCalculator calc) throws IOException {
     
     final String f = sf.getName();
     final NamedList<Object> res = new SimpleOrderedMap<Object>();
     final NamedList<Integer> counts = new NamedList<Integer>();
     res.add("counts", counts);
 
-    final T start = calc.getValue(required.getFieldParam(f,FacetParams.FACET_RANGE_START));
+    final Comparable start = calc.getValue(required.getFieldParam(f,FacetParams.FACET_RANGE_START));
     // not final, hardend may change this
-    T end = calc.getValue(required.getFieldParam(f,FacetParams.FACET_RANGE_END));
+    Comparable end = calc.getValue(required.getFieldParam(f,FacetParams.FACET_RANGE_END));
     if (end.compareTo(start) < 0) {
       throw new SolrException
         (SolrException.ErrorCode.BAD_REQUEST,
@@ -1174,11 +1188,11 @@ public class SimpleFacets {
     
     final EnumSet<FacetRangeInclude> include = FacetRangeInclude.parseParam
       (params.getFieldParams(f,FacetParams.FACET_RANGE_INCLUDE));
-    
-    T low = start;
+
+    Comparable low = start;
     
     while (low.compareTo(end) < 0) {
-      T high = calc.addGap(low, gap);
+      Comparable high = calc.addGap(low, gap);
       if (end.compareTo(high) < 0) {
         if (params.getFieldBool(f,FacetParams.FACET_RANGE_HARD_END,false)) {
           high = end;
