@@ -107,7 +107,7 @@ public class SimpleFacets {
 
   public static final TermValidator DEFAULT_TERM_VALIDATOR = new TermValidator() {
     @Override
-    public boolean validate(String term) {
+    public boolean validate(String field, String term) {
       return true;
     }
   };
@@ -522,7 +522,7 @@ public class SimpleFacets {
     for (String term : terms) {
       String internal = ft.toInternal(term);
       int count = searcher.numDocs(new TermQuery(new Term(field, internal)), docs);
-      if (termValidator.validate(term)) {
+      if (termValidator.validate(field, term)) {
         res.add(term, count);
       }
     }
@@ -703,7 +703,7 @@ public class SimpleFacets {
           int c = (int)(pair >>> 32);
           int tnum = Integer.MAX_VALUE - (int)pair;
           ft.indexedToReadable(si.lookup(startTermIndex+tnum, br), charsRef);
-          if (termValidator.validate(charsRef.toString())) {
+          if (termValidator.validate(fieldName, charsRef.toString())) {
             res.add(charsRef.toString(), c);
           }
         }
@@ -723,7 +723,7 @@ public class SimpleFacets {
           if (c<mincount || --off>=0) continue;
           if (--lim<0) break;
           ft.indexedToReadable(si.lookup(startTermIndex+i, br), charsRef);
-          if (termValidator.validate(charsRef.toString())) {
+          if (termValidator.validate(fieldName, charsRef.toString())) {
             res.add(charsRef.toString(), c);
           }
         }
@@ -817,7 +817,7 @@ public class SimpleFacets {
 
     if (docs.size() >= mincount) {
       while (term != null) {
-        if (termValidator != null && !termValidator.validate(term.utf8ToString())) {
+        if (termValidator != null && !termValidator.validate(field, term.utf8ToString())) {
           break;
         }
 

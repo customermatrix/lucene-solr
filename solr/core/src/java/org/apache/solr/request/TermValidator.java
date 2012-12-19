@@ -18,5 +18,5 @@ package org.apache.solr.request;
  */
 
 public interface TermValidator {
-  boolean validate(String term);
+  boolean validate(String field, String term);
 }

@@ -80,6 +80,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class UnInvertedField extends DocTermOrds {
   private static int TNUM_OFFSET=2;
+  private String field;
 
   static class TopTerm {
     BytesRef term;
@@ -169,6 +170,7 @@ public class UnInvertedField extends DocTermOrds {
           // small.
           searcher.maxDoc()/20 + 2,
           DEFAULT_INDEX_INTERVAL_BITS);
+    this.field = field;
     //System.out.println("maxTermDocFreq=" + maxTermDocFreq + " maxDoc=" + searcher.maxDoc());
 
     final String prefix = TrieField.getMainValuePrefix(searcher.getSchema().getFieldType(field));
@@ -201,7 +203,9 @@ public class UnInvertedField extends DocTermOrds {
     return numTermsInField;
   }
 
-  public NamedList<Integer> getCounts(TermValidator termValidator, SolrIndexSearcher searcher, DocSet baseDocs, int offset, int limit, Integer mincount, boolean missing, String sort, String prefix) throws IOException {
+  public NamedList<Integer> getCounts(TermValidator termValidator, SolrIndexSearcher searcher, DocSet baseDocs,
+                                      int offset, int limit, Integer mincount, boolean missing, String sort,
+                                      String prefix) throws IOException {
     use.incrementAndGet();
 
     FieldType ft = searcher.getSchema().getFieldType(field);
@@ -409,7 +413,7 @@ public class UnInvertedField extends DocTermOrds {
           int idx = indirect[i];
           int tnum = (int)sorted[idx];
           final String label = getReadableValue(getTermValue(te, tnum), ft, charsRef);
-          if (termValidator.validate(label)) {
+          if (termValidator.validate(field, label)) {
             //System.out.println("  label=" + label);
             res.setName(idx - sortedIdxStart, label);
           }
@@ -431,7 +435,7 @@ public class UnInvertedField extends DocTermOrds {
           if (--lim<0) break;
 
           final String label = getReadableValue(getTermValue(te, i), ft, charsRef);
-          if (termValidator.validate(label)) {
+          if (termValidator.validate(field, label)) {
             res.add(label, c);
           }
         }
