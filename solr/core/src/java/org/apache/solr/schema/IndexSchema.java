@@ -66,7 +66,7 @@ public class IndexSchema {
 
   private List<SchemaField> fieldsWithDefaultValue;
   private Collection<SchemaField> requiredFields;
-  private DynamicField[] dynamicFields;
+  protected DynamicField[] dynamicFields = new DynamicField[0];
 
   private Analyzer analyzer;
   private Analyzer queryAnalyzer;
