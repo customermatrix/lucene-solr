@@ -17,15 +17,11 @@ package org.apache.lucene.facet.index;
  * limitations under the License.
  */
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.lucene.facet.index.params.CategoryListParams;
-import org.apache.lucene.facet.index.params.DefaultFacetIndexingParams;
 import org.apache.lucene.facet.index.params.FacetIndexingParams;
 import org.apache.lucene.facet.taxonomy.directory.DirectoryTaxonomyWriter.OrdinalMap;
 import org.apache.lucene.index.AtomicReader;
@@ -37,6 +33,7 @@ import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.IntsRef;
 import org.apache.lucene.util.encoding.IntDecoder;
 import org.apache.lucene.util.encoding.IntEncoder;
 
@@ -59,7 +56,7 @@ import org.apache.lucene.util.encoding.IntEncoder;
  * DirectoryReader reader = DirectoryReader.open(oldDir);
  * IndexWriterConfig conf = new IndexWriterConfig(VER, ANALYZER);
  * IndexWriter writer = new IndexWriter(newDir, conf);
- * List<AtomicReaderContext> leaves = reader.leaves();
+ * List&lt;AtomicReaderContext&gt; leaves = reader.leaves();
  *   AtomicReader wrappedLeaves[] = new AtomicReader[leaves.size()];
  *   for (int i = 0; i < leaves.size(); i++) {
  *     wrappedLeaves[i] = new OrdinalMappingAtomicReader(leaves.get(i).reader(), ordmap);
@@ -71,6 +68,7 @@ import org.apache.lucene.util.encoding.IntEncoder;
  * @lucene.experimental
  */
 public class OrdinalMappingAtomicReader extends FilterAtomicReader {
+  
   private final int[] ordinalMap;
   // a little obtuse: but we dont need to create Term objects this way
   private final Map<String,Map<BytesRef,CategoryListParams>> termMap = 
@@ -82,7 +80,7 @@ public class OrdinalMappingAtomicReader extends FilterAtomicReader {
    * OrdinalMappingAtomicReader(in, ordinalMap, new DefaultFacetIndexingParams())}
    */
   public OrdinalMappingAtomicReader(AtomicReader in, int[] ordinalMap) {
-    this(in, ordinalMap, new DefaultFacetIndexingParams());
+    this(in, ordinalMap, FacetIndexingParams.ALL_PARENTS);
   }
   
   /**
@@ -187,7 +185,7 @@ public class OrdinalMappingAtomicReader extends FilterAtomicReader {
   private class OrdinalMappingDocsAndPositionsEnum extends FilterDocsAndPositionsEnum {
     private final IntEncoder encoder;
     private final IntDecoder decoder;
-    private final ByteArrayOutputStream os = new ByteArrayOutputStream();
+    private final IntsRef ordinals = new IntsRef(32);
     private final BytesRef payloadOut = new BytesRef();
 
     public OrdinalMappingDocsAndPositionsEnum(DocsAndPositionsEnum in, CategoryListParams params) {
@@ -202,21 +200,14 @@ public class OrdinalMappingAtomicReader extends FilterAtomicReader {
       if (payload == null) {
         return payload;
       } else {
-        InputStream is = new ByteArrayInputStream(payload.bytes, payload.offset, payload.length);
-        decoder.reInit(is);
-        os.reset();
-        encoder.reInit(os);
-        long ordinal;
-        while ((ordinal = decoder.decode()) != IntDecoder.EOS) {
-          int newOrdinal = ordinalMap[(int)ordinal];
-          encoder.encode(newOrdinal);      
+        decoder.decode(payload, ordinals);
+        
+        // map the ordinals
+        for (int i = 0; i < ordinals.length; i++) {
+          ordinals.ints[i] = ordinalMap[ordinals.ints[i]];
         }
-        encoder.close();
-        // TODO (Facet): avoid copy?
-        byte out[] = os.toByteArray();
-        payloadOut.bytes = out;
-        payloadOut.offset = 0;
-        payloadOut.length = out.length;
+        
+        encoder.encode(ordinals, payloadOut);
         return payloadOut;
       }
     }

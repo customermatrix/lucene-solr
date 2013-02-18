@@ -21,9 +21,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.solr.BaseDistributedSearchTestCase;
 import org.apache.solr.client.solrj.SolrQuery;
@@ -36,15 +34,19 @@ import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.params.ModifiableSolrParams;
-import org.apache.solr.common.util.ExecutorUtil;
 import org.apache.solr.common.util.NamedList;
+import org.apache.solr.core.CoreContainer;
+import org.apache.solr.core.SolrCore;
+import org.apache.solr.core.SolrEventListener;
+import org.apache.solr.search.SolrIndexSearcher;
+import org.apache.solr.servlet.SolrDispatchFilter;
 import org.apache.solr.update.SolrCmdDistributor.Node;
 import org.apache.solr.update.SolrCmdDistributor.Response;
 import org.apache.solr.update.SolrCmdDistributor.StdNode;
-import org.apache.solr.util.DefaultSolrThreadFactory;
+import org.apache.solr.update.processor.DistributedUpdateProcessor;
 
 public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
-  private ThreadPoolExecutor executor;
+  private UpdateShardHandler updateShardHandler;
   
   public SolrCmdDistributorTest() {
     fixShardCount = true;
@@ -63,6 +65,7 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
   
   // TODO: for now we redefine this method so that it pulls from the above
   // we don't get helpful override behavior due to the method being static
+  @Override
   protected void createServers(int numShards) throws Exception {
     controlJetty = createJetty(new File(getSolrHome()), testDir + "/control/data", null, getSolrConfigFile(), getSchemaFile());
 
@@ -89,9 +92,10 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
   public void doTest() throws Exception {
     del("*:*");
     
-    SolrCmdDistributor cmdDistrib = new SolrCmdDistributor(5, executor);
+    SolrCmdDistributor cmdDistrib = new SolrCmdDistributor(5, updateShardHandler);
     
     ModifiableSolrParams params = new ModifiableSolrParams();
+
     List<Node> nodes = new ArrayList<Node>();
 
     ZkNodeProps nodeProps = new ZkNodeProps(ZkStateReader.BASE_URL_PROP,
@@ -103,12 +107,17 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
     
     AddUpdateCommand cmd = new AddUpdateCommand(null);
     cmd.solrDoc = sdoc("id", 1);
+    params = new ModifiableSolrParams();
+
     cmdDistrib.distribAdd(cmd, nodes, params);
     
     CommitUpdateCommand ccmd = new CommitUpdateCommand(null, false);
+    params = new ModifiableSolrParams();
+    params.set(DistributedUpdateProcessor.COMMIT_END_POINT, true);
     cmdDistrib.distribCommit(ccmd, nodes, params);
     cmdDistrib.finish();
 
+    
     Response response = cmdDistrib.getResponse();
     
     assertEquals(response.errors.toString(), 0, response.errors.size());
@@ -123,20 +132,28 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
     nodes.add(new StdNode(new ZkCoreNodeProps(nodeProps)));
     
     // add another 2 docs to control and 3 to client
-    cmdDistrib = new SolrCmdDistributor(5, executor);
+    cmdDistrib = new SolrCmdDistributor(5, updateShardHandler);
     cmd.solrDoc = sdoc("id", 2);
+    params = new ModifiableSolrParams();
+    params.set(DistributedUpdateProcessor.COMMIT_END_POINT, true);
     cmdDistrib.distribAdd(cmd, nodes, params);
     
     AddUpdateCommand cmd2 = new AddUpdateCommand(null);
     cmd2.solrDoc = sdoc("id", 3);
 
+    params = new ModifiableSolrParams();
+    params.set(DistributedUpdateProcessor.COMMIT_END_POINT, true);
     cmdDistrib.distribAdd(cmd2, nodes, params);
     
     AddUpdateCommand cmd3 = new AddUpdateCommand(null);
     cmd3.solrDoc = sdoc("id", 4);
     
+    params = new ModifiableSolrParams();
+    params.set(DistributedUpdateProcessor.COMMIT_END_POINT, true);
     cmdDistrib.distribAdd(cmd3, Collections.singletonList(nodes.get(1)), params);
     
+    params = new ModifiableSolrParams();
+    params.set(DistributedUpdateProcessor.COMMIT_END_POINT, true);
     cmdDistrib.distribCommit(ccmd, nodes, params);
     cmdDistrib.finish();
     response = cmdDistrib.getResponse();
@@ -156,8 +173,17 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
     DeleteUpdateCommand dcmd = new DeleteUpdateCommand(null);
     dcmd.id = "2";
     
-    cmdDistrib = new SolrCmdDistributor(5, executor);
+    
+
+    cmdDistrib = new SolrCmdDistributor(5, updateShardHandler);
+    
+    params = new ModifiableSolrParams();
+    params.set(DistributedUpdateProcessor.COMMIT_END_POINT, true);
+    
     cmdDistrib.distribDelete(dcmd, nodes, params);
+    
+    params = new ModifiableSolrParams();
+    params.set(DistributedUpdateProcessor.COMMIT_END_POINT, true);
     
     cmdDistrib.distribCommit(ccmd, nodes, params);
     cmdDistrib.finish();
@@ -182,9 +208,9 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
     
     int id = 5;
     
-    cmdDistrib = new SolrCmdDistributor(5, executor);
+    cmdDistrib = new SolrCmdDistributor(5, updateShardHandler);
     
-    int cnt = atLeast(201);
+    int cnt = atLeast(303);
     for (int i = 0; i < cnt; i++) {
       nodes.clear();
       for (SolrServer c : clients) {
@@ -194,13 +220,13 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
         HttpSolrServer httpClient = (HttpSolrServer) c;
         nodeProps = new ZkNodeProps(ZkStateReader.BASE_URL_PROP,
             httpClient.getBaseURL(), ZkStateReader.CORE_NAME_PROP, "");
-        System.out.println("node props:" + nodeProps);
         nodes.add(new StdNode(new ZkCoreNodeProps(nodeProps)));
 
       }
       AddUpdateCommand c = new AddUpdateCommand(null);
       c.solrDoc = sdoc("id", id++);
       if (nodes.size() > 0) {
+        params = new ModifiableSolrParams();
         cmdDistrib.distribAdd(c, nodes, params);
       }
     }
@@ -214,11 +240,37 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
       
       nodes.add(new StdNode(new ZkCoreNodeProps(nodeProps)));
     }
+    
+    final AtomicInteger commits = new AtomicInteger();
+    for(JettySolrRunner jetty : jettys) {
+      CoreContainer cores = ((SolrDispatchFilter) jetty.getDispatchFilter().getFilter()).getCores();
+      SolrCore core = cores.getCore("collection1");
+      try {
+        core.getUpdateHandler().registerCommitCallback(new SolrEventListener() {
+          @Override
+          public void init(NamedList args) {}
+          @Override
+          public void postSoftCommit() {}
+          @Override
+          public void postCommit() {
+            commits.incrementAndGet();
+          }
+          @Override
+          public void newSearcher(SolrIndexSearcher newSearcher,
+              SolrIndexSearcher currentSearcher) {}
+        });
+      } finally {
+        core.close();
+      }
+    }
+    params = new ModifiableSolrParams();
+    params.set(DistributedUpdateProcessor.COMMIT_END_POINT, true);
 
     cmdDistrib.distribCommit(ccmd, nodes, params);
     
-    
     cmdDistrib.finish();
+
+    assertEquals(shardCount, commits.get());
     
     for (SolrServer c : clients) {
       NamedList<Object> resp = c.request(new LukeRequest());
@@ -232,15 +284,12 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
   @Override
   public void setUp() throws Exception {
     super.setUp();
-    executor = new ThreadPoolExecutor(0, Integer.MAX_VALUE, 5,
-        TimeUnit.SECONDS, new SynchronousQueue<Runnable>(),
-        new DefaultSolrThreadFactory("cmdDistribExecutor"));
+    updateShardHandler = new UpdateShardHandler(10000, 10000);
   }
   
   @Override
   public void tearDown() throws Exception {
-    ExecutorUtil.shutdownNowAndAwaitTermination(executor);
-    executor = null;
+    updateShardHandler = null;
     super.tearDown();
   }
 }

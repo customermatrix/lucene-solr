@@ -17,84 +17,38 @@
 
 package org.apache.solr.request;
 
-import org.apache.lucene.index.AtomicReader;
-import org.apache.lucene.index.DocsEnum;
-import org.apache.lucene.index.Fields;
-import org.apache.lucene.index.MultiDocsEnum;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.index.Terms;
-import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.queryparser.classic.ParseException;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.FieldCache;
-import org.apache.lucene.search.Filter;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TermRangeQuery;
+import org.apache.lucene.index.*;
+import org.apache.lucene.search.*;
 import org.apache.lucene.search.grouping.AbstractAllGroupHeadsCollector;
-import org.apache.lucene.search.grouping.term.TermAllGroupsCollector;
 import org.apache.lucene.search.grouping.term.TermGroupFacetCollector;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.CharsRef;
-import org.apache.lucene.util.FixedBitSet;
-import org.apache.lucene.util.OpenBitSet;
-import org.apache.lucene.util.StringHelper;
-import org.apache.lucene.util.UnicodeUtil;
+import org.apache.lucene.search.grouping.term.TermAllGroupsCollector;
+import org.apache.lucene.util.*;
 import org.apache.lucene.util.packed.PackedInts;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
-import org.apache.solr.common.params.CommonParams;
-import org.apache.solr.common.params.FacetParams;
-import org.apache.solr.common.params.FacetParams.FacetRangeInclude;
+import org.apache.solr.common.params.*;
 import org.apache.solr.common.params.FacetParams.FacetRangeOther;
-import org.apache.solr.common.params.GroupParams;
-import org.apache.solr.common.params.RequiredSolrParams;
-import org.apache.solr.common.params.SolrParams;
+import org.apache.solr.common.params.FacetParams.FacetRangeInclude;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.common.util.StrUtils;
-import org.apache.solr.handler.component.ResponseBuilder;
-import org.apache.solr.schema.BoolField;
-import org.apache.solr.schema.DateField;
-import org.apache.solr.schema.FieldType;
-import org.apache.solr.schema.IndexSchema;
-import org.apache.solr.schema.SchemaField;
-import org.apache.solr.schema.SortableDoubleField;
-import org.apache.solr.schema.SortableFloatField;
-import org.apache.solr.schema.SortableIntField;
-import org.apache.solr.schema.SortableLongField;
-import org.apache.solr.schema.TrieField;
-import org.apache.solr.search.BitDocSet;
-import org.apache.solr.search.DocIterator;
-import org.apache.solr.search.DocSet;
-import org.apache.solr.search.Grouping;
-import org.apache.solr.search.HashDocSet;
-import org.apache.solr.search.QParser;
-import org.apache.solr.search.QueryParsing;
-import org.apache.solr.search.SolrIndexSearcher;
-import org.apache.solr.search.SortedIntDocSet;
+import org.apache.solr.schema.*;
+import org.apache.solr.search.*;
 import org.apache.solr.search.grouping.GroupingSpecification;
 import org.apache.solr.util.BoundedTreeSet;
 import org.apache.solr.util.DateMathParser;
 import org.apache.solr.util.DefaultSolrThreadFactory;
+import org.apache.solr.handler.component.ResponseBuilder;
 import org.apache.solr.util.LongPriorityQueue;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Date;
-import java.util.EnumSet;
-import java.util.IdentityHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A class that generates simple Facet information for a request.
@@ -155,7 +109,7 @@ public class SimpleFacets {
     this.termValidator = termValidator;
   }
 
-  protected void parseParams(String type, String param) throws ParseException, IOException {
+  protected void parseParams(String type, String param) throws SyntaxError, IOException {
     localParams = QueryParsing.getLocalParams(param, req.getParams());
     docs = docsOrig;
     facetValue = param;
@@ -221,6 +175,7 @@ public class SimpleFacets {
       DocSet base = searcher.getDocSet(qlist);
       if (rb.grouping() && rb.getGroupingSpec().isTruncateGroups()) {
         Grouping grouping = new Grouping(searcher, null, rb.getQueryCommand(), false, 0, false);
+        grouping.setGroupSort(rb.getGroupingSpec().getSortWithinGroup());
         if (rb.getGroupingSpec().getFields().length > 0) {
           grouping.addFieldCommand(rb.getGroupingSpec().getFields()[0], req);
         } else if (rb.getGroupingSpec().getFunctions().length > 0) {
@@ -269,7 +224,7 @@ public class SimpleFacets {
 
     } catch (IOException e) {
       throw new SolrException(ErrorCode.SERVER_ERROR, e);
-    } catch (ParseException e) {
+    } catch (SyntaxError e) {
       throw new SolrException(ErrorCode.BAD_REQUEST, e);
     }
     return facetResponse;
@@ -281,7 +236,7 @@ public class SimpleFacets {
    *
    * @see FacetParams#FACET_QUERY
    */
-  public NamedList<Integer> getFacetQueryCounts() throws IOException,ParseException {
+  public NamedList<Integer> getFacetQueryCounts() throws IOException,SyntaxError {
 
     NamedList<Integer> res = new SimpleOrderedMap<Integer>();
 
@@ -469,6 +424,7 @@ public class SimpleFacets {
 
 
   static final Executor directExecutor = new Executor() {
+    @Override
     public void execute(Runnable r) {
       r.run();
     }
@@ -491,7 +447,7 @@ public class SimpleFacets {
    * @see #getFacetTermEnumCounts
    */
   public NamedList<Object> getFacetFieldCounts()
-          throws IOException, ParseException {
+          throws IOException, SyntaxError {
 
     NamedList<Object> res = new SimpleOrderedMap<Object>();
 
@@ -852,7 +808,7 @@ public class SimpleFacets {
             // TODO: specialize when base docset is a bitset or hash set (skipDocs)?  or does it matter for this?
             // TODO: do this per-segment for better efficiency (MultiDocsEnum just uses base class impl)
             // TODO: would passing deleted docs lead to better efficiency over checking the fastForRandomSet?
-            docsEnum = termsEnum.docs(null, docsEnum, 0);
+            docsEnum = termsEnum.docs(null, docsEnum, DocsEnum.FLAG_NONE);
             c=0;
 
             if (docsEnum instanceof MultiDocsEnum) {
@@ -922,7 +878,7 @@ public class SimpleFacets {
    */
   @Deprecated
   public NamedList<Object> getFacetDateCounts()
-    throws IOException, ParseException {
+    throws IOException, SyntaxError {
 
     final NamedList<Object> resOuter = new SimpleOrderedMap<Object>();
     final String[] fields = params.getParams(FacetParams.FACET_DATE);
@@ -941,7 +897,7 @@ public class SimpleFacets {
    */
   @Deprecated
   public void getFacetDateCounts(String dateFacet, NamedList<Object> resOuter)
-      throws IOException, ParseException {
+      throws IOException, SyntaxError {
 
     final IndexSchema schema = searcher.getSchema();
 
@@ -1104,7 +1060,7 @@ public class SimpleFacets {
    * @see FacetParams#FACET_RANGE
    */
 
-  public NamedList<Object> getFacetRangeCounts() throws IOException, ParseException {
+  public NamedList<Object> getFacetRangeCounts() throws IOException, SyntaxError {
     final NamedList<Object> resOuter = new SimpleOrderedMap<Object>();
     final String[] fields = params.getParams(FacetParams.FACET_RANGE);
 
@@ -1118,7 +1074,7 @@ public class SimpleFacets {
   }
 
   void getFacetRangeCounts(String facetRange, NamedList<Object> resOuter)
-      throws IOException, ParseException {
+      throws IOException, SyntaxError {
 
     final IndexSchema schema = searcher.getSchema();
 
@@ -1345,6 +1301,7 @@ public class SimpleFacets {
       CountPair<?,?> that = (CountPair<?,?>) o;
       return (this.key.equals(that.key) && this.val.equals(that.val));
     }
+    @Override
     public int compareTo(CountPair<K,V> o) {
       int vc = o.val.compareTo(val);
       return (0 != vc ? vc : key.compareTo(o.key));

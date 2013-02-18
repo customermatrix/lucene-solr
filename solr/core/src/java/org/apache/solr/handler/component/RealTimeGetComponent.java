@@ -36,6 +36,8 @@ import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.cloud.ClusterState;
+import org.apache.solr.common.cloud.DocCollection;
+import org.apache.solr.common.cloud.Slice;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.ShardParams;
 import org.apache.solr.common.params.SolrParams;
@@ -52,6 +54,7 @@ import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.SchemaField;
 import org.apache.solr.search.ReturnFields;
 import org.apache.solr.search.SolrIndexSearcher;
+import org.apache.solr.search.SolrReturnFields;
 import org.apache.solr.update.DocumentBuilder;
 import org.apache.solr.update.PeerSync;
 import org.apache.solr.update.UpdateLog;
@@ -68,7 +71,7 @@ public class RealTimeGetComponent extends SearchComponent
   @Override
   public void prepare(ResponseBuilder rb) throws IOException {
     // Set field flags
-    ReturnFields returnFields = new ReturnFields( rb.req );
+    ReturnFields returnFields = new SolrReturnFields( rb.req );
     rb.rsp.setReturnFields( returnFields );
   }
 
@@ -307,7 +310,7 @@ public class RealTimeGetComponent extends SearchComponent
     Document out = new Document();
     for (IndexableField f : doc.getFields()) {
       if (f.fieldType().stored() ) {
-        out.add(f);
+        out.add((IndexableField) f);
       }
     }
 
@@ -354,23 +357,23 @@ public class RealTimeGetComponent extends SearchComponent
       CloudDescriptor cloudDescriptor = rb.req.getCore().getCoreDescriptor().getCloudDescriptor();
 
       String collection = cloudDescriptor.getCollectionName();
-
       ClusterState clusterState = zkController.getClusterState();
-      
-      Map<String, List<String>> shardToId = new HashMap<String, List<String>>();
-      for (String id : allIds) {
-        int hash = Hash.murmurhash3_x86_32(id, 0, id.length(), 0);
-        String shard = clusterState.getShard(hash,  collection);
+      DocCollection coll = clusterState.getCollection(collection);
 
-        List<String> idsForShard = shardToId.get(shard);
+
+      Map<String, List<String>> sliceToId = new HashMap<String, List<String>>();
+      for (String id : allIds) {
+        Slice slice = coll.getRouter().getTargetSlice(id, null, params, coll);
+
+        List<String> idsForShard = sliceToId.get(slice.getName());
         if (idsForShard == null) {
           idsForShard = new ArrayList<String>(2);
-          shardToId.put(shard, idsForShard);
+          sliceToId.put(slice.getName(), idsForShard);
         }
         idsForShard.add(id);
       }
 
-      for (Map.Entry<String,List<String>> entry : shardToId.entrySet()) {
+      for (Map.Entry<String,List<String>> entry : sliceToId.entrySet()) {
         String shard = entry.getKey();
         String shardIdList = StrUtils.join(entry.getValue(), ',');
 
@@ -523,7 +526,7 @@ public class RealTimeGetComponent extends SearchComponent
     
     boolean cantReachIsSuccess = rb.req.getParams().getBool("cantReachIsSuccess", false);
     
-    PeerSync peerSync = new PeerSync(rb.req.getCore(), replicas, nVersions, cantReachIsSuccess);
+    PeerSync peerSync = new PeerSync(rb.req.getCore(), replicas, nVersions, cantReachIsSuccess, true);
     boolean success = peerSync.sync();
     
     // TODO: more complex response?

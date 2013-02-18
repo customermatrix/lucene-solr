@@ -78,6 +78,7 @@ final class FreqProxTermsWriterPerField extends TermsHashConsumerPerField implem
   @Override
   void skippingLongTerm() {}
 
+  @Override
   public int compareTo(FreqProxTermsWriterPerField other) {
     return fieldInfo.name.compareTo(other.fieldInfo.name);
   }
@@ -381,6 +382,7 @@ final class FreqProxTermsWriterPerField extends TermsHashConsumerPerField implem
     long sumTotalTermFreq = 0;
     long sumDocFreq = 0;
 
+    Term protoTerm = new Term(fieldName);
     for (int i = 0; i < numTerms; i++) {
       final int termID = termIDs[i];
       //System.out.println("term=" + termID);
@@ -403,7 +405,8 @@ final class FreqProxTermsWriterPerField extends TermsHashConsumerPerField implem
 
       final int delDocLimit;
       if (segDeletes != null) {
-        final Integer docIDUpto = segDeletes.get(new Term(fieldName, text));
+        protoTerm.bytes = text;
+        final Integer docIDUpto = segDeletes.get(protoTerm);
         if (docIDUpto != null) {
           delDocLimit = docIDUpto;
         } else {

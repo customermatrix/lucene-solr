@@ -31,12 +31,16 @@ public class CoreDescriptor {
   protected String name;
   protected String instanceDir;
   protected String dataDir;
+  protected String ulogDir;
   protected String configName;
   protected String propertiesName;
   protected String schemaName;
   private final CoreContainer coreContainer;
   private Properties coreProperties;
-  
+  private boolean loadOnStartup = true;
+  private boolean isTransient = false;
+
+
   private CloudDescriptor cloudDesc;
 
   public CoreDescriptor(CoreContainer coreContainer, String name, String instanceDir) {
@@ -130,10 +134,24 @@ public class CoreDescriptor {
   }
 
   /**@return the core instance directory. */
-  public String getInstanceDir() {
-    return instanceDir;
+  public String getRawInstanceDir() {
+    return this.instanceDir;
   }
 
+  /**
+   *
+   * @return the core instance directory, prepended with solr_home if not an absolute path.
+   */
+  public String getInstanceDir() {
+    String instDir = this.instanceDir;
+    if (instDir == null) return null; // No worse than before.
+
+    if (new File(instDir).isAbsolute()) {
+      return SolrResourceLoader.normalizeDir(SolrResourceLoader.normalizeDir(instanceDir));
+    }
+    return SolrResourceLoader.normalizeDir(coreContainer.getSolrHome() +
+        SolrResourceLoader.normalizeDir(instDir));
+  }
   /**Sets the core configuration resource name. */
   public void setConfigName(String name) {
     if (name == null || name.length() == 0)
@@ -192,5 +210,28 @@ public class CoreDescriptor {
   
   public void setCloudDescriptor(CloudDescriptor cloudDesc) {
     this.cloudDesc = cloudDesc;
+  }
+  public boolean isLoadOnStartup() {
+    return loadOnStartup;
+  }
+
+  public void setLoadOnStartup(boolean loadOnStartup) {
+    this.loadOnStartup = loadOnStartup;
+  }
+
+  public boolean isTransient() {
+    return isTransient;
+  }
+
+  public void setTransient(boolean aTransient) {
+    this.isTransient = aTransient;
+  }
+
+  public String getUlogDir() {
+    return ulogDir;
+  }
+
+  public void setUlogDir(String ulogDir) {
+    this.ulogDir = ulogDir;
   }
 }

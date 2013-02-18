@@ -55,14 +55,15 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
   // forcefully pause the larger ones, letting the smaller
   // ones run, up until maxMergeCount merges at which point
   // we forcefully pause incoming threads (that presumably
-  // are the ones causing so much merging).  We dynamically
-  // default this from 1 to 3, depending on how many cores
-  // you have:
-  private int maxThreadCount = Math.max(1, Math.min(3, Runtime.getRuntime().availableProcessors()/2));
+  // are the ones causing so much merging).  We default to 1
+  // here: tests on spinning-magnet drives showed slower
+  // indexing perf if more than one merge thread runs at
+  // once (though on an SSD it was faster):
+  private int maxThreadCount = 1;
 
   // Max number of merges we accept before forcefully
   // throttling the incoming threads
-  private int maxMergeCount = maxThreadCount+2;
+  private int maxMergeCount = 2;
 
   /** {@link Directory} that holds the index. */
   protected Directory dir;
@@ -144,6 +145,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
 
   /** Sorts {@link MergeThread}s; larger merges come first. */
   protected static final Comparator<MergeThread> compareByMergeDocCount = new Comparator<MergeThread>() {
+    @Override
     public int compare(MergeThread t1, MergeThread t2) {
       final MergePolicy.OneMerge m1 = t1.getCurrentMerge();
       final MergePolicy.OneMerge m2 = t2.getCurrentMerge();
@@ -302,7 +304,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
   }
 
   @Override
-  public void merge(IndexWriter writer) throws IOException {
+  public synchronized void merge(IndexWriter writer) throws IOException {
 
     assert !Thread.holdsLock(writer);
 
@@ -328,31 +330,34 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
     // pending merges, until it's empty:
     while (true) {
 
-      synchronized(this) {
-        long startStallTime = 0;
-        while (mergeThreadCount() >= 1+maxMergeCount) {
-          startStallTime = System.currentTimeMillis();
-          if (verbose()) {
-            message("    too many merges; stalling...");
-          }
-          try {
-            wait();
-          } catch (InterruptedException ie) {
-            throw new ThreadInterruptedException(ie);
-          }
-        }
-
+      long startStallTime = 0;
+      while (writer.hasPendingMerges() && mergeThreadCount() >= maxMergeCount) {
+        // This means merging has fallen too far behind: we
+        // have already created maxMergeCount threads, and
+        // now there's at least one more merge pending.
+        // Note that only maxThreadCount of
+        // those created merge threads will actually be
+        // running; the rest will be paused (see
+        // updateMergeThreads).  We stall this producer
+        // thread to prevent creation of new segments,
+        // until merging has caught up:
+        startStallTime = System.currentTimeMillis();
         if (verbose()) {
-          if (startStallTime != 0) {
-            message("  stalled for " + (System.currentTimeMillis()-startStallTime) + " msec");
-          }
+          message("    too many merges; stalling...");
+        }
+        try {
+          wait();
+        } catch (InterruptedException ie) {
+          throw new ThreadInterruptedException(ie);
         }
       }
 
+      if (verbose()) {
+        if (startStallTime != 0) {
+          message("  stalled for " + (System.currentTimeMillis()-startStallTime) + " msec");
+        }
+      }
 
-      // TODO: we could be careful about which merges to do in
-      // the BG (eg maybe the "biggest" ones) vs FG, which
-      // merges to do first (the easiest ones?), etc.
       MergePolicy.OneMerge merge = writer.getNextMerge();
       if (merge == null) {
         if (verbose()) {
@@ -361,34 +366,28 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
         return;
       }
 
-      // We do this w/ the primary thread to keep
-      // deterministic assignment of segment names
-      writer.mergeInit(merge);
-
       boolean success = false;
       try {
-        synchronized(this) {
-          if (verbose()) {
-            message("  consider merge " + writer.segString(merge.segments));
-          }
-
-          // OK to spawn a new merge thread to handle this
-          // merge:
-          final MergeThread merger = getMergeThread(writer, merge);
-          mergeThreads.add(merger);
-          if (verbose()) {
-            message("    launch new thread [" + merger.getName() + "]");
-          }
-
-          merger.start();
-
-          // Must call this after starting the thread else
-          // the new thread is removed from mergeThreads
-          // (since it's not alive yet):
-          updateMergeThreads();
-
-          success = true;
+        if (verbose()) {
+          message("  consider merge " + writer.segString(merge.segments));
         }
+
+        // OK to spawn a new merge thread to handle this
+        // merge:
+        final MergeThread merger = getMergeThread(writer, merge);
+        mergeThreads.add(merger);
+        if (verbose()) {
+          message("    launch new thread [" + merger.getName() + "]");
+        }
+
+        merger.start();
+
+        // Must call this after starting the thread else
+        // the new thread is removed from mergeThreads
+        // (since it's not alive yet):
+        updateMergeThreads();
+
+        success = true;
       } finally {
         if (!success) {
           writer.mergeFinish(merge);
@@ -481,8 +480,15 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
           // Subsequent times through the loop we do any new
           // merge that writer says is necessary:
           merge = tWriter.getNextMerge();
+
+          // Notify here in case any threads were stalled;
+          // they will notice that the pending merge has
+          // been pulled and possibly resume:
+          synchronized(ConcurrentMergeScheduler.this) {
+            ConcurrentMergeScheduler.this.notifyAll();
+          }
+
           if (merge != null) {
-            tWriter.mergeInit(merge);
             updateMergeThreads();
             if (verbose()) {
               message("  merge thread: do another merge " + tWriter.segString(merge.segments));
@@ -545,5 +551,14 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
   /** Used for testing */
   void clearSuppressExceptions() {
     suppressExceptions = false;
+  }
+  
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder(getClass().getSimpleName() + ": ");
+    sb.append("maxThreadCount=").append(maxThreadCount).append(", ");    
+    sb.append("maxMergeCount=").append(maxMergeCount).append(", ");    
+    sb.append("mergeThreadPriority=").append(mergeThreadPriority);
+    return sb.toString();
   }
 }

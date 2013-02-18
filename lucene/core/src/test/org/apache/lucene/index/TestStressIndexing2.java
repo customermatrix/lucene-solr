@@ -114,7 +114,7 @@ public class TestStressIndexing2 extends LuceneTestCase {
       Directory dir1 = newDirectory();
       Directory dir2 = newDirectory();
       if (VERBOSE) {
-        System.out.println("  nThreads=" + nThreads + " iter=" + iter + " range=" + range + " doPooling=" + doReaderPooling + " maxThreadStates=" + maxThreadStates + " sameFieldOrder=" + sameFieldOrder + " mergeFactor=" + mergeFactor);
+        System.out.println("  nThreads=" + nThreads + " iter=" + iter + " range=" + range + " doPooling=" + doReaderPooling + " maxThreadStates=" + maxThreadStates + " sameFieldOrder=" + sameFieldOrder + " mergeFactor=" + mergeFactor + " maxBufferedDocs=" + maxBufferedDocs);
       }
       Map<String,Document> docs = indexRandom(nThreads, iter, range, dir1, maxThreadStates, doReaderPooling);
       if (VERBOSE) {
@@ -334,9 +334,10 @@ public class TestStressIndexing2 extends LuceneTestCase {
     if (fields == null) {
       // make sure r1 is in fact empty (eg has only all
       // deleted docs):
+      Bits liveDocs = MultiFields.getLiveDocs(r1);
       DocsEnum docs = null;
       while(termsEnum.next() != null) {
-        docs = _TestUtil.docs(random(), termsEnum, null, docs, 0);
+        docs = _TestUtil.docs(random(), termsEnum, liveDocs, docs, DocsEnum.FLAG_NONE);
         while(docs.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
           fail("r1 is not empty but r2 is");
         }
@@ -356,9 +357,9 @@ public class TestStressIndexing2 extends LuceneTestCase {
         break;
       }
 
-      termDocs1 = _TestUtil.docs(random(), termsEnum, liveDocs1, termDocs1, 0);
+      termDocs1 = _TestUtil.docs(random(), termsEnum, liveDocs1, termDocs1, DocsEnum.FLAG_NONE);
       if (termsEnum2.seekExact(term, false)) {
-        termDocs2 = _TestUtil.docs(random(), termsEnum2, liveDocs2, termDocs2, 0);
+        termDocs2 = _TestUtil.docs(random(), termsEnum2, liveDocs2, termDocs2, DocsEnum.FLAG_NONE);
       } else {
         termDocs2 = null;
       }

@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -44,6 +45,7 @@ public class JSONResponseWriter implements QueryResponseWriter {
 
   private String contentType = CONTENT_TYPE_JSON_UTF8;
 
+  @Override
   public void init(NamedList namedList) {
     String contentType = (String) namedList.get("content-type");
     if (contentType != null) {
@@ -51,6 +53,7 @@ public class JSONResponseWriter implements QueryResponseWriter {
     }
   }
 
+  @Override
   public void write(Writer writer, SolrQueryRequest req, SolrQueryResponse rsp) throws IOException {
     JSONWriter w = new JSONWriter(writer, req, rsp);
     try {
@@ -60,6 +63,7 @@ public class JSONResponseWriter implements QueryResponseWriter {
     }
   }
 
+  @Override
   public String getContentType(SolrQueryRequest request, SolrQueryResponse response) {
     return contentType;
   }
@@ -342,18 +346,13 @@ class JSONWriter extends TextResponseWriter {
       writeKey(fname, true);
       Object val = doc.getFieldValue(fname);
 
-      if (val instanceof Collection) {
-        writeVal(fname, val);
+      // SolrDocument will now have multiValued fields represented as a Collection,
+      // even if only a single value is returned for this document.
+      if (val instanceof List) {
+        // shortcut this common case instead of going through writeVal again
+        writeArray(name,((Iterable)val).iterator());
       } else {
-        // if multivalued field, write single value as an array
-        SchemaField sf = schema.getFieldOrNull(fname);
-        if (sf != null && sf.multiValued()) {
-          writeArrayOpener(-1); // no trivial way to determine array size
-          writeVal(fname, val);
-          writeArrayCloser();
-        } else {
-          writeVal(fname, val);
-        }
+        writeVal(fname, val);
       }
     }
     

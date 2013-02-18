@@ -62,6 +62,10 @@ public class Builder<T> {
   private final int shareMaxTailLength;
 
   private final IntsRef lastInput = new IntsRef();
+  
+  // for packing
+  private final boolean doPackFST;
+  private final float acceptableOverheadRatio;
 
   // NOTE: cutting this over to ArrayList instead loses ~6%
   // in build performance on 9.8M Wikipedia terms; so we
@@ -80,11 +84,11 @@ public class Builder<T> {
   /**
    * Instantiates an FST/FSA builder without any pruning. A shortcut
    * to {@link #Builder(FST.INPUT_TYPE, int, int, boolean,
-   * boolean, int, Outputs, FreezeTail, boolean)} with
+   * boolean, int, Outputs, FreezeTail, boolean, boolean)} with
    * pruning options turned off.
    */
   public Builder(FST.INPUT_TYPE inputType, Outputs<T> outputs) {
-    this(inputType, 0, 0, true, true, Integer.MAX_VALUE, outputs, null, false, PackedInts.COMPACT);
+    this(inputType, 0, 0, true, true, Integer.MAX_VALUE, outputs, null, false, PackedInts.COMPACT, true);
   }
 
   /**
@@ -93,9 +97,9 @@ public class Builder<T> {
    */
   public Builder(FST.INPUT_TYPE inputType, int minSuffixCount1, int minSuffixCount2, boolean doShareSuffix,
       boolean doShareNonSingletonNodes, int shareMaxTailLength, Outputs<T> outputs,
-      FreezeTail<T> freezeTail, boolean willPackFST) {
+      FreezeTail<T> freezeTail, boolean willPackFST, boolean allowArrayArcs) {
     this(inputType, minSuffixCount1, minSuffixCount2, doShareSuffix, doShareNonSingletonNodes,
-        shareMaxTailLength, outputs, freezeTail, willPackFST, PackedInts.DEFAULT);
+         shareMaxTailLength, outputs, freezeTail, willPackFST, PackedInts.DEFAULT, allowArrayArcs);
   }
 
   /**
@@ -135,23 +139,26 @@ public class Builder<T> {
    *    FSA, use {@link NoOutputs#getSingleton()} and {@link NoOutputs#getNoOutput()} as the
    *    singleton output object.
    *
-   * @param willPackFST Pass true if you will pack the FST before saving.  This
-   *    causes the FST to create additional data structures internally to facilitate packing, but
-   *    it means the resulting FST cannot be saved: it must
-   *    first be packed using {@link FST#pack(int, int, float)}
-   *
+   * @param doPackFST Pass true to create a packed FST.
+   * 
    * @param acceptableOverheadRatio How to trade speed for space when building the FST. This option
-   *    is only relevant when willPackFST is true. @see PackedInts#getMutable(int, int, float)
+   *    is only relevant when doPackFST is true. @see PackedInts#getMutable(int, int, float)
+   *
+   * @param allowArrayArcs Pass false to disable the array arc optimization
+   *    while building the FST; this will make the resulting
+   *    FST smaller but slower to traverse.
    */
   public Builder(FST.INPUT_TYPE inputType, int minSuffixCount1, int minSuffixCount2, boolean doShareSuffix,
                  boolean doShareNonSingletonNodes, int shareMaxTailLength, Outputs<T> outputs,
-                 FreezeTail<T> freezeTail, boolean willPackFST, float acceptableOverheadRatio) {
+                 FreezeTail<T> freezeTail, boolean doPackFST, float acceptableOverheadRatio, boolean allowArrayArcs) {
     this.minSuffixCount1 = minSuffixCount1;
     this.minSuffixCount2 = minSuffixCount2;
     this.freezeTail = freezeTail;
     this.doShareNonSingletonNodes = doShareNonSingletonNodes;
     this.shareMaxTailLength = shareMaxTailLength;
-    fst = new FST<T>(inputType, outputs, willPackFST, acceptableOverheadRatio);
+    this.doPackFST = doPackFST;
+    this.acceptableOverheadRatio = acceptableOverheadRatio;
+    fst = new FST<T>(inputType, outputs, doPackFST, acceptableOverheadRatio, allowArrayArcs);
     if (doShareSuffix) {
       dedupHash = new NodeHash<T>(fst);
     } else {
@@ -177,13 +184,6 @@ public class Builder<T> {
 
   public int getMappedStateCount() {
     return dedupHash == null ? 0 : fst.nodeCount;
-  }
-
-  /** Pass false to disable the array arc optimization
-   *  while building the FST; this will make the resulting
-   *  FST smaller but slower to traverse. */
-  public void setAllowArrayArcs(boolean b) {
-    fst.setAllowArrayArcs(b);
   }
 
   private CompiledNode compileNode(UnCompiledNode<T> nodeIn, int tailLength) throws IOException {
@@ -474,7 +474,11 @@ public class Builder<T> {
     //if (DEBUG) System.out.println("  builder.finish root.isFinal=" + root.isFinal + " root.output=" + root.output);
     fst.finish(compileNode(root, lastInput.length).node);
 
-    return fst;
+    if (doPackFST) {
+      return fst.pack(3, Math.max(10, fst.getNodeCount()/4), acceptableOverheadRatio);
+    } else {
+      return fst;
+    }
   }
 
   private void compileAllTargets(UnCompiledNode<T> node, int tailLength) throws IOException {
@@ -511,6 +515,7 @@ public class Builder<T> {
 
   static final class CompiledNode implements Node {
     int node;
+    @Override
     public boolean isCompiled() {
       return true;
     }
@@ -547,6 +552,7 @@ public class Builder<T> {
       this.depth = depth;
     }
 
+    @Override
     public boolean isCompiled() {
       return false;
     }

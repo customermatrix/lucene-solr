@@ -21,40 +21,65 @@ import java.util.Random;
 
 import org.apache.lucene.codecs.FilterCodec;
 import org.apache.lucene.codecs.StoredFieldsFormat;
+import org.apache.lucene.codecs.compressing.dummy.DummyCompressingCodec;
 import org.apache.lucene.codecs.lucene41.Lucene41Codec;
 
 import com.carrotsearch.randomizedtesting.generators.RandomInts;
-import com.carrotsearch.randomizedtesting.generators.RandomPicks;
 
 /**
  * A codec that uses {@link CompressingStoredFieldsFormat} for its stored
  * fields and delegates to {@link Lucene41Codec} for everything else.
  */
-public class CompressingCodec extends FilterCodec {
+public abstract class CompressingCodec extends FilterCodec {
 
   /**
    * Create a random instance.
    */
+  public static CompressingCodec randomInstance(Random random, int chunkSize, boolean withSegmentSuffix) {
+    switch (random.nextInt(4)) {
+    case 0:
+      return new FastCompressingCodec(chunkSize, withSegmentSuffix);
+    case 1:
+      return new FastDecompressionCompressingCodec(chunkSize, withSegmentSuffix);
+    case 2:
+      return new HighCompressionCompressingCodec(chunkSize, withSegmentSuffix);
+    case 3:
+      return new DummyCompressingCodec(chunkSize, withSegmentSuffix);
+    default:
+      throw new AssertionError();
+    }
+  }
+
+  /**
+   * Creates a random {@link CompressingCodec} that is using an empty segment 
+   * suffix
+   */
   public static CompressingCodec randomInstance(Random random) {
-    final CompressionMode mode = RandomPicks.randomFrom(random, CompressionMode.values());
-    final int chunkSize = RandomInts.randomIntBetween(random, 1, 500);
-    final CompressingStoredFieldsIndex index = RandomPicks.randomFrom(random, CompressingStoredFieldsIndex.values());
-    return new CompressingCodec(mode, chunkSize, index);
+    return randomInstance(random, RandomInts.randomIntBetween(random, 1, 500), false);
+  }
+  
+  /**
+   * Creates a random {@link CompressingCodec} that is using a segment suffix
+   */
+  public static CompressingCodec randomInstance(Random random, boolean withSegmentSuffix) {
+    return randomInstance(random, RandomInts.randomIntBetween(random, 1, 500), withSegmentSuffix);
   }
 
   private final CompressingStoredFieldsFormat storedFieldsFormat;
 
   /**
-   * @see CompressingStoredFieldsFormat#CompressingStoredFieldsFormat(CompressionMode, int, CompressingStoredFieldsIndex)
+   * Creates a compressing codec with a given segment suffix
    */
-  public CompressingCodec(CompressionMode compressionMode, int chunkSize,
-      CompressingStoredFieldsIndex storedFieldsIndexFormat) {
-    super("Compressing", new Lucene41Codec());
-    this.storedFieldsFormat = new CompressingStoredFieldsFormat(compressionMode, chunkSize, storedFieldsIndexFormat);
+  public CompressingCodec(String name, String segmentSuffix, CompressionMode compressionMode, int chunkSize) {
+    super(name, new Lucene41Codec());
+    this.storedFieldsFormat = new CompressingStoredFieldsFormat(name, segmentSuffix, compressionMode, chunkSize);
   }
-
-  public CompressingCodec() {
-    this(CompressionMode.FAST, 1 << 14, CompressingStoredFieldsIndex.MEMORY_CHUNK);
+  
+  /**
+   * Creates a compressing codec with an empty segment suffix
+   */
+  public CompressingCodec(String name, CompressionMode compressionMode, int chunkSize) {
+    this(name, "", compressionMode, chunkSize);
   }
 
   @Override

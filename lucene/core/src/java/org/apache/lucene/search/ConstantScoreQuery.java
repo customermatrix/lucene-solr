@@ -24,6 +24,8 @@ import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.ToStringUtils;
 
 import java.io.IOException;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Set;
 
 /**
@@ -195,7 +197,7 @@ public class ConstantScoreQuery extends Query {
     }
 
     @Override
-    public float freq() throws IOException {
+    public int freq() throws IOException {
       return 1;
     }
 
@@ -247,6 +249,14 @@ public class ConstantScoreQuery extends Query {
       } else {
         return super.score(collector, max, firstDocID);
       }
+    }
+
+    @Override
+    public Collection<ChildScorer> getChildren() {
+      if (docIdSetIterator instanceof Scorer)
+        return Collections.singletonList(new ChildScorer((Scorer) docIdSetIterator, "constant"));
+      else
+        return Collections.emptyList();
     }
   }
 

@@ -31,27 +31,33 @@ import org.apache.lucene.util.FieldCacheSanityChecker;
 import org.apache.lucene.util.FieldCacheSanityChecker.Insanity;
 
 /**
- * A SolrInfoMBean that provides introspection of the Lucene FiledCache, this is <b>NOT</b> a cache that is manged by Solr.
- *
+ * A SolrInfoMBean that provides introspection of the Lucene FieldCache, this is <b>NOT</b> a cache that is managed by Solr.
  *
  */
 public class SolrFieldCacheMBean implements SolrInfoMBean {
 
   protected FieldCacheSanityChecker checker = new FieldCacheSanityChecker();
 
+  @Override
   public String getName() { return this.getClass().getName(); }
+  @Override
   public String getVersion() { return SolrCore.version; }
+  @Override
   public String getDescription() {
     return "Provides introspection of the Lucene FieldCache, "
       +    "this is **NOT** a cache that is managed by Solr.";
   }
+  @Override
   public Category getCategory() { return Category.CACHE; } 
+  @Override
   public String getSource() { 
     return "$URL$";
   }
+  @Override
   public URL[] getDocs() {
     return null;
   }
+  @Override
   public NamedList getStatistics() {
     NamedList stats = new SimpleOrderedMap();
     CacheEntry[] entries = FieldCache.DEFAULT.getCacheEntries();

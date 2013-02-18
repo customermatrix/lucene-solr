@@ -81,6 +81,7 @@ public class AbstractDIHCacheTestCase {
       this.data = data;
     }
 
+    @Override
     @SuppressWarnings("unchecked")
     public int compareTo(ControlData cd) {
       Comparable c1 = (Comparable) data[0];
@@ -88,6 +89,7 @@ public class AbstractDIHCacheTestCase {
       return c1.compareTo(c2);
     }
 
+    @Override
     public Iterator<Object> iterator() {
       return Arrays.asList(data).iterator();
     }
@@ -226,7 +228,7 @@ public class AbstractDIHCacheTestCase {
   }
 
   public static Context getContext(final Map<String, String> entityAttrs) {
-    VariableResolverImpl resolver = new VariableResolverImpl();
+    VariableResolver resolver = new VariableResolver();
     final Context delegate = new ContextImpl(null, resolver, null, null, new HashMap<String, Object>(), null, null);
     return new TestContext(entityAttrs, delegate, null, true);
   }

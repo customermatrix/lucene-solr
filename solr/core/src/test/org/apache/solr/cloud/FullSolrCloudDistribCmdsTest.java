@@ -131,7 +131,8 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
   }
 
   private void testThatCantForwardToLeaderFails() throws Exception {
-    ZkNodeProps props = zkStateReader.getLeaderProps(DEFAULT_COLLECTION, "shard1");
+    ZkStateReader zkStateReader = cloudClient.getZkStateReader();
+    ZkNodeProps props = zkStateReader.getLeaderRetry(DEFAULT_COLLECTION, "shard1");
     
     chaosMonkey.stopShard("shard1");
 
@@ -237,7 +238,8 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
   private void testIndexingWithSuss() throws Exception {
     ConcurrentUpdateSolrServer suss = new ConcurrentUpdateSolrServer(
         ((HttpSolrServer) clients.get(0)).getBaseURL(), 3, 1);
-    
+    suss.setConnectionTimeout(15000);
+    suss.setSoTimeout(30000);
     for (int i=100; i<150; i++) {
       index_specific(suss, id, i);      
     }
@@ -250,7 +252,6 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
   
   private void testOptimisticUpdate(QueryResponse results) throws Exception {
     SolrDocument doc = results.getResults().get(0);
-    System.out.println("version:" + doc.getFieldValue(VersionInfo.VERSION_FIELD));
     Long version = (Long) doc.getFieldValue(VersionInfo.VERSION_FIELD);
     Integer theDoc = (Integer) doc.getFieldValue("id");
     UpdateRequest uReq = new UpdateRequest();

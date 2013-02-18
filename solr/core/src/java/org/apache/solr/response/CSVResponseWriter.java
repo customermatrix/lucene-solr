@@ -45,9 +45,11 @@ import java.util.*;
 
 public class CSVResponseWriter implements QueryResponseWriter {
 
+  @Override
   public void init(NamedList n) {
   }
 
+  @Override
   public void write(Writer writer, SolrQueryRequest req, SolrQueryResponse rsp) throws IOException {
     CSVWriter w = new CSVWriter(writer, req, rsp);
     try {
@@ -57,6 +59,7 @@ public class CSVResponseWriter implements QueryResponseWriter {
     }
   }
 
+  @Override
   public String getContentType(SolrQueryRequest request, SolrQueryResponse response) {
     // using the text/plain allows this to be viewed in the browser easily
     return CONTENT_TYPE_TEXT_UTF8;
@@ -202,7 +205,6 @@ class CSVWriter extends TextResponseWriter {
       // be escaped.
       strat.setUnicodeEscapeInterpretation(true);
     }
-
     printer = new CSVPrinter(writer, strategy);
     
 
@@ -261,7 +263,6 @@ class CSVWriter extends TextResponseWriter {
        if (!returnFields.wantsField(field)) {
          continue;
        }
-
       if (field.equals("score")) {
         CSVField csvField = new CSVField();
         csvField.name = "score";
@@ -284,6 +285,11 @@ class CSVWriter extends TextResponseWriter {
       sep = params.get("f." + field + '.' + CSV_SEPARATOR);
       encapsulator = params.get("f." + field + '.' + CSV_ENCAPSULATOR);
       escape = params.get("f." + field + '.' + CSV_ESCAPE);
+     
+      // if polyfield and no escape is provided, add "\\" escape by default
+      if (sf.isPolyField()) {
+        escape = (escape==null)?"\\":escape;
+      }
 
       CSVSharedBufPrinter csvPrinter = csvPrinterMV;
       if (sep != null || encapsulator != null || escape != null) {
@@ -309,7 +315,6 @@ class CSVWriter extends TextResponseWriter {
         }        
         csvPrinter = new CSVSharedBufPrinter(mvWriter, strat);
       }
-
 
       CSVField csvField = new CSVField();
       csvField.name = field;
@@ -350,12 +355,14 @@ class CSVWriter extends TextResponseWriter {
   public void writeNamedList(String name, NamedList val) throws IOException {
   }
 
+  @Override
   public void writeStartDocumentList(String name, 
       long start, int size, long numFound, Float maxScore) throws IOException
   {
     // nothing
   }
 
+  @Override
   public void writeEndDocumentList() throws IOException
   {
     // nothing
@@ -407,7 +414,19 @@ class CSVWriter extends TextResponseWriter {
           Collection values = (Collection)val;
           val = values.iterator().next();
         }
-        writeVal(csvField.name, val);
+        // if field is polyfield, use the multi-valued printer to apply appropriate escaping
+        if (csvField.sf != null && csvField.sf.isPolyField()) {
+          mvWriter.reset();
+          csvField.mvPrinter.reset();
+          CSVPrinter tmp = printer;
+          printer = csvField.mvPrinter;
+          writeVal(csvField.name, val);
+          printer = tmp;
+          mvWriter.freeze();
+          printer.print(mvWriter.getFrozenBuf(), 0, mvWriter.getFrozenSize(), true);
+        } else {
+          writeVal(csvField.name, val);
+        }
       }
     }
 

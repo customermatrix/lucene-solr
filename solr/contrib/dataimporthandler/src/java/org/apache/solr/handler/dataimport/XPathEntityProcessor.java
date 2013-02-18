@@ -91,14 +91,14 @@ public class XPathEntityProcessor extends EntityProcessorBase {
   public void init(Context context) {
     super.init(context);
     if (xpathReader == null)
-      initXpathReader();
+      initXpathReader(context.getVariableResolver());
     pk = context.getEntityAttribute("pk");
     dataSource = context.getDataSource();
     rowIterator = null;
 
   }
 
-  private void initXpathReader() {
+  private void initXpathReader(VariableResolver resolver) {
     useSolrAddXml = Boolean.parseBoolean(context
             .getEntityAttribute(USE_SOLR_ADD_SCHEMA));
     streamRows = Boolean.parseBoolean(context
@@ -175,7 +175,7 @@ public class XPathEntityProcessor extends EntityProcessorBase {
       }
     }
     String url = context.getEntityAttribute(URL);
-    List<String> l = url == null ? Collections.EMPTY_LIST : TemplateString.getVariables(url);
+    List<String> l = url == null ? Collections.EMPTY_LIST : resolver.getVariables(url);
     for (String s : l) {
       if (s.startsWith(entityName + ".")) {
         if (placeHolderVariables == null)
@@ -259,7 +259,7 @@ public class XPathEntityProcessor extends EntityProcessorBase {
       Object val = context.getSessionAttribute(name, Context.SCOPE_ENTITY);
       if (val != null) namespace.put(name, val);
     }
-    ((VariableResolverImpl)context.getVariableResolver()).addNamespace(entityName, namespace);
+    ((VariableResolver)context.getVariableResolver()).addNamespace(entityName, namespace);
   }
 
   private void addCommonFields(Map<String, Object> r) {
@@ -316,6 +316,7 @@ public class XPathEntityProcessor extends EntityProcessorBase {
       } else {
         try {
           xpathReader.streamRecords(data, new XPathRecordReader.Handler() {
+            @Override
             @SuppressWarnings("unchecked")
             public void handle(Map<String, Object> record, String xpath) {
               rows.add(readRow(record, xpath));
@@ -425,6 +426,7 @@ public class XPathEntityProcessor extends EntityProcessorBase {
       public void run() {
         try {
           xpathReader.streamRecords(data, new XPathRecordReader.Handler() {
+            @Override
             @SuppressWarnings("unchecked")
             public void handle(Map<String, Object> record, String xpath) {
               if (isEnd.get()) {
@@ -475,10 +477,12 @@ public class XPathEntityProcessor extends EntityProcessorBase {
       private Map<String, Object> lastRow;
       int count = 0;
 
+      @Override
       public boolean hasNext() {
         return !isEnd.get();
       }
 
+      @Override
       public Map<String, Object> next() {
         Map<String, Object> row;
         
@@ -514,6 +518,7 @@ public class XPathEntityProcessor extends EntityProcessorBase {
         return lastRow = row;
       }
 
+      @Override
       public void remove() {
         /*no op*/
       }

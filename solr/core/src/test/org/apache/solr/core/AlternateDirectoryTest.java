@@ -22,6 +22,7 @@ import java.io.IOException;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.store.Directory;
 import org.apache.solr.SolrTestCaseJ4;
+import org.apache.solr.core.DirectoryFactory.DirContext;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -41,12 +42,12 @@ public class AlternateDirectoryTest extends SolrTestCaseJ4 {
     assertTrue(TestIndexReaderFactory.newReaderCalled);
   }
 
-  static public class TestFSDirectoryFactory extends CachingDirectoryFactory {
+  static public class TestFSDirectoryFactory extends StandardDirectoryFactory {
     public static volatile boolean openCalled = false;
     public static volatile Directory dir;
     
     @Override
-    public Directory create(String path) throws IOException {
+    public Directory create(String path, DirContext dirContext) throws IOException {
       openCalled = true;
 
       return dir = newFSDirectory(new File(path));

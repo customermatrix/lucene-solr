@@ -27,6 +27,8 @@ import java.util.Locale;
 import java.util.Random;
 
 import org.apache.lucene.codecs.CodecUtil;
+import org.apache.lucene.store.ByteArrayDataInput;
+import org.apache.lucene.store.DataInput;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
@@ -38,8 +40,30 @@ import org.apache.lucene.util.LuceneTestCase.Slow;
 import org.apache.lucene.util._TestUtil;
 import org.apache.lucene.util.packed.PackedInts.Reader;
 
+import org.junit.Ignore;
+
+import com.carrotsearch.randomizedtesting.generators.RandomInts;
+
 @Slow
 public class TestPackedInts extends LuceneTestCase {
+
+  public void testByteCount() {
+    final int iters = atLeast(3);
+    for (int i = 0; i < iters; ++i) {
+      final int valueCount = RandomInts.randomIntBetween(random(), 1, Integer.MAX_VALUE);
+      for (PackedInts.Format format : PackedInts.Format.values()) {
+        for (int bpv = 1; bpv <= 64; ++bpv) {
+          final long byteCount = format.byteCount(PackedInts.VERSION_CURRENT, valueCount, bpv);
+          String msg = "format=" + format + ", byteCount=" + byteCount + ", valueCount=" + valueCount + ", bpv=" + bpv;
+          assertTrue(msg, byteCount * 8 >= (long) valueCount * bpv);
+          if (format == PackedInts.Format.PACKED) {
+            assertTrue(msg, (byteCount - 1) * 8 < (long) valueCount * bpv);
+          }
+        }
+      }
+    }
+  }
+
   public void testBitsRequired() {
     assertEquals(61, PackedInts.bitsRequired((long)Math.pow(2, 61)-1));
     assertEquals(61, PackedInts.bitsRequired(0x1FFFFFFFFFFFFFFFL));
@@ -86,21 +110,8 @@ public class TestPackedInts extends LuceneTestCase {
         final long fp = out.getFilePointer();
         out.close();
 
-        // packed writers should only write longs
-        assertEquals(0, (fp - startFp) % 8);
         // ensure that finish() added the (valueCount-actualValueCount) missing values
-        final long bytes;
-        switch (w.getFormat()) {
-          case PACKED:
-            bytes = (long) Math.ceil((double) valueCount * w.bitsPerValue / 64) << 3;
-            break;
-          case PACKED_SINGLE_BLOCK:
-            final int valuesPerBlock = 64 / w.bitsPerValue;
-            bytes = (long) Math.ceil((double) valueCount / valuesPerBlock) << 3;
-            break;
-          default:
-            bytes = -1;
-        }
+        final long bytes = w.getFormat().byteCount(PackedInts.VERSION_CURRENT, valueCount, w.bitsPerValue);
         assertEquals(bytes, fp - startFp);
 
         {// test header
@@ -168,13 +179,58 @@ public class TestPackedInts extends LuceneTestCase {
             long value = intsEnum.get(index);
             assertEquals(msg, value, values[index]);
           }
+          intsEnum.get(intsEnum.size() - 1);
+          assertEquals(fp, in.getFilePointer());
           in.close();
         }
         d.close();
       }
     }
   }
-  
+
+  public void testEndPointer() throws IOException {
+    final Directory dir = newDirectory();
+    final int valueCount = RandomInts.randomIntBetween(random(), 1, 1000);
+    final IndexOutput out = dir.createOutput("tests.bin", newIOContext(random()));
+    for (int i = 0; i < valueCount; ++i) {
+      out.writeLong(0);
+    }
+    out.close();
+    final IndexInput in = dir.openInput("tests.bin", newIOContext(random()));
+    for (int version = PackedInts.VERSION_START; version <= PackedInts.VERSION_CURRENT; ++version) {
+      for (int bpv = 1; bpv <= 64; ++bpv) {
+        for (PackedInts.Format format : PackedInts.Format.values()) {
+          if (!format.isSupported(bpv)) {
+            continue;
+          }
+          final long byteCount = format.byteCount(version, valueCount, bpv); 
+          String msg = "format=" + format + ",version=" + version + ",valueCount=" + valueCount + ",bpv=" + bpv;
+
+          // test iterator
+          in.seek(0L);
+          final PackedInts.ReaderIterator it = PackedInts.getReaderIteratorNoHeader(in, format, version, valueCount, bpv, RandomInts.randomIntBetween(random(), 1, 1<<16));
+          for (int i = 0; i < valueCount; ++i) {
+            it.next();
+          }
+          assertEquals(msg, byteCount, in.getFilePointer());
+
+          // test direct reader
+          in.seek(0L);
+          final PackedInts.Reader directReader = PackedInts.getDirectReaderNoHeader(in, format, version, valueCount, bpv);
+          directReader.get(valueCount - 1);
+          assertEquals(msg, byteCount, in.getFilePointer());
+
+          // test reader
+          in.seek(0L);
+          PackedInts.getReaderNoHeader(in, format, version, valueCount, bpv);
+          assertEquals(msg, byteCount, in.getFilePointer());
+         }
+      }
+    }
+    in.close();
+    dir.close();
+  }
+
   public void testControlledEquality() {
     final int VALUE_COUNT = 255;
     final int BITS_PER_VALUE = 8;
@@ -389,6 +445,7 @@ public class TestPackedInts extends LuceneTestCase {
     
     NOTE: this test allocates 256 MB
    */
+  @Ignore("See LUCENE-4488")
   public void testIntOverflow() {
     int INDEX = (int)Math.pow(2, 30)+1;
     int BITS = 2;
@@ -626,6 +683,7 @@ public class TestPackedInts extends LuceneTestCase {
         in.close();
         directory.deleteFile("packed-ints.bin");
       }
+      directory.close();
     }
   }
 
@@ -729,6 +787,147 @@ public class TestPackedInts extends LuceneTestCase {
       }
     }
     return true;
+  }
+
+  public void testPackedInputOutput() throws IOException {
+    final long[] longs = new long[random().nextInt(8192)];
+    final int[] bitsPerValues = new int[longs.length];
+    final boolean[] skip = new boolean[longs.length];
+    for (int i = 0; i < longs.length; ++i) {
+      final int bpv = RandomInts.randomIntBetween(random(), 1, 64);
+      bitsPerValues[i] = random().nextBoolean() ? bpv : _TestUtil.nextInt(random(), bpv, 64);
+      if (bpv == 64) {
+        longs[i] = random().nextLong();
+      } else {
+        longs[i] = _TestUtil.nextLong(random(), 0, PackedInts.maxValue(bpv));
+      }
+      skip[i] = rarely();
+    }
+
+    final Directory dir = newDirectory();
+    final IndexOutput out = dir.createOutput("out.bin", IOContext.DEFAULT);
+    PackedDataOutput pout = new PackedDataOutput(out);
+    long totalBits = 0;
+    for (int i = 0; i < longs.length; ++i) {
+      pout.writeLong(longs[i], bitsPerValues[i]);
+      totalBits += bitsPerValues[i];
+      if (skip[i]) {
+        pout.flush();
+        totalBits = 8 * (long) Math.ceil((double) totalBits / 8);
+      }
+    }
+    pout.flush();
+    assertEquals((long) Math.ceil((double) totalBits / 8), out.getFilePointer());
+    out.close();
+    final IndexInput in = dir.openInput("out.bin", IOContext.READONCE);
+    final PackedDataInput pin = new PackedDataInput(in);
+    for (int i = 0; i < longs.length; ++i) {
+      assertEquals("" + i, longs[i], pin.readLong(bitsPerValues[i]));
+      if (skip[i]) {
+        pin.skipToNextByte();
+      }
+    }
+    assertEquals((long) Math.ceil((double) totalBits / 8), in.getFilePointer());
+    in.close();
+    dir.close();
+  }
+
+  public void testBlockPackedReaderWriter() throws IOException {
+    final int iters = atLeast(2);
+    for (int iter = 0; iter < iters; ++iter) {
+      final int blockSize = 64 * _TestUtil.nextInt(random(), 1, 1 << 12);
+      final int valueCount = random().nextInt(1 << 18);
+      final long[] values = new long[valueCount];
+      long minValue = 0;
+      int bpv = 0;
+      for (int i = 0; i < valueCount; ++i) {
+        if (i % blockSize == 0) {
+          minValue = rarely() ? random().nextInt(256) : rarely() ? -5 : random().nextLong();
+          bpv = random().nextInt(65);
+        }
+        if (bpv == 0) {
+          values[i] = minValue;
+        } else if (bpv == 64) {
+          values[i] = random().nextLong();
+        } else {
+          values[i] = minValue + _TestUtil.nextLong(random(), 0, (1L << bpv) - 1);
+        }
+      }
+  
+      final Directory dir = newDirectory();
+      final IndexOutput out = dir.createOutput("out.bin", IOContext.DEFAULT);
+      final BlockPackedWriter writer = new BlockPackedWriter(out, blockSize);
+      for (int i = 0; i < valueCount; ++i) {
+        assertEquals(i, writer.ord());
+        writer.add(values[i]);
+      }
+      assertEquals(valueCount, writer.ord());
+      writer.finish();
+      assertEquals(valueCount, writer.ord());
+      final long fp = out.getFilePointer();
+      out.close();
+
+      DataInput in = dir.openInput("out.bin", IOContext.DEFAULT);
+      if (random().nextBoolean()) {
+        byte[] buf = new byte[(int) fp];
+        in.readBytes(buf, 0, (int) fp);
+        ((IndexInput) in).close();
+        in = new ByteArrayDataInput(buf);
+      }
+      final BlockPackedReader reader = new BlockPackedReader(in, PackedInts.VERSION_CURRENT, blockSize, valueCount);
+      for (int i = 0; i < valueCount; ) {
+        if (random().nextBoolean()) {
+          assertEquals("" + i, values[i], reader.next());
+          ++i;
+        } else {
+          final LongsRef nextValues = reader.next(_TestUtil.nextInt(random(), 1, 1024));
+          for (int j = 0; j < nextValues.length; ++j) {
+            assertEquals("" + (i + j), values[i + j], nextValues.longs[nextValues.offset + j]);
+          }
+          i += nextValues.length;
+        }
+        assertEquals(i, reader.ord());
+      }
+      assertEquals(fp, in instanceof ByteArrayDataInput ? ((ByteArrayDataInput) in).getPosition() : ((IndexInput) in).getFilePointer());
+      try {
+        reader.next();
+        assertTrue(false);
+      } catch (IOException e) {
+        // OK
+      }
+
+      if (in instanceof ByteArrayDataInput) {
+        ((ByteArrayDataInput) in).setPosition(0);
+      } else {
+        ((IndexInput) in).seek(0L);
+      }
+      final BlockPackedReader reader2 = new BlockPackedReader(in, PackedInts.VERSION_CURRENT, blockSize, valueCount);
+      int i = 0;
+      while (true) {
+        final int skip = _TestUtil.nextInt(random(), 0, valueCount - i);
+        reader2.skip(skip);
+        i += skip;
+        assertEquals(i, reader2.ord());
+        if (i == valueCount) {
+          break;
+        } else {
+          assertEquals(values[i], reader2.next());
+          ++i;
+        }
+      }
+      assertEquals(fp, in instanceof ByteArrayDataInput ? ((ByteArrayDataInput) in).getPosition() : ((IndexInput) in).getFilePointer());
+      try {
+        reader2.skip(1);
+        assertTrue(false);
+      } catch (IOException e) {
+        // OK
+      }
+
+      if (in instanceof IndexInput) {
+        ((IndexInput) in).close();
+      }
+      dir.close();
+    }
   }
 
 }

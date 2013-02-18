@@ -54,6 +54,7 @@ public class TestTermVectorsReader extends LuceneTestCase {
     int pos;
     int startOffset;
     int endOffset;
+    @Override
     public int compareTo(TestToken other) {
       return pos - other.pos;
     }
@@ -225,7 +226,7 @@ public class TestTermVectorsReader extends LuceneTestCase {
         //System.out.println("Term: " + term);
         assertEquals(testTerms[i], term);
         
-        docsEnum = _TestUtil.docs(random(), termsEnum, null, docsEnum, 0);
+        docsEnum = _TestUtil.docs(random(), termsEnum, null, docsEnum, DocsEnum.FLAG_NONE);
         assertNotNull(docsEnum);
         int doc = docsEnum.docID();
         assertTrue(doc == -1 || doc == DocIdSetIterator.NO_MORE_DOCS);
@@ -326,28 +327,6 @@ public class TestTermVectorsReader extends LuceneTestCase {
       }
       assertEquals(DocIdSetIterator.NO_MORE_DOCS, dpEnum.nextDoc());
     }
-    reader.close();
-  }
-
-  /**
-   * Make sure exceptions and bad params are handled appropriately
-   */
-  public void testBadParams() throws IOException {
-    TermVectorsReader reader = null;
-    try {
-      reader = Codec.getDefault().termVectorsFormat().vectorsReader(dir, seg.info, fieldInfos, newIOContext(random()));
-      //Bad document number, good field number
-      reader.get(50);
-      fail();
-    } catch (IllegalArgumentException e) {
-      // expected exception
-    } finally {
-      reader.close();
-    }
-    reader = Codec.getDefault().termVectorsFormat().vectorsReader(dir, seg.info, fieldInfos, newIOContext(random()));
-    //good document number, bad field
-    Terms vector = reader.get(0).terms("f50");
-    assertNull(vector);
     reader.close();
   }
 }

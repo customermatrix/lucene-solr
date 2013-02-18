@@ -1,10 +1,12 @@
 package org.apache.lucene.facet.search;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.lucene.search.MatchAllDocsQuery;
+import org.apache.lucene.util.IntsRef;
 
 import org.junit.After;
 import org.junit.Before;
@@ -16,9 +18,11 @@ import org.apache.lucene.facet.index.params.FacetIndexingParams;
 import org.apache.lucene.facet.search.cache.CategoryListCache;
 import org.apache.lucene.facet.search.cache.CategoryListData;
 import org.apache.lucene.facet.search.params.CountFacetRequest;
+import org.apache.lucene.facet.search.params.FacetRequest;
 import org.apache.lucene.facet.search.params.FacetSearchParams;
 import org.apache.lucene.facet.search.results.FacetResult;
 import org.apache.lucene.facet.taxonomy.CategoryPath;
+import org.apache.lucene.index.AtomicReaderContext;
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -74,22 +78,29 @@ public class TestCategoryListCache extends FacetTestBase {
   
   private void doTest(boolean withCache, boolean plantWrongData) throws Exception {
     Map<CategoryPath,Integer> truth = facetCountsTruth();
-    CategoryPath cp = (CategoryPath) truth.keySet().toArray()[0]; // any category path will do for this test 
-    CountFacetRequest frq = new CountFacetRequest(cp, 10);
-    FacetSearchParams sParams = getFacetedSearchParams();
-    sParams.addFacetRequest(frq);
+    CategoryPath cp = (CategoryPath) truth.keySet().toArray()[0]; // any category path will do for this test
+    FacetIndexingParams iParams = FacetIndexingParams.ALL_PARENTS;
+    final CategoryListCache clCache;
     if (withCache) {
       //let's use a cached cl data
-      FacetIndexingParams iparams = sParams.getFacetIndexingParams();
       CategoryListParams clp = new CategoryListParams(); // default term ok as only single list
-      CategoryListCache clCache = new CategoryListCache();
-      clCache.loadAndRegister(clp, indexReader, taxoReader, iparams);
+      clCache = new CategoryListCache();
+      clCache.loadAndRegister(clp, indexReader, taxoReader, iParams);
       if (plantWrongData) {
         // let's mess up the cached data and then expect a wrong result...
         messCachedData(clCache, clp);
       }
-      sParams.setClCache(clCache);
+    } else {
+      clCache = null;
     }
+    List<FacetRequest> req = new ArrayList<FacetRequest>();
+    req.add(new CountFacetRequest(cp, 10));
+    final FacetSearchParams sParams = new FacetSearchParams(req, iParams) {
+      @Override
+      public CategoryListCache getCategoryListCache() {
+        return clCache;
+      }
+    };
     FacetsCollector fc = new FacetsCollector(sParams, indexReader, taxoReader);
     searcher.search(new MatchAllDocsQuery(), fc);
     List<FacetResult> res = fc.getFacetResults();
@@ -109,19 +120,21 @@ public class TestCategoryListCache extends FacetTestBase {
       @Override
       public CategoryListIterator iterator(int partition)  throws IOException {
         final CategoryListIterator it = cld.iterator(partition);
-        return new CategoryListIterator() {              
-          public boolean skipTo(int docId) throws IOException {
-            return it.skipTo(docId);
-          }
-          public long nextCategory() throws IOException {
-            long res = it.nextCategory();
-            if (res>Integer.MAX_VALUE) {
-              return res;
+        return new CategoryListIterator() {
+          @Override
+          public void getOrdinals(int docID, IntsRef ints) throws IOException {
+            it.getOrdinals(docID, ints);
+            for (int i = 0; i < ints.length; i++) {
+              if (ints.ints[i] > 1) {
+                ints.ints[i]--;
+              } else {
+                ints.ints[i]++;
+              }
             }
-            return res>1 ? res-1 : res+1;
           }
-          public boolean init() throws IOException {
-            return it.init();
+          @Override
+          public boolean setNextReader(AtomicReaderContext context) throws IOException {
+            return it.setNextReader(context);
           }
         };
       }

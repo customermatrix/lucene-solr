@@ -28,11 +28,13 @@ public class DefaultSimilarity extends TFIDFSimilarity {
   public DefaultSimilarity() {}
   
   /** Implemented as <code>overlap / maxOverlap</code>. */
+  @Override
   public float coord(int overlap, int maxOverlap) {
     return overlap / (float)maxOverlap;
   }
 
   /** Implemented as <code>1/sqrt(sumOfSquaredWeights)</code>. */
+  @Override
   public float queryNorm(float sumOfSquaredWeights) {
     return (float)(1.0 / Math.sqrt(sumOfSquaredWeights));
   }
@@ -46,13 +48,13 @@ public class DefaultSimilarity extends TFIDFSimilarity {
    *
    *  @lucene.experimental */
   @Override
-  public void computeNorm(FieldInvertState state, Norm norm) {
+  public float lengthNorm(FieldInvertState state) {
     final int numTerms;
     if (discountOverlaps)
       numTerms = state.getLength() - state.getNumOverlap();
     else
       numTerms = state.getLength();
-    norm.setByte(encodeNormValue(state.getBoost() * ((float) (1.0 / Math.sqrt(numTerms)))));
+   return state.getBoost() * ((float) (1.0 / Math.sqrt(numTerms)));
   }
 
   /** Implemented as <code>sqrt(freq)</code>. */

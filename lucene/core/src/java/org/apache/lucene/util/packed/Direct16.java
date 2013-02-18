@@ -37,16 +37,15 @@ final class Direct16 extends PackedInts.MutableImpl {
     values = new short[valueCount];
   }
 
-  Direct16(DataInput in, int valueCount) throws IOException {
+  Direct16(int packedIntsVersion, DataInput in, int valueCount) throws IOException {
     this(valueCount);
     for (int i = 0; i < valueCount; ++i) {
       values[i] = in.readShort();
     }
-    final int mod = valueCount % 4;
-    if (mod != 0) {
-      for (int i = mod; i < 4; ++i) {
-        in.readShort();
-      }
+    // because packed ints have not always been byte-aligned
+    final int remaining = (int) (PackedInts.Format.PACKED.byteCount(packedIntsVersion, valueCount, 16) - 2L * valueCount);
+    for (int i = 0; i < remaining; ++i) {
+      in.readByte();
     }
   }
 
@@ -55,14 +54,17 @@ final class Direct16 extends PackedInts.MutableImpl {
     return values[index] & 0xFFFFL;
   }
 
+  @Override
   public void set(final int index, final long value) {
     values[index] = (short) (value);
   }
 
+  @Override
   public long ramBytesUsed() {
     return RamUsageEstimator.sizeOf(values);
   }
 
+  @Override
   public void clear() {
     Arrays.fill(values, (short) 0L);
   }
@@ -90,6 +92,7 @@ final class Direct16 extends PackedInts.MutableImpl {
     return gets;
   }
 
+  @Override
   public int set(int index, long[] arr, int off, int len) {
     assert len > 0 : "len must be > 0 (got " + len + ")";
     assert index >= 0 && index < valueCount;

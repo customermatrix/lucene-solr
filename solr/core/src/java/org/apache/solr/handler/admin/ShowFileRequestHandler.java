@@ -48,11 +48,11 @@ import java.util.Set;
 /**
  * This handler uses the RawResponseWriter to give client access to
  * files inside ${solr.home}/conf
- * 
+ * <p>
  * If you want to selectively restrict access some configuration files, you can list
  * these files in the {@link #HIDDEN} invariants.  For example to hide 
  * synonyms.txt and anotherfile.txt, you would register:
- * 
+ * <p>
  * <pre>
  * &lt;requestHandler name="/admin/file" class="org.apache.solr.handler.admin.ShowFileRequestHandler" &gt;
  *   &lt;lst name="defaults"&gt;
@@ -64,11 +64,11 @@ import java.util.Set;
  *   &lt;/lst&gt;
  * &lt;/requestHandler&gt;
  * </pre>
- * 
+ * <p>
  * The ShowFileRequestHandler uses the {@link RawResponseWriter} (wt=raw) to return
  * file contents.  If you need to use a different writer, you will need to change 
  * the registered invariant param for wt.
- * 
+ * <p>
  * If you want to override the contentType header returned for a given file, you can
  * set it directly using: {@link #USE_CONTENT_TYPE}.  For example, to get a plain text
  * version of schema.xml, try:
@@ -139,10 +139,12 @@ public class ShowFileRequestHandler extends RequestHandlerBase
     } else {
       fname = fname.replace('\\', '/'); // normalize slashes
       if (hiddenFiles.contains(fname.toUpperCase(Locale.ROOT))) {
-        throw new SolrException(ErrorCode.FORBIDDEN, "Can not access: " + fname);
+        rsp.setException(new SolrException(ErrorCode.FORBIDDEN, "Can not access: " + fname));
+        return;
       }
       if (fname.indexOf("..") >= 0) {
-        throw new SolrException(ErrorCode.FORBIDDEN, "Invalid path: " + fname);
+        rsp.setException(new SolrException(ErrorCode.FORBIDDEN, "Invalid path: " + fname));
+        return;
       }
       if (fname.startsWith("/")) { // Only files relative to conf are valid
         fname = fname.substring(1);
@@ -152,8 +154,9 @@ public class ShowFileRequestHandler extends RequestHandlerBase
     
     // Make sure the file exists, is readable and is not a hidden file
     if (!zkClient.exists(adminFile, true)) {
-      throw new SolrException(ErrorCode.BAD_REQUEST, "Can not find: "
-          + adminFile);
+      rsp.setException(new SolrException(ErrorCode.NOT_FOUND, "Can not find: "
+                                         + adminFile));
+      return;
     }
     
     // Show a directory listing
@@ -208,7 +211,8 @@ public class ShowFileRequestHandler extends RequestHandlerBase
       try {
         configdir = new File( loader.getClassLoader().getResource(loader.getConfigDir()).toURI() );
       } catch (URISyntaxException e) {
-        throw new SolrException( ErrorCode.FORBIDDEN, "Can not access configuration directory!");
+        rsp.setException(new SolrException( ErrorCode.FORBIDDEN, "Can not access configuration directory!", e));
+        return;
       }
     }
     String fname = req.getParams().get("file", null);
@@ -218,22 +222,28 @@ public class ShowFileRequestHandler extends RequestHandlerBase
     else {
       fname = fname.replace( '\\', '/' ); // normalize slashes
       if( hiddenFiles.contains( fname.toUpperCase(Locale.ROOT) ) ) {
-        throw new SolrException( ErrorCode.FORBIDDEN, "Can not access: "+fname );
+        rsp.setException(new SolrException( ErrorCode.FORBIDDEN, "Can not access: "+fname ));
+        return;
       }
       if( fname.indexOf( ".." ) >= 0 ) {
-        throw new SolrException( ErrorCode.FORBIDDEN, "Invalid path: "+fname );  
+        rsp.setException(new SolrException( ErrorCode.FORBIDDEN, "Invalid path: "+fname ));
+        return;
       }
       adminFile = new File( configdir, fname );
     }
     
     // Make sure the file exists, is readable and is not a hidden file
     if( !adminFile.exists() ) {
-      throw new SolrException( ErrorCode.BAD_REQUEST, "Can not find: "+adminFile.getName() 
-          + " ["+adminFile.getAbsolutePath()+"]" );
+      rsp.setException(new SolrException
+                       ( ErrorCode.NOT_FOUND, "Can not find: "+adminFile.getName() 
+                         + " ["+adminFile.getAbsolutePath()+"]" ));
+      return;
     }
     if( !adminFile.canRead() || adminFile.isHidden() ) {
-      throw new SolrException( ErrorCode.BAD_REQUEST, "Can not show: "+adminFile.getName() 
-          + " ["+adminFile.getAbsolutePath()+"]" );
+      rsp.setException(new SolrException
+                       ( ErrorCode.NOT_FOUND, "Can not show: "+adminFile.getName() 
+                         + " ["+adminFile.getAbsolutePath()+"]" ));
+      return;
     }
     
     // Show a directory listing

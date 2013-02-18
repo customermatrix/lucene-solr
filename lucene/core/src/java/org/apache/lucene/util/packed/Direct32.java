@@ -37,16 +37,15 @@ final class Direct32 extends PackedInts.MutableImpl {
     values = new int[valueCount];
   }
 
-  Direct32(DataInput in, int valueCount) throws IOException {
+  Direct32(int packedIntsVersion, DataInput in, int valueCount) throws IOException {
     this(valueCount);
     for (int i = 0; i < valueCount; ++i) {
       values[i] = in.readInt();
     }
-    final int mod = valueCount % 2;
-    if (mod != 0) {
-      for (int i = mod; i < 2; ++i) {
-        in.readInt();
-      }
+    // because packed ints have not always been byte-aligned
+    final int remaining = (int) (PackedInts.Format.PACKED.byteCount(packedIntsVersion, valueCount, 32) - 4L * valueCount);
+    for (int i = 0; i < remaining; ++i) {
+      in.readByte();
     }
   }
 
@@ -55,14 +54,17 @@ final class Direct32 extends PackedInts.MutableImpl {
     return values[index] & 0xFFFFFFFFL;
   }
 
+  @Override
   public void set(final int index, final long value) {
     values[index] = (int) (value);
   }
 
+  @Override
   public long ramBytesUsed() {
     return RamUsageEstimator.sizeOf(values);
   }
 
+  @Override
   public void clear() {
     Arrays.fill(values, (int) 0L);
   }
@@ -90,6 +92,7 @@ final class Direct32 extends PackedInts.MutableImpl {
     return gets;
   }
 
+  @Override
   public int set(int index, long[] arr, int off, int len) {
     assert len > 0 : "len must be > 0 (got " + len + ")";
     assert index >= 0 && index < valueCount;

@@ -79,10 +79,10 @@ public class LeaderElectionIntegrationTest extends SolrTestCaseJ4 {
     ignoreException("No UpdateLog found - cannot sync");
     ignoreException("No UpdateLog found - cannot recover");
     
-    System.setProperty("zkClientTimeout", "3000");
+    System.setProperty("zkClientTimeout", "8000");
     
     zkDir = dataDir.getAbsolutePath() + File.separator
-        + "zookeeper/server1/data";
+        + "zookeeper" + System.currentTimeMillis() + "/server1/data";
     zkServer = new ZkTestServer(zkDir);
     zkServer.run();
     System.setProperty("zkHost", zkServer.getZkAddress());
@@ -256,7 +256,7 @@ public class LeaderElectionIntegrationTest extends SolrTestCaseJ4 {
   
   private String getLeader() throws InterruptedException {
     
-    ZkNodeProps props = reader.getLeaderProps("collection1", "shard1", 30000);
+    ZkNodeProps props = reader.getLeaderRetry("collection1", "shard1", 30000);
     String leader = props.getStr(ZkStateReader.NODE_NAME_PROP);
     
     return leader;

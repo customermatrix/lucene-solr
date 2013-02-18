@@ -18,7 +18,6 @@
 package org.apache.solr.handler;
 
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Date;
 import java.util.Locale;
@@ -119,7 +118,7 @@ import org.slf4j.LoggerFactory;
  *   </li>
  *   <li><code>http://.../ping?action=status</code>
  *       - returns a status code indicating if the healthcheck file exists 
- *       ("<code>enabled</code>") or not ("<code>disabled<code>")
+ *       ("<code>enabled</code>") or not ("<code>disabled</code>")
  *   </li>
  * </ul>
  *
@@ -135,12 +134,14 @@ public class PingRequestHandler extends RequestHandlerBase implements SolrCoreAw
   private String healthFileName = null;
   private File healthcheck = null;
 
+  @Override
   public void init(NamedList args) {
     super.init(args);
     Object tmp = args.get(HEALTHCHECK_FILE_PARAM);
     healthFileName = (null == tmp ? null : tmp.toString());
   }
 
+  @Override
   public void inform( SolrCore core ) {
     if (null != healthFileName) {
       healthcheck = new File(healthFileName);
@@ -201,8 +202,10 @@ public class PingRequestHandler extends RequestHandlerBase implements SolrCoreAw
     switch(action){
       case PING:
         if( isPingDisabled() ) {
-          throw new SolrException(SolrException.ErrorCode.SERVICE_UNAVAILABLE, 
+          SolrException e = new SolrException(SolrException.ErrorCode.SERVICE_UNAVAILABLE, 
                                   "Service disabled");
+          rsp.setException(e);
+          return;
         }
         handlePing(req, rsp);
         break;

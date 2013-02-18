@@ -19,13 +19,17 @@ package org.apache.solr.client.solrj.embedded;
 
 import java.io.IOException;
 import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.LinkedList;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.servlet.DispatcherType;
 import javax.servlet.Filter;
+import javax.servlet.FilterChain;
+import javax.servlet.FilterConfig;
+import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -35,6 +39,7 @@ import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.bio.SocketConnector;
 import org.eclipse.jetty.server.handler.GzipHandler;
+import org.eclipse.jetty.server.nio.SelectChannelConnector;
 import org.eclipse.jetty.server.session.HashSessionIdManager;
 import org.eclipse.jetty.servlet.FilterHolder;
 import org.eclipse.jetty.servlet.ServletContextHandler;
@@ -52,6 +57,7 @@ public class JettySolrRunner {
   Server server;
 
   FilterHolder dispatchFilter;
+  FilterHolder debugFilter;
 
   String context;
 
@@ -71,6 +77,53 @@ public class JettySolrRunner {
   private String solrHome;
 
   private boolean stopAtShutdown;
+
+  public static class DebugFilter implements Filter {
+    public int requestsToKeep = 10;
+    private AtomicLong nRequests = new AtomicLong();
+
+    public long getTotalRequests() {
+      return nRequests.get();
+
+    }
+
+    // TODO: keep track of certain number of last requests
+    private LinkedList<HttpServletRequest> requests = new LinkedList<HttpServletRequest>();
+
+
+    @Override
+    public void init(FilterConfig filterConfig) throws ServletException {
+    }
+
+    @Override
+    public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain) throws IOException, ServletException {
+      nRequests.incrementAndGet();
+
+      /***
+      HttpServletRequest req = (HttpServletRequest)servletRequest;
+      HttpServletResponse resp = (HttpServletResponse)servletResponse;
+
+      String path = req.getServletPath();
+      if( req.getPathInfo() != null ) {
+        // this lets you handle /update/commit when /update is a servlet
+        path += req.getPathInfo();
+      }
+      System.out.println("###################### FILTER request " + servletRequest);
+      System.out.println("\t\tgetServletPath="+req.getServletPath());
+      System.out.println("\t\tgetPathInfo="+req.getPathInfo());
+      ***/
+
+      filterChain.doFilter(servletRequest, servletResponse);
+    }
+
+    @Override
+    public void destroy() {
+    }
+  }
+
+
+
+
 
   public JettySolrRunner(String solrHome, String context, int port) {
     this.init(solrHome, context, port, true);
@@ -92,6 +145,7 @@ public class JettySolrRunner {
   private void init(String solrHome, String context, int port, boolean stopAtShutdown) {
     this.context = context;
     server = new Server(port);
+
     this.solrHome = solrHome;
     this.stopAtShutdown = stopAtShutdown;
     server.setStopAtShutdown(stopAtShutdown);
@@ -100,32 +154,56 @@ public class JettySolrRunner {
     }
     System.setProperty("solr.solr.home", solrHome);
     if (System.getProperty("jetty.testMode") != null) {
-      // SelectChannelConnector connector = new SelectChannelConnector();
-      // Normal SocketConnector is what solr's example server uses by default
-      SocketConnector connector = new SocketConnector();
-      connector.setPort(port);
-      connector.setReuseAddress(true);
-      if (!stopAtShutdown) {
-        QueuedThreadPool threadPool = (QueuedThreadPool) connector
-            .getThreadPool();
-        if (threadPool != null) {
-          threadPool.setMaxStopTimeMs(100);
-        }
+      final String connectorName = System.getProperty("tests.jettyConnector", "SelectChannel");
+      final Connector connector;
+      final QueuedThreadPool threadPool;
+      if ("SelectChannel".equals(connectorName)) {
+        final SelectChannelConnector c = new SelectChannelConnector();
+        c.setReuseAddress(true);
+        c.setLowResourcesMaxIdleTime(1500);
+        connector = c;
+        threadPool = (QueuedThreadPool) c.getThreadPool();
+      } else if ("Socket".equals(connectorName)) {
+        final SocketConnector c = new SocketConnector();
+        c.setReuseAddress(true);
+        connector = c;
+        threadPool = (QueuedThreadPool) c.getThreadPool();
+      } else {
+        throw new IllegalArgumentException("Illegal value for system property 'tests.jettyConnector': " + connectorName);
       }
+      connector.setPort(port);
+      connector.setHost("127.0.0.1");
+      if (threadPool != null) {
+        threadPool.setMaxThreads(10000);
+        threadPool.setMaxIdleTimeMs(5000);
+        threadPool.setMaxStopTimeMs(30000);
+      }
+      
       server.setConnectors(new Connector[] {connector});
       server.setSessionIdManager(new HashSessionIdManager(new Random()));
     } else {
-      if (!stopAtShutdown) {
-        for (Connector connector : server.getConnectors()) {
-          if (connector instanceof SocketConnector) {
-            QueuedThreadPool threadPool = (QueuedThreadPool) ((SocketConnector) connector)
-                .getThreadPool();
-            if (threadPool != null) {
-              threadPool.setMaxStopTimeMs(100);
-            }
+      
+      for (Connector connector : server.getConnectors()) {
+        QueuedThreadPool threadPool = null;
+        if (connector instanceof SocketConnector) {
+          threadPool = (QueuedThreadPool) ((SocketConnector) connector)
+              .getThreadPool();
+        }
+        if (connector instanceof SelectChannelConnector) {
+          threadPool = (QueuedThreadPool) ((SelectChannelConnector) connector)
+              .getThreadPool();
+        }
+        
+        if (threadPool != null) {
+          threadPool.setMaxThreads(10000);
+          threadPool.setMaxIdleTimeMs(5000);
+          if (!stopAtShutdown) {
+            threadPool.setMaxStopTimeMs(100);
           }
         }
+        
       }
+
     }
 
     // Initialize the servlets
@@ -133,12 +211,15 @@ public class JettySolrRunner {
     root.setHandler(new GzipHandler());
     server.addLifeCycleListener(new LifeCycle.Listener() {
 
+      @Override
       public void lifeCycleStopping(LifeCycle arg0) {
         System.clearProperty("hostPort");
       }
 
+      @Override
       public void lifeCycleStopped(LifeCycle arg0) {}
 
+      @Override
       public void lifeCycleStarting(LifeCycle arg0) {
         synchronized (JettySolrRunner.this) {
           waitOnSolr = true;
@@ -146,6 +227,7 @@ public class JettySolrRunner {
         }
       }
 
+      @Override
       public void lifeCycleStarted(LifeCycle arg0) {
         lastPort = getFirstConnectorPort();
         System.setProperty("hostPort", Integer.toString(lastPort));
@@ -155,12 +237,14 @@ public class JettySolrRunner {
             schemaFilename);
 //        SolrDispatchFilter filter = new SolrDispatchFilter();
 //        FilterHolder fh = new FilterHolder(filter);
+        debugFilter = root.addFilter(DebugFilter.class, "*", EnumSet.of(DispatcherType.REQUEST) );
         dispatchFilter = root.addFilter(SolrDispatchFilter.class, "*", EnumSet.of(DispatcherType.REQUEST) );
         if (solrConfigFilename != null) System.clearProperty("solrconfig");
         if (schemaFilename != null) System.clearProperty("schema");
         System.clearProperty("solr.solr.home");
       }
 
+      @Override
       public void lifeCycleFailure(LifeCycle arg0, Throwable arg1) {
         System.clearProperty("hostPort");
       }
@@ -224,24 +308,11 @@ public class JettySolrRunner {
   }
 
   public void stop() throws Exception {
-    // we try and do a bunch of extra stop stuff because
-    // jetty doesn't like to stop if it started
-    // and ended up in a failure state (like when it cannot get the port)
-    if (server.getState().equals(Server.FAILED)) {
-      Connector[] connectors = server.getConnectors();
-      for (Connector connector : connectors) {
-        connector.stop();
-      }
-    }
+
     Filter filter = dispatchFilter.getFilter();
-    ThreadPool threadPool = server.getThreadPool();
-    server.getServer().stop();
+
     server.stop();
-    if (threadPool instanceof QueuedThreadPool) {
-      ((QueuedThreadPool) threadPool).setMaxStopTimeMs(30000);
-      ((QueuedThreadPool) threadPool).stop();
-      ((QueuedThreadPool) threadPool).join();
-    }
+
     //server.destroy();
     if (server.getState().equals(Server.FAILED)) {
       filter.destroy();
@@ -273,6 +344,10 @@ public class JettySolrRunner {
       throw new IllegalStateException("You cannot get the port until this instance has started");
     }
     return lastPort;
+  }
+
+  public DebugFilter getDebugFilter() {
+    return (DebugFilter)debugFilter.getFilter();
   }
 
   // --------------------------------------------------------------
@@ -323,17 +398,21 @@ class NoLog implements Logger {
     this.name = name == null ? "" : name;
   }
 
+  @Override
   public boolean isDebugEnabled() {
     return debug;
   }
 
+  @Override
   public void setDebugEnabled(boolean enabled) {
     debug = enabled;
   }
 
+  @Override
   public void debug(String msg, Throwable th) {
   }
 
+  @Override
   public Logger getLogger(String name) {
     if ((name == null && this.name == null)
         || (name != null && name.equals(this.name)))

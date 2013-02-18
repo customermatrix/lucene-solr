@@ -17,15 +17,31 @@
 
 package org.apache.solr.search;
 
+import java.util.HashSet;
+import java.util.Set;
+
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.DisjunctionMaxQuery;
+import org.apache.lucene.search.FuzzyQuery;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.TermQuery;
 import org.apache.solr.common.SolrException;
+import org.apache.solr.common.params.ModifiableSolrParams;
+import org.apache.solr.common.params.SolrParams;
+import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.util.AbstractSolrTestCase;
+import org.apache.solr.util.SolrPluginUtils;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class TestExtendedDismaxParser extends AbstractSolrTestCase {
-  @Override
-  public String getSchemaFile() { return "schema12.xml"; }
-  @Override
-  public String getSolrConfigFile() { return "solrconfig.xml"; }
+
+  @BeforeClass
+  public static void beforeClass() throws Exception {
+    initCore("solrconfig.xml", "schema12.xml");
+  }
+  
   // public String getCoreName() { return "collection1"; }
 
   @Override
@@ -57,6 +73,13 @@ public class TestExtendedDismaxParser extends AbstractSolrTestCase {
     assertU(adoc("id", "52", "text_sw", "tekna theou klethomen"));
     assertU(adoc("id", "53", "text_sw", "nun tekna theou esmen"));
     assertU(adoc("id", "54", "text_sw", "phanera estin ta tekna tou theou"));
+    assertU(adoc("id", "55", "standardtok", "大"));
+    assertU(adoc("id", "56", "standardtok", "大亚"));
+    assertU(adoc("id", "57", "standardtok", "大亚湾"));
+    assertU(adoc("id", "58", "HTMLstandardtok", "大"));
+    assertU(adoc("id", "59", "HTMLstandardtok", "大亚"));
+    assertU(adoc("id", "60", "HTMLstandardtok", "大亚湾"));
+    assertU(adoc("id", "61", "text_sw", "bazaaa")); // synonyms in an expansion group
     assertU(commit());
   }
   @Override
@@ -500,37 +523,42 @@ public class TestExtendedDismaxParser extends AbstractSolrTestCase {
   
   public void testCyclicAliasing() throws Exception {
     try {
-      h.query(req("defType","edismax", "q","ignore_exception", "qf","who", "f.who.qf","name","f.name.qf","who"));
-      fail("Simple cyclic alising");
-    } catch (SolrException e) {
-      assertTrue(e.getCause().getMessage().contains("Field aliases lead to a cycle"));
-    }
-    
-    try {
-      h.query(req("defType","edismax", "q","ignore_exception", "qf","who", "f.who.qf","name","f.name.qf","myalias", "f.myalias.qf","who"));
-      fail();
-    } catch (SolrException e) {
-      assertTrue(e.getCause().getMessage().contains("Field aliases lead to a cycle"));
-    }
-    
-    try {
-      h.query(req("defType","edismax", "q","ignore_exception", "qf","field1", "f.field1.qf","field2 field3","f.field2.qf","field4 field5", "f.field4.qf","field5", "f.field5.qf","field6", "f.field3.qf","field6"));
-    } catch (SolrException e) {
-      fail("This is not cyclic alising");
-    }
-    
-    try {
-      h.query(req("defType","edismax", "q","ignore_exception", "qf","field1", "f.field1.qf","field2 field3", "f.field2.qf","field4 field5", "f.field4.qf","field5", "f.field5.qf","field4"));
-      fail();
-    } catch (SolrException e) {
-      assertTrue(e.getCause().getMessage().contains("Field aliases lead to a cycle"));
-    }
-    
-    try {
-      h.query(req("defType","edismax", "q","who:(Zapp Pig) ignore_exception", "qf","field1", "f.who.qf","name","f.name.qf","myalias", "f.myalias.qf","who"));
-      fail();
-    } catch (SolrException e) {
-      assertTrue(e.getCause().getMessage().contains("Field aliases lead to a cycle"));
+      ignoreException(".*Field aliases lead to a cycle.*");
+      try {
+        h.query(req("defType","edismax", "q","blarg", "qf","who", "f.who.qf","name","f.name.qf","who"));
+        fail("Simple cyclic alising not detected");
+      } catch (SolrException e) {
+        assertTrue(e.getCause().getMessage().contains("Field aliases lead to a cycle"));
+      }
+      
+      try {
+        h.query(req("defType","edismax", "q","blarg", "qf","who", "f.who.qf","name","f.name.qf","myalias", "f.myalias.qf","who"));
+        fail("Cyclic alising not detected");
+      } catch (SolrException e) {
+        assertTrue(e.getCause().getMessage().contains("Field aliases lead to a cycle"));
+      }
+      
+      try {
+        h.query(req("defType","edismax", "q","blarg", "qf","field1", "f.field1.qf","field2 field3","f.field2.qf","field4 field5", "f.field4.qf","field5", "f.field5.qf","field6", "f.field3.qf","field6"));
+      } catch (SolrException e) {
+        fail("This is not cyclic alising");
+      }
+      
+      try {
+        h.query(req("defType","edismax", "q","blarg", "qf","field1", "f.field1.qf","field2 field3", "f.field2.qf","field4 field5", "f.field4.qf","field5", "f.field5.qf","field4"));
+        fail("Cyclic alising not detected");
+      } catch (SolrException e) {
+        assertTrue(e.getCause().getMessage().contains("Field aliases lead to a cycle"));
+      }
+      
+      try {
+        h.query(req("defType","edismax", "q","who:(Zapp Pig)", "qf","field1", "f.who.qf","name","f.name.qf","myalias", "f.myalias.qf","who"));
+        fail("Cyclic alising not detected");
+      } catch (SolrException e) {
+        assertTrue(e.getCause().getMessage().contains("Field aliases lead to a cycle"));
+      }
+    } finally {
+      resetExceptionIgnores();
     }
   }
 
@@ -762,7 +790,7 @@ public class TestExtendedDismaxParser extends AbstractSolrTestCase {
             "defType", "edismax")
         , "*[count(//doc)=1]");
     
-    // Query string field 'cat_s' for special char / - causes ParseException without patch SOLR-3467
+    // Query string field 'cat_s' for special char / - causes SyntaxError without patch SOLR-3467
     assertQ("Escaping string with reserved / character",
         req("q", "foo/",
             "qf", "cat_s",
@@ -770,5 +798,307 @@ public class TestExtendedDismaxParser extends AbstractSolrTestCase {
             "defType", "edismax")
         , "*[count(//doc)=1]");
     
+  }
+  
+  /**
+   * SOLR-3589: Edismax parser does not honor mm parameter if analyzer splits a token
+   */
+  public void testCJK() throws Exception {
+    assertQ("test cjk (disjunction)",
+        req("q", "大亚湾",
+            "qf", "standardtok",
+            "mm", "0%",
+            "defType", "edismax")
+        , "*[count(//doc)=3]");
+    assertQ("test cjk (minShouldMatch)",
+        req("q", "大亚湾",
+            "qf", "standardtok",
+            "mm", "67%",
+            "defType", "edismax")
+        , "*[count(//doc)=2]");
+    assertQ("test cjk (conjunction)",
+        req("q", "大亚湾",
+            "qf", "standardtok",
+            "mm", "100%",
+            "defType", "edismax")
+        , "*[count(//doc)=1]");
+  }
+  
+  /** 
+   * test that minShouldMatch works with aliasing
+   * for implicit boolean queries
+   */
+  public void testCJKAliasing() throws Exception {
+    // single field
+    assertQ("test cjk (aliasing+disjunction)",
+        req("q", "myalias:大亚湾",
+            "f.myalias.qf", "standardtok",
+            "mm", "0%",
+            "defType", "edismax")
+        , "*[count(//doc)=3]");
+    assertQ("test cjk (aliasing+minShouldMatch)",
+        req("q", "myalias:大亚湾",
+            "f.myalias.qf", "standardtok",
+            "mm", "67%",
+            "defType", "edismax")
+        , "*[count(//doc)=2]");
+    assertQ("test cjk (aliasing+conjunction)",
+        req("q", "myalias:大亚湾",
+            "f.myalias.qf", "standardtok",
+            "mm", "100%",
+            "defType", "edismax")
+        , "*[count(//doc)=1]");
+    // multifield
+    assertQ("test cjk (aliasing+disjunction)",
+        req("q", "myalias:大亚湾",
+            "f.myalias.qf", "standardtok HTMLstandardtok",
+            "mm", "0%",
+            "defType", "edismax")
+        , "*[count(//doc)=6]");
+    assertQ("test cjk (aliasing+minShouldMatch)",
+        req("q", "myalias:大亚湾",
+            "f.myalias.qf", "standardtok HTMLstandardtok",
+            "mm", "67%",
+            "defType", "edismax")
+        , "*[count(//doc)=4]");
+    assertQ("test cjk (aliasing+conjunction)",
+        req("q", "myalias:大亚湾",
+            "f.myalias.qf", "standardtok HTMLstandardtok",
+            "mm", "100%",
+            "defType", "edismax")
+        , "*[count(//doc)=2]");
+  }
+  
+  /** Test that we apply boosts correctly */
+  public void testCJKBoosts() throws Exception {
+    assertQ("test cjk (disjunction)",
+        req("q", "大亚湾",
+            "qf", "standardtok^2 HTMLstandardtok",
+            "mm", "0%",
+            "defType", "edismax")
+        , "*[count(//doc)=6]", "//result/doc[1]/str[@name='id'][.='57']");
+    assertQ("test cjk (minShouldMatch)",
+        req("q", "大亚湾",
+            "qf", "standardtok^2 HTMLstandardtok",
+            "mm", "67%",
+            "defType", "edismax")
+        , "*[count(//doc)=4]", "//result/doc[1]/str[@name='id'][.='57']");
+    assertQ("test cjk (conjunction)",
+        req("q", "大亚湾",
+            "qf", "standardtok^2 HTMLstandardtok",
+            "mm", "100%",
+            "defType", "edismax")
+        , "*[count(//doc)=2]", "//result/doc[1]/str[@name='id'][.='57']");
+    
+    // now boost the other field
+    assertQ("test cjk (disjunction)",
+        req("q", "大亚湾",
+            "qf", "standardtok HTMLstandardtok^2",
+            "mm", "0%",
+            "defType", "edismax")
+        , "*[count(//doc)=6]", "//result/doc[1]/str[@name='id'][.='60']");
+    assertQ("test cjk (minShouldMatch)",
+        req("q", "大亚湾",
+            "qf", "standardtok HTMLstandardtok^2",
+            "mm", "67%",
+            "defType", "edismax")
+        , "*[count(//doc)=4]", "//result/doc[1]/str[@name='id'][.='60']");
+    assertQ("test cjk (conjunction)",
+        req("q", "大亚湾",
+            "qf", "standardtok HTMLstandardtok^2",
+            "mm", "100%",
+            "defType", "edismax")
+        , "*[count(//doc)=2]", "//result/doc[1]/str[@name='id'][.='60']");
+  }
+  
+  /** always apply minShouldMatch to the inner booleanqueries
+   *  created from whitespace, as these are never structured lucene queries
+   *  but only come from unstructured text */
+  public void testCJKStructured() throws Exception {
+    assertQ("test cjk (disjunction)",
+        req("q", "大亚湾 OR bogus",
+            "qf", "standardtok",
+            "mm", "0%",
+            "defType", "edismax")
+        , "*[count(//doc)=3]");
+    assertQ("test cjk (minShouldMatch)",
+        req("q", "大亚湾 OR bogus",
+            "qf", "standardtok",
+            "mm", "67%",
+            "defType", "edismax")
+        , "*[count(//doc)=2]");
+    assertQ("test cjk (conjunction)",
+        req("q", "大亚湾 OR bogus",
+            "qf", "standardtok",
+            "mm", "100%",
+            "defType", "edismax")
+        , "*[count(//doc)=1]");
+  }
+  
+  /**
+   * Test that we don't apply minShouldMatch to the inner boolean queries
+   * when there are synonyms (these are indicated by coordination factor)
+   */
+  public void testSynonyms() throws Exception {
+    // document only contains baraaa, but should still match.
+    assertQ("test synonyms",
+        req("q", "fooaaa",
+            "qf", "text_sw",
+            "mm", "100%",
+            "defType", "edismax")
+        , "*[count(//doc)=1]");
+  }
+  
+  public void testEdismaxSimpleExtension() throws SyntaxError {
+    ModifiableSolrParams params = new ModifiableSolrParams();
+    params.set("q", "foo bar");
+    params.set("qf", "subject title^5");
+    params.set("qf_fr", "subject_fr title_fr^5");
+    params.set("qf_en", "subject_en title_en^5");
+    params.set("qf_es", "subject_es title_es^5");
+    
+    MultilanguageQueryParser parser = new MultilanguageQueryParser("foo bar", new ModifiableSolrParams(), params, req(params));
+    Query query = parser.parse();
+    assertNotNull(query);
+    assertTrue(containsClause(query, "title", "foo", 5, false));
+    assertTrue(containsClause(query, "title", "bar", 5, false));
+    assertTrue(containsClause(query, "subject", "foo", 1, false));
+    assertTrue(containsClause(query, "subject", "bar", 1, false));
+    
+    params.set("language", "es");
+    parser = new MultilanguageQueryParser("foo bar", new ModifiableSolrParams(), params, req(params));
+    query = parser.parse();
+    assertNotNull(query);
+    assertTrue(containsClause(query, "title_es", "foo", 5, false));
+    assertTrue(containsClause(query, "title_es", "bar", 5, false));
+    assertTrue(containsClause(query, "subject_es", "foo", 1, false));
+    assertTrue(containsClause(query, "subject_es", "bar", 1, false));
+    
+    FuzzyDismaxQParser parser2 = new FuzzyDismaxQParser("foo bar absence", new ModifiableSolrParams(), params, req(params));
+    query = parser2.parse();
+    assertNotNull(query);
+    assertTrue(containsClause(query, "title", "foo", 5, false));
+    assertTrue(containsClause(query, "title", "bar", 5, false));
+    assertTrue(containsClause(query, "title", "absence", 5, true));
+    
+  }
+
+  private boolean containsClause(Query query, String field, String value,
+      int boost, boolean fuzzy) {
+    
+    if(query instanceof BooleanQuery) {
+      return containsClause((BooleanQuery)query, field, value, boost, fuzzy);
+    }
+    if(query instanceof DisjunctionMaxQuery) {
+      return containsClause((DisjunctionMaxQuery)query, field, value, boost, fuzzy);
+    }
+    if(query instanceof TermQuery && !fuzzy) {
+      return containsClause((TermQuery)query, field, value, boost);
+    }
+    if(query instanceof FuzzyQuery && fuzzy) {
+      return containsClause((FuzzyQuery)query, field, value, boost);
+    }
+    return false;
+  }
+
+  private boolean containsClause(FuzzyQuery query, String field, String value,
+      int boost) {
+    if(query.getTerm().field().equals(field) && 
+       query.getTerm().bytes().utf8ToString().equals(value) && 
+       query.getBoost() == boost) {
+      return true;
+    }
+    return false;
+  }
+
+  private boolean containsClause(BooleanQuery query, String field, String value, int boost, boolean fuzzy) {
+    for(BooleanClause clause:query.getClauses()) {
+      if(containsClause(clause.getQuery(), field, value, boost, fuzzy)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  
+  private boolean containsClause(TermQuery query, String field, String value, int boost) {
+    if(query.getTerm().field().equals(field) && 
+       query.getTerm().bytes().utf8ToString().equals(value) && 
+       query.getBoost() == boost) {
+      return true;
+    }
+    return false;
+  }
+  
+  private boolean containsClause(DisjunctionMaxQuery query, String field, String value, int boost, boolean fuzzy) {
+    for(Query disjunct:query.getDisjuncts()) {
+      if(containsClause(disjunct, field, value, boost, fuzzy)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  class MultilanguageQueryParser extends ExtendedDismaxQParser {
+
+    public MultilanguageQueryParser(String qstr, SolrParams localParams,
+        SolrParams params, SolrQueryRequest req) {
+      super(qstr, localParams, params, req);
+    }
+    
+    @Override
+    protected ExtendedDismaxConfiguration createConfiguration(String qstr,
+        SolrParams localParams, SolrParams params, SolrQueryRequest req) {
+      return new MultilanguageDismaxConfiguration(localParams, params, req);
+    }
+    
+    class MultilanguageDismaxConfiguration extends ExtendedDismaxConfiguration {
+
+      public MultilanguageDismaxConfiguration(SolrParams localParams,
+          SolrParams params, SolrQueryRequest req) {
+        super(localParams, params, req);
+        String language = params.get("language");
+        if(language != null) {
+          super.queryFields = SolrPluginUtils.parseFieldBoosts(solrParams.getParams("qf_" + language)); 
+        }
+      }
+      
+    }
+    
+  }
+  
+  
+  
+  class FuzzyDismaxQParser extends ExtendedDismaxQParser {
+
+    public FuzzyDismaxQParser(String qstr, SolrParams localParams,
+        SolrParams params, SolrQueryRequest req) {
+      super(qstr, localParams, params, req);
+    }
+    
+    @Override
+    protected ExtendedSolrQueryParser createEdismaxQueryParser(QParser qParser,
+        String field) {
+      return new FuzzyQueryParser(qParser, field);
+    }
+    
+    class FuzzyQueryParser extends ExtendedSolrQueryParser{
+      
+      private Set<String> frequentlyMisspelledWords;
+
+      public FuzzyQueryParser(QParser parser, String defaultField) {
+        super(parser, defaultField);
+        frequentlyMisspelledWords = new HashSet<String>();
+        frequentlyMisspelledWords.add("absence");
+      }
+      
+      @Override
+      protected Query getFieldQuery(String field,
+          String val, boolean quoted) throws SyntaxError {
+        if(frequentlyMisspelledWords.contains(val)) {
+          return getFuzzyQuery(field, val, 0.75F);
+        }
+        return super.getFieldQuery(field, val, quoted);
+      }
+    }
   }
 }

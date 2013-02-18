@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Exchange Rates Provider for {@link CurrencyField} implementing the freely available
  * exchange rates from openexchangerates.org
- * <p/>
+ * <p>
  * <b>Disclaimer:</b> This data is collected from various providers and provided free of charge
  * for informational purposes only, with no guarantee whatsoever of accuracy, validity,
  * availability or fitness for any purpose; use at your own risk. Other than that - have
@@ -64,6 +64,7 @@ public class OpenExchangeRatesOrgProvider implements ExchangeRateProvider {
    * @return The exchange rate.
    * @throws SolrException if the requested currency pair cannot be found
    */
+  @Override
   public double getExchangeRate(String sourceCurrencyCode, String targetCurrencyCode) {
     if (rates == null) {
       throw new SolrException(SolrException.ErrorCode.SERVICE_UNAVAILABLE, "Rates not initialized.");
@@ -105,6 +106,7 @@ public class OpenExchangeRatesOrgProvider implements ExchangeRateProvider {
     return rates != null ? rates.hashCode() : 0;
   }
 
+  @Override
   public String toString() {
     return "["+this.getClass().getName()+" : " + rates.getRates().size() + " rates.]";
   }

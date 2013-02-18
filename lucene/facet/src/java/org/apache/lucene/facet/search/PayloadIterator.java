@@ -2,12 +2,13 @@ package org.apache.lucene.facet.search;
 
 import java.io.IOException;
 
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.DocsAndPositionsEnum;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.MultiFields;
+import org.apache.lucene.index.Fields;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.index.Terms;
+import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 
 /*
@@ -29,107 +30,85 @@ import org.apache.lucene.util.BytesRef;
 
 /**
  * A utility class for iterating through a posting list of a given term and
- * retrieving the payload of the first occurrence in every document. Comes with
- * its own working space (buffer).
+ * retrieving the payload of the first position in every document. For
+ * efficiency, this class does not check if documents passed to
+ * {@link #getPayload(int)} are deleted, since it is usually used to iterate on
+ * payloads of documents that matched a query. If you need to skip over deleted
+ * documents, you should do so before calling {@link #getPayload(int)}.
  * 
  * @lucene.experimental
  */
 public class PayloadIterator {
 
-  protected byte[] buffer;
-  protected int payloadLength;
-
-  DocsAndPositionsEnum tp;
-
+  private TermsEnum reuseTE;
+  private DocsAndPositionsEnum dpe;
   private boolean hasMore;
+  private int curDocID;
+  
+  private final Term term;
 
-  public PayloadIterator(IndexReader indexReader, Term term)
-      throws IOException {
-    this(indexReader, term, new byte[1024]);
-  }
-
-  public PayloadIterator(IndexReader indexReader, Term term, byte[] buffer)
-      throws IOException {
-    this.buffer = buffer;
-    // TODO (Facet): avoid Multi*?
-    Bits liveDocs = MultiFields.getLiveDocs(indexReader);
-    this.tp = MultiFields.getTermPositionsEnum(indexReader, liveDocs, term.field(), term.bytes(), DocsAndPositionsEnum.FLAG_PAYLOADS);
+  public PayloadIterator(Term term) throws IOException {
+    this.term = term;
   }
 
   /**
-   * (re)initialize the iterator. Should be done before the first call to
-   * {@link #setdoc(int)}. Returns false if there is no category list found
-   * (no setdoc() will never return true).
+   * Sets the {@link AtomicReaderContext} for which {@link #getPayload(int)}
+   * calls will be made. Returns true iff this reader has payload for any of the
+   * documents belonging to the {@link Term} given to the constructor.
    */
-  public boolean init() throws IOException {
-    hasMore = tp != null && tp.nextDoc() != DocIdSetIterator.NO_MORE_DOCS;
+  public boolean setNextReader(AtomicReaderContext context) throws IOException {
+    hasMore = false;
+    Fields fields = context.reader().fields();
+    if (fields != null) {
+      Terms terms = fields.terms(term.field());
+      if (terms != null) {
+        reuseTE = terms.iterator(reuseTE);
+        if (reuseTE.seekExact(term.bytes(), true)) {
+          // this class is usually used to iterate on whatever a Query matched
+          // if it didn't match deleted documents, we won't receive them. if it
+          // did, we should iterate on them too, therefore we pass liveDocs=null
+          dpe = reuseTE.docsAndPositions(null, dpe, DocsAndPositionsEnum.FLAG_PAYLOADS);
+          if (dpe != null && (curDocID = dpe.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
+            hasMore = true;
+          }
+        }
+      }
+    }
     return hasMore;
   }
-
+  
   /**
-   * Skip forward to document docId. Return true if this document exists and
-   * has any payload.
-   * <P>
-   * Users should call this method with increasing docIds, and implementations
-   * can assume that this is the case.
+   * Returns the {@link BytesRef payload} of the given document, or {@code null}
+   * if the document does not exist, there are no more documents in the posting
+   * list, or the document exists but has not payload. The given document IDs
+   * are treated as local to the reader given to
+   * {@link #setNextReader(AtomicReaderContext)}.
    */
-  public boolean setdoc(int docId) throws IOException {
+  public BytesRef getPayload(int docID) throws IOException {
     if (!hasMore) {
-      return false;
+      return null;
+    }
+
+    if (curDocID > docID) {
+      // document does not exist
+      return null;
     }
     
-    if (tp.docID() > docId) {
-      return false;
-    }
-
-    // making sure we have the requested document
-    if (tp.docID() < docId) {
-      // Skipping to requested document
-      if (tp.advance(docId) == DocIdSetIterator.NO_MORE_DOCS) {
-        this.hasMore = false;
-        return false;
-      }
-
-      // If document not found (skipped to much)
-      if (tp.docID() != docId) {
-        return false;
+    if (curDocID < docID) {
+      curDocID = dpe.advance(docID);
+      if (curDocID != docID) { // requested document does not have a payload
+        if (curDocID == DocIdSetIterator.NO_MORE_DOCS) { // no more docs in this reader
+          hasMore = false;
+        }
+        return null;
       }
     }
 
-    // Prepare for payload extraction
-    tp.nextPosition();
-
-    BytesRef br = tp.getPayload();
-    
-    if (br == null) {
-      return false;
-    }
-    
-    assert br.length > 0;
-
-    this.payloadLength = br.length;
-    
-    if (this.payloadLength > this.buffer.length) {
-      // Growing if necessary.
-      this.buffer = new byte[this.payloadLength * 2 + 1];
-    }
-    // Loading the payload
-    System.arraycopy(br.bytes, br.offset, this.buffer, 0, payloadLength);
-    return true;
+    // we're on the document
+    assert dpe.freq() == 1 : "expecting freq=1 (got " + dpe.freq() + ") term=" + term + " doc=" + curDocID;
+    int pos = dpe.nextPosition();
+    assert pos != -1 : "no positions for term=" + term + " doc=" + curDocID;
+    return dpe.getPayload();
   }
-
-  /**
-   * Get the buffer with the content of the last read payload.
-   */
-  public byte[] getBuffer() {
-    return buffer;
-  }
-
-  /**
-   * Get the length of the last read payload.
-   */
-  public int getPayloadLength() {
-    return payloadLength;
-  }
-
+  
 }

@@ -24,6 +24,7 @@ import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.embedded.JettySolrRunner;
 import org.apache.solr.common.SolrInputDocument;
+import org.apache.solr.common.cloud.ZkStateReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,7 +72,7 @@ public class RecoveryZkTest extends AbstractFullDistribZkTestBase {
     
     // make sure replication can start
     Thread.sleep(1500);
-    
+    ZkStateReader zkStateReader = cloudClient.getZkStateReader();
     waitForRecoveriesToFinish(DEFAULT_COLLECTION, zkStateReader, false, true);
     
     // stop indexing threads
@@ -81,11 +82,21 @@ public class RecoveryZkTest extends AbstractFullDistribZkTestBase {
     indexThread.join();
     indexThread2.join();
     
-    commit();
+    Thread.sleep(500);
+  
+    waitForThingsToLevelOut(30);
+    
+    Thread.sleep(1000);
+    
+    waitForThingsToLevelOut(30);
+    
+    Thread.sleep(1000);
+    
+    waitForRecoveriesToFinish(DEFAULT_COLLECTION, zkStateReader, false, true);
 
     // test that leader and replica have same doc count
     
-    checkShardConsistency("shard1", false); 
+    checkShardConsistency("shard1", false, false);
     SolrQuery query = new SolrQuery("*:*");
     query.setParam("distrib", "false");
     long client1Docs = shardToJetty.get("shard1").get(0).client.solrClient.query(query).getResults().getNumFound();
@@ -98,6 +109,7 @@ public class RecoveryZkTest extends AbstractFullDistribZkTestBase {
     //query("q", "*:*", "sort", "id desc");
   }
   
+  @Override
   protected void indexDoc(SolrInputDocument doc) throws IOException,
       SolrServerException {
     controlClient.add(doc);
@@ -123,6 +135,7 @@ public class RecoveryZkTest extends AbstractFullDistribZkTestBase {
   }
   
   // skip the randoms - they can deadlock...
+  @Override
   protected void indexr(Object... fields) throws Exception {
     SolrInputDocument doc = new SolrInputDocument();
     addFields(doc, fields);

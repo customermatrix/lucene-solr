@@ -602,7 +602,7 @@ public class HighlighterTest extends BaseTokenStreamTestCase implements Formatte
     // Not sure we can assert anything here - just running to check we dont
     // throw any exceptions
   }
-
+  
   public void testSpanHighlighting() throws Exception {
     Query query1 = new SpanNearQuery(new SpanQuery[] {
         new SpanTermQuery(new Term(FIELD_NAME, "wordx")),
@@ -654,6 +654,31 @@ public class HighlighterTest extends BaseTokenStreamTestCase implements Formatte
       public void run() throws Exception {
         numHighlights = 0;
         doSearching(new TermQuery(new Term(FIELD_NAME, "kennedy")));
+        doStandardHighlights(analyzer, searcher, hits, query, HighlighterTest.this);
+        assertTrue("Failed to find correct number of highlights " + numHighlights + " found",
+            numHighlights == 4);
+      }
+    };
+
+    helper.start();
+  }
+  
+  public void testGetBestFragmentsConstantScore() throws Exception {
+    TestHighlightRunner helper = new TestHighlightRunner() {
+
+      @Override
+      public void run() throws Exception {
+        numHighlights = 0;
+        if (random().nextBoolean()) {
+          BooleanQuery bq = new BooleanQuery();
+          bq.add(new ConstantScoreQuery(new QueryWrapperFilter(new TermQuery(
+              new Term(FIELD_NAME, "kennedy")))), Occur.MUST);
+          bq.add(new ConstantScoreQuery(new TermQuery(new Term(FIELD_NAME, "kennedy"))), Occur.MUST);
+          doSearching(bq);
+        } else {
+          doSearching(new ConstantScoreQuery(new TermQuery(new Term(FIELD_NAME,
+              "kennedy"))));
+        }
         doStandardHighlights(analyzer, searcher, hits, query, HighlighterTest.this);
         assertTrue("Failed to find correct number of highlights " + numHighlights + " found",
             numHighlights == 4);
@@ -1341,17 +1366,21 @@ public class HighlighterTest extends BaseTokenStreamTestCase implements Formatte
     // for
     // highlighting but scores a single fragment for selection
     Highlighter highlighter = new Highlighter(this, new SimpleHTMLEncoder(), new Scorer() {
+      @Override
       public void startFragment(TextFragment newFragment) {
       }
 
+      @Override
       public float getTokenScore() {
         return 0;
       }
 
+      @Override
       public float getFragmentScore() {
         return 1;
       }
 
+      @Override
       public TokenStream init(TokenStream tokenStream) {
         return null;
       }
@@ -1687,6 +1716,7 @@ public class HighlighterTest extends BaseTokenStreamTestCase implements Formatte
    * System.out.println(highlightedText); } }
    */
 
+  @Override
   public String highlightTerm(String originalText, TokenGroup group) {
     if (group.getTotalScore() <= 0) {
       return originalText;

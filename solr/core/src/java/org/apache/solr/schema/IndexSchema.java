@@ -516,7 +516,7 @@ public class IndexSchema {
       }
 
       if (!uniqueKeyField.stored()) {
-        log.error("uniqueKey is not stored - distributed search will not work");
+        log.warn("uniqueKey is not stored - distributed search and MoreLikeThis will not work");
       }
       if (uniqueKeyField.multiValued()) {
         String msg = "uniqueKey field ("+uniqueKeyFieldName+
@@ -783,6 +783,7 @@ public class IndexSchema {
      * as this object is less than, equal to, or greater than
      * the specified object.
      */
+    @Override
     public int compareTo(DynamicReplacement other) {
       return other.regex.length() - regex.length();
     }

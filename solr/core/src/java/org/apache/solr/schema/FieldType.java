@@ -84,7 +84,7 @@ public abstract class FieldType extends FieldProperties {
   public boolean isMultiValued() {
     return (properties & MULTIVALUED) != 0;
   }
-  
+
   /** Check if a property is set */
   protected boolean hasProperty( int p ) {
     return (properties & p) != 0;
@@ -292,14 +292,18 @@ public abstract class FieldType extends FieldProperties {
     IndexableField f = createField( field, value, boost);
     return f==null ? new IndexableField[]{} : new IndexableField[]{f};
   }
-  protected IndexOptions getIndexOptions(SchemaField field,
-                                         String internalVal) {
+
+  protected IndexOptions getIndexOptions(SchemaField field, String internalVal) {
+
     IndexOptions options = IndexOptions.DOCS_AND_FREQS_AND_POSITIONS;
     if (field.omitTermFreqAndPositions()) {
       options = IndexOptions.DOCS_ONLY;
     } else if (field.omitPositions()) {
       options = IndexOptions.DOCS_AND_FREQS;
+    } else if (field.storeOffsetsWithPositions()) {
+      options = IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS;
     }
+
     return options;
   }
 

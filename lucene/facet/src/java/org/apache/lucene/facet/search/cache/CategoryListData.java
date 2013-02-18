@@ -2,13 +2,13 @@ package org.apache.lucene.facet.search.cache;
 
 import java.io.IOException;
 
-import org.apache.lucene.index.IndexReader;
-
 import org.apache.lucene.facet.index.params.CategoryListParams;
 import org.apache.lucene.facet.index.params.FacetIndexingParams;
 import org.apache.lucene.facet.search.CategoryListIterator;
 import org.apache.lucene.facet.taxonomy.TaxonomyReader;
-import org.apache.lucene.util.collections.IntArray;
+import org.apache.lucene.index.AtomicReaderContext;
+import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.util.IntsRef;
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -56,33 +56,31 @@ public class CategoryListData {
   protected CategoryListData() {
   }
   
-  /**
-   * Compute category list data for caching for faster iteration.
-   */
-  CategoryListData(IndexReader reader, TaxonomyReader taxo, 
-      FacetIndexingParams iparams, CategoryListParams clp) throws IOException {
+  /** Compute category list data for caching for faster iteration. */
+  CategoryListData(IndexReader reader, TaxonomyReader taxo, FacetIndexingParams iparams, CategoryListParams clp) 
+      throws IOException {
   
-    final int maxDoc = reader.maxDoc();
-    int[][][]dpf  = new int[maxDoc][][];
+    int[][][]dpf  = new int[reader.maxDoc()][][];
     int numPartitions = (int)Math.ceil(taxo.getSize()/(double)iparams.getPartitionSize());
-    IntArray docCategories = new IntArray(); 
-    for (int part=0; part<numPartitions; part++) {
-      CategoryListIterator cli = clp.createCategoryListIterator(reader, part);
-      if (cli.init()) {
-        for (int doc=0; doc<maxDoc; doc++) {
-          if (cli.skipTo(doc)) {
-            docCategories.clear(false);
-            if (dpf[doc]==null) {
-              dpf[doc] = new int[numPartitions][];
-            }
-            long category;
-            while ((category = cli.nextCategory()) <= Integer.MAX_VALUE) {
-              docCategories.addToArray((int)category);
-            }
-            final int size = docCategories.size();
-            dpf[doc][part] = new int[size];
-            for (int i=0; i<size; i++) {
-              dpf[doc][part][i] = docCategories.get(i);
+    IntsRef ordinals = new IntsRef(32);
+    for (int part = 0; part < numPartitions; part++) {
+      for (AtomicReaderContext context : reader.leaves()) {
+        CategoryListIterator cli = clp.createCategoryListIterator(part);
+        if (cli.setNextReader(context)) {
+          final int maxDoc = context.reader().maxDoc();
+          for (int i = 0; i < maxDoc; i++) {
+            cli.getOrdinals(i, ordinals);
+            if (ordinals.length > 0) {
+              int doc = i + context.docBase;
+              if (dpf[doc] == null) {
+                dpf[doc] = new int[numPartitions][];
+              }
+              if (dpf[doc][part] == null) {
+                dpf[doc][part] = new int[ordinals.length];
+              }
+              for (int j = 0; j < ordinals.length; j++) {
+                dpf[doc][part][j] = ordinals.ints[j];
+              }
             }
           }
         }
@@ -98,38 +96,38 @@ public class CategoryListData {
     return new RAMCategoryListIterator(partition, docPartitionCategories);
   }
 
-  /**
-   * Internal: category list iterator over uncompressed category info in RAM
-   */
+  /** Internal: category list iterator over uncompressed category info in RAM */
   private static class RAMCategoryListIterator implements CategoryListIterator {
+    
+    private int docBase;
     private final int part;
     private final int[][][] dpc;
-    private int currDoc = -1;
-    private int nextCategoryIndex = -1;  
     
     RAMCategoryListIterator(int part, int[][][] docPartitionCategories) {
       this.part = part;
       dpc = docPartitionCategories;
     }
 
-    public boolean init() throws IOException {
-      return dpc!=null && dpc.length>part;
+    @Override
+    public boolean setNextReader(AtomicReaderContext context) throws IOException {
+      docBase = context.docBase;
+      return dpc != null && dpc.length > part;
     }
-
-    public long nextCategory() throws IOException {
-      if (nextCategoryIndex >= dpc[currDoc][part].length) {
-        return 1L+Integer.MAX_VALUE;
+    
+    @Override
+    public void getOrdinals(int docID, IntsRef ints) throws IOException {
+      ints.length = 0;
+      docID += docBase;
+      if (dpc.length > docID && dpc[docID] != null && dpc[docID][part] != null) {
+        if (ints.ints.length < dpc[docID][part].length) {
+          ints.grow(dpc[docID][part].length);
+        }
+        ints.length = 0;
+        for (int i = 0; i < dpc[docID][part].length; i++) {
+          ints.ints[ints.length++] = dpc[docID][part][i];
+        }
       }
-      return dpc[currDoc][part][nextCategoryIndex++]; 
-    }
-
-    public boolean skipTo(int docId) throws IOException {
-      final boolean res = dpc.length>docId && dpc[docId]!=null && dpc[docId][part]!=null;
-      if (res) {
-        currDoc = docId;
-        nextCategoryIndex = 0;
-      }
-      return res;
     }
   }
+  
 }

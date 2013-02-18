@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Random;
 
 import org.apache.lucene.analysis.MockAnalyzer;
+import org.apache.lucene.index.MergePolicy.MergeTrigger;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.MockDirectoryWrapper;
@@ -227,7 +228,7 @@ public class TestPerSegmentDeletes extends LuceneTestCase {
     Terms cterms = fields.terms(term.field);
     TermsEnum ctermsEnum = cterms.iterator(null);
     if (ctermsEnum.seekExact(new BytesRef(term.text()), false)) {
-      DocsEnum docsEnum = _TestUtil.docs(random(), ctermsEnum, bits, null, 0);
+      DocsEnum docsEnum = _TestUtil.docs(random(), ctermsEnum, bits, null, DocsEnum.FLAG_NONE);
       return toArray(docsEnum);
     }
     return null;
@@ -257,7 +258,7 @@ public class TestPerSegmentDeletes extends LuceneTestCase {
     public void close() {}
 
     @Override
-    public MergeSpecification findMerges(SegmentInfos segmentInfos)
+    public MergeSpecification findMerges(MergeTrigger mergeTrigger, SegmentInfos segmentInfos)
         throws IOException {
       MergeSpecification ms = new MergeSpecification();
       if (doMerge) {

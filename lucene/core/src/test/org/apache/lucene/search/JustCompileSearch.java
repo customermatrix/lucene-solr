@@ -17,6 +17,8 @@ package org.apache.lucene.search;
  * limitations under the License.
  */
 
+import java.io.IOException;
+
 import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.Norm;
 import org.apache.lucene.search.similarities.Similarity;
@@ -89,6 +91,7 @@ final class JustCompileSearch {
   
   static final class JustCompileExtendedFieldCacheLongParser implements FieldCache.LongParser {
 
+    @Override
     public long parseLong(BytesRef string) {
       throw new UnsupportedOperationException(UNSUPPORTED_MSG);
     }
@@ -97,6 +100,7 @@ final class JustCompileSearch {
   
   static final class JustCompileExtendedFieldCacheDoubleParser implements FieldCache.DoubleParser {
     
+    @Override
     public double parseDouble(BytesRef term) {
       throw new UnsupportedOperationException(UNSUPPORTED_MSG);
     }
@@ -187,20 +191,6 @@ final class JustCompileSearch {
     
   }
 
-  static final class JustCompilePhraseScorer extends PhraseScorer {
-
-    JustCompilePhraseScorer(Weight weight, PhraseQuery.PostingsAndFreq[] postings,
-        Similarity.SloppySimScorer docScorer) {
-      super(weight, postings, docScorer);
-    }
-
-    @Override
-    protected float phraseFreq() {
-      throw new UnsupportedOperationException(UNSUPPORTED_MSG);
-    }
-    
-  }
-
   static final class JustCompileQuery extends Query {
 
     @Override
@@ -227,7 +217,7 @@ final class JustCompileSearch {
     }
     
     @Override
-    public float freq() {
+    public int freq() {
       throw new UnsupportedOperationException(UNSUPPORTED_MSG);
     }
 

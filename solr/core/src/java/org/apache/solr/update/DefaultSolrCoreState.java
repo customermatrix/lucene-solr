@@ -20,6 +20,7 @@ package org.apache.solr.update;
 import java.io.IOException;
 
 import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.solr.cloud.RecoveryStrategy;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.core.CoreContainer;
@@ -44,7 +45,7 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
 
   private volatile boolean recoveryRunning;
   private RecoveryStrategy recoveryStrat;
-  private boolean closed = false;
+  private volatile boolean closed = false;
 
   private RefCounted<IndexWriter> refCntWriter;
 
@@ -73,6 +74,11 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
   @Override
   public synchronized RefCounted<IndexWriter> getIndexWriter(SolrCore core)
       throws IOException {
+    
+    if (closed) {
+      throw new RuntimeException("SolrCoreState already closed");
+    }
+    
     synchronized (writerPauseLock) {
       if (core == null) {
         // core == null is a signal to just return the current writer, or null
@@ -83,8 +89,12 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
       
       while (pauseWriter) {
         try {
-          writerPauseLock.wait();
+          writerPauseLock.wait(100);
         } catch (InterruptedException e) {}
+        
+        if (closed) {
+          throw new RuntimeException("Already closed");
+        }
       }
       
       if (indexWriter == null) {
@@ -113,7 +123,10 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
   }
 
   @Override
-  public synchronized void newIndexWriter(SolrCore core, boolean rollback) throws IOException {
+  public synchronized void newIndexWriter(SolrCore core, boolean rollback, boolean forceNewDir) throws IOException {
+    if (closed) {
+      throw new AlreadyClosedException("SolrCoreState already closed");
+    }
     log.info("Creating new IndexWriter...");
     String coreName = core.getName();
     synchronized (writerPauseLock) {
@@ -124,8 +137,12 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
       log.info("Waiting until IndexWriter is unused... core=" + coreName);
       while (!writerFree) {
         try {
-          writerPauseLock.wait();
+          writerPauseLock.wait(100);
         } catch (InterruptedException e) {}
+        
+        if (closed) {
+          throw new RuntimeException("SolrCoreState already closed");
+        }
       }
 
       try {
@@ -148,7 +165,7 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
             }
           }
         }
-        indexWriter = createMainIndexWriter(core, "DirectUpdateHandler2", true);
+        indexWriter = createMainIndexWriter(core, "DirectUpdateHandler2", forceNewDir);
         log.info("New IndexWriter is ready to be used.");
         // we need to null this so it picks up the new writer next get call
         refCntWriter = null;
@@ -162,7 +179,7 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
 
   @Override
   public synchronized void rollbackIndexWriter(SolrCore core) throws IOException {
-    newIndexWriter(core, true);
+    newIndexWriter(core, true, true);
   }
   
   protected SolrIndexWriter createMainIndexWriter(SolrCore core, String name, boolean forceNewDirectory) throws IOException {

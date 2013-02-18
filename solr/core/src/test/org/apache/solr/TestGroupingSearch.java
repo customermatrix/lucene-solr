@@ -360,6 +360,29 @@ public class TestGroupingSearch extends SolrTestCaseJ4 {
     );
   }
 
+  @Test
+  public void testGroupingGroupedBasedFacetingWithTaggedFilter() throws Exception {
+    assertU(add(doc("id", "1", "cat_sI", "a", "bday", "2012-11-20T00:00:00Z")));
+    assertU(add(doc("id", "2", "cat_sI", "b", "bday", "2012-11-21T00:00:00Z")));
+    assertU(add(doc("id", "3", "cat_sI", "a", "bday", "2012-11-20T00:00:00Z")));
+    assertU(add(doc("id", "4", "cat_sI", "b", "bday", "2013-01-15T00:00:00Z")));
+    assertU(add(doc("id", "5", "cat_sI", "a", "bday", "2013-01-14T00:00:00Z")));
+    assertU(commit());
+
+    // Facet counts based on groups
+    SolrQueryRequest req = req("q", "*:*", "rows", "1", "group", "true", "group.field", "cat_sI",
+        "sort", "cat_sI asc", "fl", "id", "fq", "{!tag=chk}bday:[2012-12-18T00:00:00Z TO 2013-01-17T23:59:59Z]",
+        "facet", "true", "group.truncate", "true", "group.sort", "bday desc",
+        "facet.query", "{!ex=chk key=LW1}bday:[2013-01-11T00:00:00Z TO 2013-01-17T23:59:59Z]",
+        "facet.query", "{!ex=chk key=LM1}bday:[2012-12-18T00:00:00Z TO 2013-01-17T23:59:59Z]",
+        "facet.query", "{!ex=chk key=LM3}bday:[2012-10-18T00:00:00Z TO 2013-01-17T23:59:59Z]");
+    assertJQ(
+        req,
+        "/grouped=={'cat_sI':{'matches':2,'groups':[{'groupValue':'a','doclist':{'numFound':1,'start':0,'docs':[{'id':'5'}]}}]}}",
+        "/facet_counts=={'facet_queries':{'LW1':2,'LM1':2,'LM3':2},'facet_fields':{},'facet_dates':{},'facet_ranges':{}}"
+    );
+  }
+
   static String f = "foo_i";
   static String f2 = "foo2_i";
 
@@ -502,6 +525,18 @@ public class TestGroupingSearch extends SolrTestCaseJ4 {
            "'doclist':{'numFound':4,'start':0,'docs':[{'id':'3'},{'id':'4'},{'id':'2'}]}}}"
     );
 
+    // group.query that matches nothing
+    assertJQ(req("fq",filt,  
+                 "q","{!func}"+f2, 
+                 "group","true", 
+                 "group.query","id:[2 TO 5]", 
+                 "group.query","id:1000", 
+                 "fl","id", 
+                 "group.limit","3")
+             ,"/grouped/id:[2 TO 5]=={'matches':10,'doclist':{'numFound':4,'start':0,'docs':[{'id':'3'},{'id':'4'},{'id':'2'}]}}"
+             ,"/grouped/id:1000=={'matches':10,'doclist':{'numFound':0,'start':0,'docs':[]}}"
+    );
+
     // group.query and offset
     assertJQ(req("fq",filt,  "q","{!func}"+f2, "group","true", "group.query","id:[2 TO 5]", "fl","id", "group.limit","3", "group.offset","2")
        ,"/grouped=={'id:[2 TO 5]':{'matches':10," +
@@ -573,6 +608,34 @@ public class TestGroupingSearch extends SolrTestCaseJ4 {
         , "/grouped/foo_i=={'matches':10,'doclist':"
         + "{'numFound':10,'start':1,'docs':[{'id':'10'},{'id':'3'},{'id':'6'}]}}"
     );
+
+    //////////////////////// grouping where main query matches nothing
+    assertJQ(req("fq", filt, "q", "bogus_s:nothing", "group", "true", "group.field", f, "fl", "id", "group.limit", "2", "group.format", "simple")
+        , "/grouped/foo_i=={'matches':0,'doclist':{'numFound':0,'start':0,'docs':[]}}"
+    );
+    assertJQ(req("fq",filt,  "q","bogus_s:nothing", "group","true",
+        "group.query","id:[2 TO 5]",
+        "group.query","id:[5 TO 5]",
+        "group.field",f,
+        "rows","1",
+        "fl","id", "group.limit","2")
+       ,"/grouped/id:[2 TO 5]=={'matches':0,'doclist':{'numFound':0,'start':0,'docs':[]}}"
+       ,"/grouped/id:[5 TO 5]=={'matches':0,'doclist':{'numFound':0,'start':0,'docs':[]}}"        
+       ,"/grouped/"+f+"=={'matches':0,'groups':[]}"
+    );
+    assertJQ(req("fq",filt,  
+                 "q","bogus_s:nothing", 
+                 "group","true", 
+                 "group.query","id:[2 TO 5]", 
+                 "group.query","id:1000", 
+                 "fl","id", 
+                 "group.limit","3")
+             ,"/grouped/id:[2 TO 5]=={'matches':0,'doclist':{'numFound':0,'start':0,'docs':[]}}"
+             ,"/grouped/id:1000=={'matches':0,'doclist':{'numFound':0,'start':0,'docs':[]}}"
+    );
+
+
+
   }
 
 

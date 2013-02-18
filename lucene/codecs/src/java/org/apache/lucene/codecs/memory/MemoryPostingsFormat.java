@@ -113,7 +113,7 @@ public final class MemoryPostingsFormat extends PostingsFormat {
       this.field = field;
       this.doPackFST = doPackFST;
       this.acceptableOverheadRatio = acceptableOverheadRatio;
-      builder = new Builder<BytesRef>(FST.INPUT_TYPE.BYTE1, 0, 0, true, true, Integer.MAX_VALUE, outputs, null, doPackFST, acceptableOverheadRatio);
+      builder = new Builder<BytesRef>(FST.INPUT_TYPE.BYTE1, 0, 0, true, true, Integer.MAX_VALUE, outputs, null, doPackFST, acceptableOverheadRatio, true);
     }
 
     private class PostingsWriter extends PostingsConsumer {
@@ -269,9 +269,6 @@ public final class MemoryPostingsFormat extends PostingsFormat {
         out.writeVLong(sumDocFreq);
         out.writeVInt(docCount);
         FST<BytesRef> fst = builder.finish();
-        if (doPackFST) {
-          fst = fst.pack(3, Math.max(10, fst.getNodeCount()/4), acceptableOverheadRatio);
-        }
         fst.save(out);
         //System.out.println("finish field=" + field.name + " fp=" + out.getFilePointer());
       }

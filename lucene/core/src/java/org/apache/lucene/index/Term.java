@@ -37,8 +37,8 @@ public final class Term implements Comparable<Term> {
    *
    * <p>WARNING: the provided BytesRef is not copied, but used directly.
    * Therefore the bytes should not be modified after construction, for
-   * example, you should clone a copy rather than pass reused bytes from
-   * a TermsEnum.
+   * example, you should clone a copy by {@link BytesRef#deepCopyOf}
+   * rather than pass reused bytes from a TermsEnum.
    */
   public Term(String fld, BytesRef bytes) {
     field = fld;
@@ -110,6 +110,7 @@ public final class Term implements Comparable<Term> {
     argument, and a positive integer if this term belongs after the argument.
 
     The ordering of terms is first by field, then by text.*/
+  @Override
   public final int compareTo(Term other) {
     if (field.equals(other.field)) {
       return bytes.compareTo(other.bytes);

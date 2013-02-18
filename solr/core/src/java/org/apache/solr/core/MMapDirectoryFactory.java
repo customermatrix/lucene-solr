@@ -22,6 +22,7 @@ import org.apache.lucene.store.LockFactory; // javadocs
 import org.apache.lucene.store.MMapDirectory;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
+import org.apache.solr.core.DirectoryFactory.DirContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,8 +31,8 @@ import java.io.IOException;
 
 
 /**
- *  Directly provide MMapDirectory instead of relying on {@link org.apache.lucene.store.FSDirectory#open}
- *
+ * Directly provide MMapDirectory instead of relying on {@link org.apache.lucene.store.FSDirectory#open}.
+ * <p>
  * Can set the following parameters:
  * <ul>
  *  <li>unmap -- See {@link MMapDirectory#setUseUnmap(boolean)}</li>
@@ -39,13 +40,14 @@ import java.io.IOException;
  * </ul>
  *
  **/
-public class MMapDirectoryFactory extends CachingDirectoryFactory {
+public class MMapDirectoryFactory extends StandardDirectoryFactory {
   private transient static Logger log = LoggerFactory.getLogger(MMapDirectoryFactory.class);
   boolean unmapHack;
   private int maxChunk;
 
   @Override
   public void init(NamedList args) {
+    super.init(args);
     SolrParams params = SolrParams.toSolrParams( args );
     maxChunk = params.getInt("maxChunkSize", MMapDirectory.DEFAULT_MAX_BUFF);
     if (maxChunk <= 0){
@@ -55,7 +57,7 @@ public class MMapDirectoryFactory extends CachingDirectoryFactory {
   }
 
   @Override
-  protected Directory create(String path) throws IOException {
+  protected Directory create(String path, DirContext dirContext) throws IOException {
     MMapDirectory mapDirectory = new MMapDirectory(new File(path), null, maxChunk);
     try {
       mapDirectory.setUseUnmap(unmapHack);

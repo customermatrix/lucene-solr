@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
@@ -49,7 +50,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- *
+ * 
  * All Solr ZooKeeper interactions should go through this class rather than
  * ZooKeeper. This class handles synchronous connects and reconnections.
  *
@@ -58,7 +59,7 @@ public class SolrZkClient {
   // These should *only* be used for debugging or monitoring purposes
   public static final AtomicLong numOpens = new AtomicLong();
   public static final AtomicLong numCloses = new AtomicLong();
-
+  
   static final String NEWL = System.getProperty("line.separator");
 
   static final int DEFAULT_CLIENT_CONNECT_TIMEOUT = 30000;
@@ -69,28 +70,36 @@ public class SolrZkClient {
   private ConnectionManager connManager;
 
   private volatile SolrZooKeeper keeper;
-
-  private ZkCmdExecutor zkCmdExecutor = new ZkCmdExecutor();
+  
+  private ZkCmdExecutor zkCmdExecutor;
 
   private volatile boolean isClosed = false;
   private ZkClientConnectionStrategy zkClientConnectionStrategy;
+  private int zkClientTimeout;
+  
+  public int getZkClientTimeout() {
+    return zkClientTimeout;
+  }
 
   public SolrZkClient(String zkServerAddress, int zkClientTimeout) {
     this(zkServerAddress, zkClientTimeout, new DefaultConnectionStrategy(), null);
   }
-
+  
   public SolrZkClient(String zkServerAddress, int zkClientTimeout, int zkClientConnectTimeout, OnReconnect onReonnect) {
     this(zkServerAddress, zkClientTimeout, new DefaultConnectionStrategy(), onReonnect, zkClientConnectTimeout);
   }
 
   public SolrZkClient(String zkServerAddress, int zkClientTimeout,
-                      ZkClientConnectionStrategy strat, final OnReconnect onReconnect) {
+      ZkClientConnectionStrategy strat, final OnReconnect onReconnect) {
     this(zkServerAddress, zkClientTimeout, strat, onReconnect, DEFAULT_CLIENT_CONNECT_TIMEOUT);
   }
 
   public SolrZkClient(String zkServerAddress, int zkClientTimeout,
-                      ZkClientConnectionStrategy strat, final OnReconnect onReconnect, int clientConnectTimeout) {
+      ZkClientConnectionStrategy strat, final OnReconnect onReconnect, int clientConnectTimeout) {
     this.zkClientConnectionStrategy = strat;
+    this.zkClientTimeout = zkClientTimeout;
+    // we must retry at least as long as the session timeout
+    zkCmdExecutor = new ZkCmdExecutor(zkClientTimeout);
     connManager = new ConnectionManager("ZooKeeperConnection Watcher:"
         + zkServerAddress, this, zkServerAddress, zkClientTimeout, strat, onReconnect);
     try {
@@ -112,14 +121,14 @@ public class SolrZkClient {
           });
     } catch (Throwable e) {
       connManager.close();
-      throw new RuntimeException();
+      throw new RuntimeException(e);
     }
-
+    
     try {
       connManager.waitForConnected(clientConnectTimeout);
     } catch (Throwable e) {
       connManager.close();
-      throw new RuntimeException();
+      throw new RuntimeException(e);
     }
     numOpens.incrementAndGet();
   }
@@ -134,7 +143,7 @@ public class SolrZkClient {
   public boolean isConnected() {
     return keeper != null && keeper.getState() == ZooKeeper.States.CONNECTED;
   }
-
+  
   public void delete(final String path, final int version, boolean retryOnConnLoss)
       throws InterruptedException, KeeperException {
     if (retryOnConnLoss) {
@@ -180,7 +189,7 @@ public class SolrZkClient {
       return keeper.exists(path, watcher);
     }
   }
-
+  
   /**
    * Returns true if path exists
    */
@@ -202,7 +211,7 @@ public class SolrZkClient {
    * Returns path of created node
    */
   public String create(final String path, final byte data[], final List<ACL> acl,
-                       final CreateMode createMode, boolean retryOnConnLoss) throws KeeperException, InterruptedException {
+      final CreateMode createMode, boolean retryOnConnLoss) throws KeeperException, InterruptedException {
     if (retryOnConnLoss) {
       return zkCmdExecutor.retryOperation(new ZkOperation() {
         @Override
@@ -265,12 +274,12 @@ public class SolrZkClient {
       return keeper.setData(path, data, version);
     }
   }
-
+  
   /**
    * Returns path of created node
    */
   public String create(final String path, final byte[] data,
-                       final CreateMode createMode, boolean retryOnConnLoss) throws KeeperException,
+      final CreateMode createMode, boolean retryOnConnLoss) throws KeeperException,
       InterruptedException {
     if (retryOnConnLoss) {
       return zkCmdExecutor.retryOperation(new ZkOperation() {
@@ -287,7 +296,7 @@ public class SolrZkClient {
 
   /**
    * Creates the path in ZooKeeper, creating each node as necessary.
-   *
+   * 
    * e.g. If <code>path=/solr/group/node</code> and none of the nodes, solr,
    * group, node exist, each will be created.
    */
@@ -295,23 +304,23 @@ public class SolrZkClient {
       InterruptedException {
     makePath(path, null, CreateMode.PERSISTENT, retryOnConnLoss);
   }
-
+  
   public void makePath(String path, boolean failOnExists, boolean retryOnConnLoss) throws KeeperException,
       InterruptedException {
     makePath(path, null, CreateMode.PERSISTENT, null, failOnExists, retryOnConnLoss);
   }
-
+  
   public void makePath(String path, File file, boolean failOnExists, boolean retryOnConnLoss)
       throws IOException, KeeperException, InterruptedException {
     makePath(path, FileUtils.readFileToString(file).getBytes("UTF-8"),
         CreateMode.PERSISTENT, null, failOnExists, retryOnConnLoss);
   }
-
+  
   public void makePath(String path, File file, boolean retryOnConnLoss) throws IOException,
       KeeperException, InterruptedException {
     makePath(path, FileUtils.readFileToString(file).getBytes("UTF-8"), retryOnConnLoss);
   }
-
+  
   public void makePath(String path, CreateMode createMode, boolean retryOnConnLoss) throws KeeperException,
       InterruptedException {
     makePath(path, null, createMode, retryOnConnLoss);
@@ -319,7 +328,7 @@ public class SolrZkClient {
 
   /**
    * Creates the path in ZooKeeper, creating each node as necessary.
-   *
+   * 
    * @param data to set on the last zkNode
    */
   public void makePath(String path, byte[] data, boolean retryOnConnLoss) throws KeeperException,
@@ -329,10 +338,10 @@ public class SolrZkClient {
 
   /**
    * Creates the path in ZooKeeper, creating each node as necessary.
-   *
+   * 
    * e.g. If <code>path=/solr/group/node</code> and none of the nodes, solr,
    * group, node exist, each will be created.
-   *
+   * 
    * @param data to set on the last zkNode
    */
   public void makePath(String path, byte[] data, CreateMode createMode, boolean retryOnConnLoss)
@@ -342,35 +351,35 @@ public class SolrZkClient {
 
   /**
    * Creates the path in ZooKeeper, creating each node as necessary.
-   *
+   * 
    * e.g. If <code>path=/solr/group/node</code> and none of the nodes, solr,
    * group, node exist, each will be created.
-   *
+   * 
    * @param data to set on the last zkNode
    */
   public void makePath(String path, byte[] data, CreateMode createMode,
-                       Watcher watcher, boolean retryOnConnLoss) throws KeeperException, InterruptedException {
+      Watcher watcher, boolean retryOnConnLoss) throws KeeperException, InterruptedException {
     makePath(path, data, createMode, watcher, true, retryOnConnLoss);
   }
-
+  
 
 
   /**
    * Creates the path in ZooKeeper, creating each node as necessary.
-   *
+   * 
    * e.g. If <code>path=/solr/group/node</code> and none of the nodes, solr,
    * group, node exist, each will be created.
-   *
+   * 
    * Note: retryOnConnLoss is only respected for the final node - nodes
    * before that are always retried on connection loss.
    */
   public void makePath(String path, byte[] data, CreateMode createMode,
-                       Watcher watcher, boolean failOnExists, boolean retryOnConnLoss) throws KeeperException, InterruptedException {
+      Watcher watcher, boolean failOnExists, boolean retryOnConnLoss) throws KeeperException, InterruptedException {
     if (log.isInfoEnabled()) {
       log.info("makePath: " + path);
     }
     boolean retry = true;
-
+    
     if (path.startsWith("/")) {
       path = path.substring(1, path.length());
     }
@@ -404,7 +413,7 @@ public class SolrZkClient {
             keeper.create(currentPath, bytes, ZooDefs.Ids.OPEN_ACL_UNSAFE, mode);
           }
         } catch (NodeExistsException e) {
-
+          
           if (!failOnExists) {
             // TODO: version ? for now, don't worry about race
             setData(currentPath, data, -1, retryOnConnLoss);
@@ -412,7 +421,7 @@ public class SolrZkClient {
             exists(currentPath, watcher, retryOnConnLoss);
             return;
           }
-
+          
           // ignore unless it's the last node in the path
           if (i == paths.length - 1) {
             throw e;
@@ -446,7 +455,7 @@ public class SolrZkClient {
 
   /**
    * Write file to ZooKeeper - default system encoding used.
-   *
+   * 
    * @param path path to upload file to e.g. /solr/conf/solrconfig.xml
    * @param file path to file to be uploaded
    */
@@ -459,6 +468,28 @@ public class SolrZkClient {
     String data = FileUtils.readFileToString(file);
     setData(path, data.getBytes("UTF-8"), retryOnConnLoss);
   }
+
+  /**
+   * Returns the baseURL corrisponding to a given node's nodeName -- 
+   * NOTE: does not (currently) imply that the nodeName (or resulting 
+   * baseURL) exists in the cluster.
+   * @lucene.experimental
+   */
+  public String getBaseUrlForNodeName(final String nodeName) {
+    final int _offset = nodeName.indexOf("_");
+    if (_offset < 0) {
+      throw new IllegalArgumentException("nodeName does not contain expected '_' seperator: " + nodeName);
+    }
+    final String hostAndPort = nodeName.substring(0,_offset);
+    try {
+      final String path = URLDecoder.decode(nodeName.substring(1+_offset),
+                                            "UTF-8");
+      return "http://" + hostAndPort + (path.isEmpty() ? "" : ("/" + path));
+    } catch (UnsupportedEncodingException e) {
+      throw new IllegalStateException("JVM Does not seem to support UTF-8", e);
+    }
+  }
+
 
   /**
    * Fills string with printout of current ZooKeeper layout.
@@ -480,7 +511,7 @@ public class SolrZkClient {
             // this is the cluster state in xml format - lets pretty print
             dataString = prettyPrint(dataString);
           }
-
+          
           string.append(dent + "DATA:\n" + dent + "    "
               + dataString.replaceAll("\n", "\n" + dent + "    ") + NEWL);
         } else {
@@ -514,7 +545,7 @@ public class SolrZkClient {
     printLayout("/", 0, sb);
     System.out.println(sb.toString());
   }
-
+  
   public static String prettyPrint(String input, int indent) {
     try {
       Source xmlInput = new StreamSource(new StringReader(input));
@@ -530,7 +561,7 @@ public class SolrZkClient {
       throw new RuntimeException("Problem pretty printing XML", e);
     }
   }
-
+  
   private static String prettyPrint(String input) {
     return prettyPrint(input, 2);
   }
@@ -554,19 +585,19 @@ public class SolrZkClient {
    * Allows package private classes to update volatile ZooKeeper.
    */
   void updateKeeper(SolrZooKeeper keeper) throws InterruptedException {
-    SolrZooKeeper oldKeeper = this.keeper;
-    this.keeper = keeper;
-    if (oldKeeper != null) {
-      oldKeeper.close();
-    }
-    // we might have been closed already
-    if (isClosed) this.keeper.close();
+   SolrZooKeeper oldKeeper = this.keeper;
+   this.keeper = keeper;
+   if (oldKeeper != null) {
+     oldKeeper.close();
+   }
+   // we might have been closed already
+   if (isClosed) this.keeper.close();
   }
-
+  
   public SolrZooKeeper getSolrZooKeeper() {
     return keeper;
   }
-
+  
   private void closeKeeper(SolrZooKeeper keeper) {
     if (keeper != null) {
       try {
@@ -590,6 +621,8 @@ public class SolrZkClient {
       return;
     }
     for (String string : children) {
+      // we can't clean the built-in zookeeper node
+      if (path.equals("/") && string.equals("zookeeper")) continue;
       if (path.equals("/")) {
         clean(path + string);
       } else {

@@ -20,6 +20,7 @@ package org.apache.solr.client.solrj.impl;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -63,11 +64,12 @@ public class CloudSolrServer extends SolrServer {
   private HttpClient myClient;
   Random rand = new Random();
   
+  private Object cachLock = new Object();
   // since the state shouldn't change often, should be very cheap reads
-  private volatile List<String> urlList;
-  
-  private volatile List<String> leaderUrlList;
-  private volatile List<String> replicasList;
+  private Map<String,List<String>> urlLists = new HashMap<String,List<String>>();
+  private Map<String,List<String>> leaderUrlLists = new HashMap<String,List<String>>();
+
+  private Map<String,List<String>> replicasLists = new HashMap<String,List<String>>();
   
   private volatile int lastClusterStateHashCode;
   
@@ -161,9 +163,10 @@ public class CloudSolrServer extends SolrServer {
   }
 
   @Override
-  public NamedList<Object> request(SolrRequest request) throws SolrServerException, IOException {
+  public NamedList<Object> request(SolrRequest request)
+      throws SolrServerException, IOException {
     connect();
-
+    
     // TODO: if you can hash here, you could favor the shard leader
     
     ClusterState clusterState = zkStateReader.getClusterState();
@@ -174,85 +177,111 @@ public class CloudSolrServer extends SolrServer {
       sendToLeaders = true;
       replicas = new ArrayList<String>();
     }
-
+    
     SolrParams reqParams = request.getParams();
     if (reqParams == null) {
       reqParams = new ModifiableSolrParams();
     }
-    String collection = reqParams.get("collection", defaultCollection);
-    
-    if (collection == null) {
-      throw new SolrServerException("No collection param specified on request and no default collection has been set.");
-    }
-    
-    // Extract each comma separated collection name and store in a List.
-    List<String> collectionList = StrUtils.splitSmart(collection, ",", true);
-    
-    // TODO: not a big deal because of the caching, but we could avoid looking at every shard
-    // when getting leaders if we tweaked some things
-    
-    // Retrieve slices from the cloud state and, for each collection specified,
-    // add it to the Map of slices.
-    Map<String,Slice> slices = new HashMap<String,Slice>();
-    for (int i = 0; i < collectionList.size(); i++) {
-      String coll= collectionList.get(i);
-      ClientUtils.appendMap(coll, slices, clusterState.getSlices(coll));
-    }
-
-    Set<String> liveNodes = clusterState.getLiveNodes();
-
-    if (sendToLeaders && leaderUrlList == null || !sendToLeaders && urlList == null || clusterState.hashCode() != this.lastClusterStateHashCode) {
-    
-      // build a map of unique nodes
-      // TODO: allow filtering by group, role, etc
-      Map<String,ZkNodeProps> nodes = new HashMap<String,ZkNodeProps>();
-      List<String> urlList = new ArrayList<String>();
-      for (Slice slice : slices.values()) {
-        for (ZkNodeProps nodeProps : slice.getReplicasMap().values()) {
-          ZkCoreNodeProps coreNodeProps = new ZkCoreNodeProps(nodeProps);
-          String node = coreNodeProps.getNodeName();
-          if (!liveNodes.contains(coreNodeProps.getNodeName())
-              || !coreNodeProps.getState().equals(ZkStateReader.ACTIVE)) continue;
-          if (nodes.put(node, nodeProps) == null) {
-            if (!sendToLeaders || (sendToLeaders && coreNodeProps.isLeader())) {
-              String url = coreNodeProps.getCoreUrl();
-              urlList.add(url);
-            } else if (sendToLeaders) {
-              String url = coreNodeProps.getCoreUrl();
-              replicas.add(url);
+    List<String> theUrlList = new ArrayList<String>();
+    if (request.getPath().equals("/admin/collections")) {
+      Set<String> liveNodes = clusterState.getLiveNodes();
+      for (String liveNode : liveNodes) {
+        int splitPointBetweenHostPortAndContext = liveNode.indexOf("_");
+        theUrlList.add("http://"
+            + liveNode.substring(0, splitPointBetweenHostPortAndContext) + "/"
+            + liveNode.substring(splitPointBetweenHostPortAndContext + 1));
+      }
+    } else {
+      String collection = reqParams.get("collection", defaultCollection);
+      
+      if (collection == null) {
+        throw new SolrServerException(
+            "No collection param specified on request and no default collection has been set.");
+      }
+      
+      // Extract each comma separated collection name and store in a List.
+      List<String> collectionList = StrUtils.splitSmart(collection, ",", true);
+      
+      // TODO: not a big deal because of the caching, but we could avoid looking
+      // at every shard
+      // when getting leaders if we tweaked some things
+      
+      // Retrieve slices from the cloud state and, for each collection
+      // specified,
+      // add it to the Map of slices.
+      Map<String,Slice> slices = new HashMap<String,Slice>();
+      for (String collectionName : collectionList) {
+        ClientUtils.addSlices(slices, collectionName,
+            clusterState.getSlices(collectionName), true);
+      }
+      Set<String> liveNodes = clusterState.getLiveNodes();
+      
+      synchronized (cachLock) {
+        List<String> leaderUrlList = leaderUrlLists.get(collection);
+        List<String> urlList = urlLists.get(collection);
+        List<String> replicasList = replicasLists.get(collection);
+        
+        if ((sendToLeaders && leaderUrlList == null)
+            || (!sendToLeaders && urlList == null)
+            || clusterState.hashCode() != this.lastClusterStateHashCode) {
+          // build a map of unique nodes
+          // TODO: allow filtering by group, role, etc
+          Map<String,ZkNodeProps> nodes = new HashMap<String,ZkNodeProps>();
+          List<String> urlList2 = new ArrayList<String>();
+          for (Slice slice : slices.values()) {
+            for (ZkNodeProps nodeProps : slice.getReplicasMap().values()) {
+              ZkCoreNodeProps coreNodeProps = new ZkCoreNodeProps(nodeProps);
+              String node = coreNodeProps.getNodeName();
+              if (!liveNodes.contains(coreNodeProps.getNodeName())
+                  || !coreNodeProps.getState().equals(ZkStateReader.ACTIVE)) continue;
+              if (nodes.put(node, nodeProps) == null) {
+                if (!sendToLeaders
+                    || (sendToLeaders && coreNodeProps.isLeader())) {
+                  String url = coreNodeProps.getCoreUrl();
+                  urlList2.add(url);
+                } else if (sendToLeaders) {
+                  String url = coreNodeProps.getCoreUrl();
+                  replicas.add(url);
+                }
+              }
             }
           }
+          
+          if (sendToLeaders) {
+            this.leaderUrlLists.put(collection, urlList2);
+            leaderUrlList = urlList2;
+            this.replicasLists.put(collection, replicas);
+            replicasList = replicas;
+          } else {
+            this.urlLists.put(collection, urlList2);
+            urlList = urlList2;
+          }
+          this.lastClusterStateHashCode = clusterState.hashCode();
+        }
+        
+        if (sendToLeaders) {
+          theUrlList = new ArrayList<String>(leaderUrlList.size());
+          theUrlList.addAll(leaderUrlList);
+        } else {
+          theUrlList = new ArrayList<String>(urlList.size());
+          theUrlList.addAll(urlList);
+        }
+        Collections.shuffle(theUrlList, rand);
+        if (sendToLeaders) {
+          ArrayList<String> theReplicas = new ArrayList<String>(
+              replicasList.size());
+          theReplicas.addAll(replicasList);
+          Collections.shuffle(theReplicas, rand);
+          // System.out.println("leaders:" + theUrlList);
+          // System.out.println("replicas:" + theReplicas);
+          theUrlList.addAll(theReplicas);
         }
       }
-      if (sendToLeaders) {
-        this.leaderUrlList = urlList; 
-        this.replicasList = replicas;
-      } else {
-        this.urlList = urlList;
-      }
-      this.lastClusterStateHashCode = clusterState.hashCode();
     }
     
-    List<String> theUrlList;
-    if (sendToLeaders) {
-      theUrlList = new ArrayList<String>(leaderUrlList.size());
-      theUrlList.addAll(leaderUrlList);
-    } else {
-      theUrlList = new ArrayList<String>(urlList.size());
-      theUrlList.addAll(urlList);
-    }
-    Collections.shuffle(theUrlList, rand);
-    if (sendToLeaders) {
-      ArrayList<String> theReplicas = new ArrayList<String>(replicasList.size());
-      theReplicas.addAll(replicasList);
-      Collections.shuffle(theReplicas, rand);
-    //  System.out.println("leaders:" + theUrlList);
-    //  System.out.println("replicas:" + theReplicas);
-      theUrlList.addAll(theReplicas);
-    }
- 
-   // System.out.println("########################## MAKING REQUEST TO " + theUrlList);
- 
+    // System.out.println("########################## MAKING REQUEST TO " +
+    // theUrlList);
+    
     LBHttpSolrServer.Req req = new LBHttpSolrServer.Req(request, theUrlList);
     LBHttpSolrServer.Rsp rsp = lbServer.request(req);
     return rsp.getResponse();
@@ -276,15 +305,19 @@ public class CloudSolrServer extends SolrServer {
     return lbServer;
   }
 
-  List<String> getUrlList() {
-    return urlList;
+  // for tests
+  Map<String,List<String>> getUrlLists() {
+    return urlLists;
   }
 
-  List<String> getLeaderUrlList() {
-    return leaderUrlList;
+  //for tests
+  Map<String,List<String>> getLeaderUrlLists() {
+    return leaderUrlLists;
   }
 
-  List<String> getReplicasList() {
-    return replicasList;
+  //for tests
+  Map<String,List<String>> getReplicasLists() {
+    return replicasLists;
   }
+
 }

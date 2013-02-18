@@ -49,18 +49,26 @@ public class ExtendedQueryBase extends Query implements ExtendedQuery {
     this.cost = cost;
   }
 
+  @Override
   public int getCost() {
     return cost;
   }
 
   public String getOptions() {
+    return getOptionsString(this);
+  }
+
+  public static String getOptionsString(ExtendedQuery q) {
     StringBuilder sb = new StringBuilder();
-    if (!cache) {
+    if (!q.getCache()) {
       sb.append("{!cache=false");
-      sb.append(" cost=");
-      sb.append(cost);
+      int cost = q.getCost();
+      if (cost != 0) {
+        sb.append(" cost=");
+        sb.append(q.getCost());
+      }
       sb.append("}");
-    } else if (cacheSep) {
+    } else if (q.getCacheSep()) {
       sb.append("{!cache=sep");
       sb.append("}");
     }

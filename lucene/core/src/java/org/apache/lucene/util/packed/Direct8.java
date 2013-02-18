@@ -37,16 +37,13 @@ final class Direct8 extends PackedInts.MutableImpl {
     values = new byte[valueCount];
   }
 
-  Direct8(DataInput in, int valueCount) throws IOException {
+  Direct8(int packedIntsVersion, DataInput in, int valueCount) throws IOException {
     this(valueCount);
-    for (int i = 0; i < valueCount; ++i) {
-      values[i] = in.readByte();
-    }
-    final int mod = valueCount % 8;
-    if (mod != 0) {
-      for (int i = mod; i < 8; ++i) {
-        in.readByte();
-      }
+    in.readBytes(values, 0, valueCount);
+    // because packed ints have not always been byte-aligned
+    final int remaining = (int) (PackedInts.Format.PACKED.byteCount(packedIntsVersion, valueCount, 8) - 1L * valueCount);
+    for (int i = 0; i < remaining; ++i) {
+      in.readByte();
     }
   }
 
@@ -55,14 +52,17 @@ final class Direct8 extends PackedInts.MutableImpl {
     return values[index] & 0xFFL;
   }
 
+  @Override
   public void set(final int index, final long value) {
     values[index] = (byte) (value);
   }
 
+  @Override
   public long ramBytesUsed() {
     return RamUsageEstimator.sizeOf(values);
   }
 
+  @Override
   public void clear() {
     Arrays.fill(values, (byte) 0L);
   }
@@ -90,6 +90,7 @@ final class Direct8 extends PackedInts.MutableImpl {
     return gets;
   }
 
+  @Override
   public int set(int index, long[] arr, int off, int len) {
     assert len > 0 : "len must be > 0 (got " + len + ")";
     assert index >= 0 && index < valueCount;

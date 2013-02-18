@@ -16,7 +16,6 @@
  */
 package org.apache.solr.search;
 
-import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.Sort;
@@ -110,7 +109,7 @@ public abstract class QParser {
    * there was no input (e.g. no query string) to parse.
    * @see #getQuery()
    **/
-  public abstract Query parse() throws ParseException;
+  public abstract Query parse() throws SyntaxError;
 
   public SolrParams getLocalParams() {
     return localParams;
@@ -148,7 +147,7 @@ public abstract class QParser {
    * Returns the resulting query from this QParser, calling parse() only the
    * first time and caching the Query result.
    */
-  public Query getQuery() throws ParseException {
+  public Query getQuery() throws SyntaxError {
     if (query==null) {
       query=parse();
 
@@ -184,9 +183,9 @@ public abstract class QParser {
     }
   }
 
-  private void checkRecurse() throws ParseException {
+  private void checkRecurse() throws SyntaxError {
     if (recurseCount++ >= 100) {
-      throw new ParseException("Infinite Recursion detected parsing query '" + qstr + "'");
+      throw new SyntaxError("Infinite Recursion detected parsing query '" + qstr + "'");
     }
   }
 
@@ -207,7 +206,7 @@ public abstract class QParser {
   }
 
   /** Create a new QParser for parsing an embedded sub-query */
-  public QParser subQuery(String q, String defaultType) throws ParseException {
+  public QParser subQuery(String q, String defaultType) throws SyntaxError {
     checkRecurse();
     if (defaultType == null && localParams != null) {
       // if not passed, try and get the defaultType from local params
@@ -223,7 +222,7 @@ public abstract class QParser {
    * use common params to look up pageScore and pageDoc in global params
    * @return the ScoreDoc
    */
-  public ScoreDoc getPaging() throws ParseException
+  public ScoreDoc getPaging() throws SyntaxError
   {
     return null;
 
@@ -256,7 +255,7 @@ public abstract class QParser {
    * @param schema
    * @return the sort specification
    */
-  public SortSpec getSort(boolean useGlobalParams, IndexSchema schema) throws ParseException {
+  public SortSpec getSort(boolean useGlobalParams, IndexSchema schema) throws SyntaxError {
     getQuery(); // ensure query is parsed first
 
     String sortStr = null;
@@ -314,7 +313,7 @@ public abstract class QParser {
     return new String[]{};
   }
 
-  public Query getHighlightQuery() throws ParseException {
+  public Query getHighlightQuery() throws SyntaxError {
     Query query = getQuery();
     return query instanceof WrappedQuery ? ((WrappedQuery)query).getWrappedQuery() : query;
   }
@@ -332,7 +331,7 @@ public abstract class QParser {
    * if qstr=<code>{!prefix f=myfield}foo</code>
    * then the prefix query parser will be used.
    */
-  public static QParser getParser(String qstr, String defaultParser, SolrQueryRequest req) throws ParseException {
+  public static QParser getParser(String qstr, String defaultParser, SolrQueryRequest req) throws SyntaxError {
     // SolrParams localParams = QueryParsing.getLocalParams(qstr, req.getParams());
 
     String stringIncludingLocalParams = qstr;

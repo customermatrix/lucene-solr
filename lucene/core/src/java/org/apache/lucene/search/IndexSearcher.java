@@ -180,19 +180,36 @@ public class IndexSearcher {
     return reader;
   }
 
-  /** Sugar for <code>.getIndexReader().document(docID)</code> */
+  /** 
+   * Sugar for <code>.getIndexReader().document(docID)</code> 
+   * @see IndexReader#document(int) 
+   */
   public Document doc(int docID) throws IOException {
     return reader.document(docID);
   }
 
-  /** Sugar for <code>.getIndexReader().document(docID, fieldVisitor)</code> */
+  /** 
+   * Sugar for <code>.getIndexReader().document(docID, fieldVisitor)</code>
+   * @see IndexReader#document(int, StoredFieldVisitor) 
+   */
   public void doc(int docID, StoredFieldVisitor fieldVisitor) throws IOException {
     reader.document(docID, fieldVisitor);
   }
 
-  /** Sugar for <code>.getIndexReader().document(docID, fieldsToLoad)</code> */
-  public final Document document(int docID, Set<String> fieldsToLoad) throws IOException {
+  /** 
+   * Sugar for <code>.getIndexReader().document(docID, fieldsToLoad)</code>
+   * @see IndexReader#document(int, Set) 
+   */
+  public Document doc(int docID, Set<String> fieldsToLoad) throws IOException {
     return reader.document(docID, fieldsToLoad);
+  }
+  
+  /**
+   * @deprecated Use {@link #doc(int, Set)} instead.
+   */
+  @Deprecated
+  public final Document document(int docID, Set<String> fieldsToLoad) throws IOException {
+    return doc(docID, fieldsToLoad);
   }
 
   /** Expert: Set the Similarity implementation used by this IndexSearcher.
@@ -500,7 +517,7 @@ public class IndexSearcher {
                                 boolean doDocScores, boolean doMaxScore)
       throws IOException {
 
-    if (sort == null) throw new NullPointerException();
+    if (sort == null) throw new NullPointerException("Sort must not be null");
     
     if (executor == null) {
       // use all leaves here!
@@ -687,6 +704,7 @@ public class IndexSearcher {
       this.slice = slice;
     }
 
+    @Override
     public TopDocs call() throws IOException {
       final TopDocs docs = searcher.search(Arrays.asList(slice.leaves), weight, after, nDocs);
       final ScoreDoc[] scoreDocs = docs.scoreDocs;
@@ -748,7 +766,7 @@ public class IndexSearcher {
     
       @Override
       public int advance(int target) {
-        throw new UnsupportedOperationException();
+        throw new UnsupportedOperationException("FakeScorer doesn't support advance(int)");
       }
 
       @Override
@@ -757,13 +775,13 @@ public class IndexSearcher {
       }
 
       @Override
-      public float freq() {
-        throw new UnsupportedOperationException();
+      public int freq() {
+        throw new UnsupportedOperationException("FakeScorer doesn't support freq()");
       }
 
       @Override
       public int nextDoc() {
-        throw new UnsupportedOperationException();
+        throw new UnsupportedOperationException("FakeScorer doesn't support nextDoc()");
       }
     
       @Override
@@ -774,6 +792,7 @@ public class IndexSearcher {
 
     private final FakeScorer fakeScorer = new FakeScorer();
 
+    @Override
     public TopFieldDocs call() throws IOException {
       assert slice.leaves.length == 1;
       final TopFieldDocs docs = searcher.search(Arrays.asList(slice.leaves),
@@ -816,6 +835,7 @@ public class IndexSearcher {
       this.service = new ExecutorCompletionService<T>(executor);
     }
 
+    @Override
     public boolean hasNext() {
       return numTasks > 0;
     }
@@ -825,9 +845,10 @@ public class IndexSearcher {
       ++numTasks;
     }
 
+    @Override
     public T next() {
-      if(!this.hasNext())
-        throw new NoSuchElementException();
+      if(!this.hasNext()) 
+        throw new NoSuchElementException("next() is called but hasNext() returned false");
       try {
         return service.take().get();
       } catch (InterruptedException e) {
@@ -839,10 +860,12 @@ public class IndexSearcher {
       }
     }
 
+    @Override
     public void remove() {
       throw new UnsupportedOperationException();
     }
 
+    @Override
     public Iterator<T> iterator() {
       // use the shortcut here - this is only used in a private context
       return this;

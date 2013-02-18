@@ -58,7 +58,6 @@ final class DocFieldProcessor extends DocConsumer {
   int hashMask = 1;
   int totalFieldCount;
 
-  float docBoost;
   int fieldGen;
   final DocumentsWriterPerThread.DocState docState;
 
@@ -314,6 +313,7 @@ final class DocFieldProcessor extends DocConsumer {
   }
 
   private static final Comparator<DocFieldProcessorPerField> fieldsComp = new Comparator<DocFieldProcessorPerField>() {
+    @Override
     public int compare(DocFieldProcessorPerField o1, DocFieldProcessorPerField o2) {
       return o1.fieldInfo.name.compareTo(o2.fieldInfo.name);
     }

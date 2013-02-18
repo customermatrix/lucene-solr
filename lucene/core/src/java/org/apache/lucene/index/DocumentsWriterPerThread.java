@@ -36,6 +36,7 @@ import org.apache.lucene.util.ByteBlockPool.DirectTrackingAllocator;
 import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.Counter;
 import org.apache.lucene.util.InfoStream;
+import org.apache.lucene.util.IntBlockPool;
 import org.apache.lucene.util.MutableBits;
 import org.apache.lucene.util.RamUsageEstimator;
 
@@ -186,6 +187,7 @@ class DocumentsWriterPerThread {
   DeleteSlice deleteSlice;
   private final NumberFormat nf = NumberFormat.getInstance(Locale.ROOT);
   final Allocator byteBlockAllocator;
+  final IntBlockPool.Allocator intBlockAllocator;
 
   
   public DocumentsWriterPerThread(Directory directory, DocumentsWriter parent,
@@ -201,9 +203,12 @@ class DocumentsWriterPerThread {
     this.docState.similarity = parent.indexWriter.getConfig().getSimilarity();
     bytesUsed = Counter.newCounter();
     byteBlockAllocator = new DirectTrackingAllocator(bytesUsed);
-    consumer = indexingChain.getChain(this);
     pendingDeletes = new BufferedDeletes();
+    intBlockAllocator = new IntBlockAllocator(bytesUsed);
     initialize();
+    // this should be the last call in the ctor 
+    // it really sucks that we need to pull this within the ctor and pass this ref to the chain!
+    consumer = indexingChain.getChain(this);
   }
   
   public DocumentsWriterPerThread(DocumentsWriterPerThread other, FieldInfos.Builder fieldInfos) {
@@ -291,6 +296,7 @@ class DocumentsWriterPerThread {
       infoStream.message("DWPT", Thread.currentThread().getName() + " update delTerm=" + delTerm + " docID=" + docState.docID + " seg=" + segmentInfo.name);
     }
     int docCount = 0;
+    boolean allDocsIndexed = false;
     try {
       for(Iterable<? extends IndexableField> doc : docs) {
         docState.doc = doc;
@@ -304,20 +310,7 @@ class DocumentsWriterPerThread {
         } finally {
           if (!success) {
             // An exc is being thrown...
-
             if (!aborting) {
-              // One of the documents hit a non-aborting
-              // exception (eg something happened during
-              // analysis).  We now go and mark any docs
-              // from this batch that we had already indexed
-              // as deleted:
-              int docID = docState.docID;
-              final int endDocID = docID - docCount;
-              while (docID > endDocID) {
-                deleteDocID(docID);
-                docID--;
-              }
-
               // Incr here because finishDocument will not
               // be called (because an exc is being thrown):
               numDocsInRAM++;
@@ -338,6 +331,7 @@ class DocumentsWriterPerThread {
 
         finishDocument(null);
       }
+      allDocsIndexed = true;
 
       // Apply delTerm only after all indexing has
       // succeeded, but apply it only to docs prior to when
@@ -349,6 +343,16 @@ class DocumentsWriterPerThread {
       }
 
     } finally {
+      if (!allDocsIndexed && !aborting) {
+        // the iterator threw an exception that is not aborting 
+        // go and mark all docs from this block as deleted
+        int docID = numDocsInRAM-1;
+        final int endDocID = docID - docCount;
+        while (docID > endDocID) {
+          deleteDocID(docID);
+          docID--;
+        }
+      }
       docState.clear();
     }
 
@@ -577,6 +581,9 @@ class DocumentsWriterPerThread {
           infoStream.message("DWPT", "flush: write " + delCount + " deletes gen=" + flushedSegment.segmentInfo.getDelGen());
         }
 
+        // TODO: we should prune the segment if it's 100%
+        // deleted... but merge will also catch it.
+
         // TODO: in the NRT case it'd be better to hand
         // this del vector over to the
         // shortly-to-be-opened SegmentReader and let it
@@ -619,23 +626,30 @@ class DocumentsWriterPerThread {
    * getTerms/getTermsIndex requires <= 32768 */
   final static int MAX_TERM_LENGTH_UTF8 = BYTE_BLOCK_SIZE-2;
 
-  /* Initial chunks size of the shared int[] blocks used to
-     store postings data */
-  final static int INT_BLOCK_SHIFT = 13;
-  final static int INT_BLOCK_SIZE = 1 << INT_BLOCK_SHIFT;
-  final static int INT_BLOCK_MASK = INT_BLOCK_SIZE - 1;
 
-  /* Allocate another int[] from the shared pool */
-  int[] getIntBlock() {
-    int[] b = new int[INT_BLOCK_SIZE];
-    bytesUsed.addAndGet(INT_BLOCK_SIZE*RamUsageEstimator.NUM_BYTES_INT);
-    return b;
+  private static class IntBlockAllocator extends IntBlockPool.Allocator {
+    private final Counter bytesUsed;
+    
+    public IntBlockAllocator(Counter bytesUsed) {
+      super(IntBlockPool.INT_BLOCK_SIZE);
+      this.bytesUsed = bytesUsed;
+    }
+    
+    /* Allocate another int[] from the shared pool */
+    @Override
+    public int[] getIntBlock() {
+      int[] b = new int[IntBlockPool.INT_BLOCK_SIZE];
+      bytesUsed.addAndGet(IntBlockPool.INT_BLOCK_SIZE
+          * RamUsageEstimator.NUM_BYTES_INT);
+      return b;
+    }
+    
+    @Override
+    public void recycleIntBlocks(int[][] blocks, int offset, int length) {
+      bytesUsed.addAndGet(-(length * (IntBlockPool.INT_BLOCK_SIZE * RamUsageEstimator.NUM_BYTES_INT)));
+    }
+    
   }
-  
-  void recycleIntBlocks(int[][] blocks, int offset, int length) {
-    bytesUsed.addAndGet(-(length *(INT_BLOCK_SIZE*RamUsageEstimator.NUM_BYTES_INT)));
-  }
-
   PerDocWriteState newPerDocWriteState(String segmentSuffix) {
     assert segmentInfo != null;
     return new PerDocWriteState(infoStream, directory, segmentInfo, bytesUsed, segmentSuffix, IOContext.DEFAULT);

@@ -27,6 +27,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.ArrayList;
 
+import org.apache.lucene.index.MergePolicy.MergeTrigger;
+
 
 /**
  *  Merges segments of approximately equal size, subject to
@@ -267,6 +269,7 @@ public class TieredMergePolicy extends MergePolicy {
   }
 
   private class SegmentByteSizeDescending implements Comparator<SegmentInfoPerCommit> {
+    @Override
     public int compare(SegmentInfoPerCommit o1, SegmentInfoPerCommit o2) {
       try {
         final long sz1 = size(o1);
@@ -298,7 +301,7 @@ public class TieredMergePolicy extends MergePolicy {
   }
 
   @Override
-  public MergeSpecification findMerges(SegmentInfos infos) throws IOException {
+  public MergeSpecification findMerges(MergeTrigger mergeTrigger, SegmentInfos infos) throws IOException {
     if (verbose()) {
       message("findMerges: " + infos.size() + " segments");
     }

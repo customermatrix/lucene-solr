@@ -234,8 +234,11 @@ public class CheckIndex {
       TermIndexStatus() {
       }
 
-      /** Total term count */
+      /** Number of terms with at least one live doc. */
       public long termCount = 0L;
+
+      /** Number of terms with zero live docs docs. */
+      public long delTermCount = 0L;
 
       /** Total frequency across all terms. */
       public long totFreq = 0L;
@@ -756,7 +759,7 @@ public class CheckIndex {
       final TermsEnum termsEnum = terms.iterator(null);
       
       boolean hasOrd = true;
-      final long termCountStart = status.termCount;
+      final long termCountStart = status.delTermCount + status.termCount;
       
       BytesRef lastTerm = null;
       
@@ -787,7 +790,6 @@ public class CheckIndex {
         if (docFreq <= 0) {
           throw new RuntimeException("docfreq: " + docFreq + " is out of bounds");
         }
-        status.totFreq += docFreq;
         sumDocFreq += docFreq;
         
         docs = termsEnum.docs(liveDocs, docs);
@@ -802,14 +804,12 @@ public class CheckIndex {
           }
           
           if (hasOrd) {
-            final long ordExpected = status.termCount - termCountStart;
+            final long ordExpected = status.delTermCount + status.termCount - termCountStart;
             if (ord != ordExpected) {
               throw new RuntimeException("ord mismatch: TermsEnum has ord=" + ord + " vs actual=" + ordExpected);
             }
           }
         }
-        
-        status.termCount++;
         
         final DocsEnum docs2;
         if (postings != null) {
@@ -826,6 +826,7 @@ public class CheckIndex {
           if (doc == DocIdSetIterator.NO_MORE_DOCS) {
             break;
           }
+          status.totFreq++;
           visitedDocs.set(doc);
           int freq = -1;
           if (hasFreqs) {
@@ -889,6 +890,12 @@ public class CheckIndex {
           }
         }
         
+        if (docCount != 0) {
+          status.termCount++;
+        } else {
+          status.delTermCount++;
+        }
+        
         final long totalTermFreq2 = termsEnum.totalTermFreq();
         final boolean hasTotalTermFreq = hasFreqs && totalTermFreq2 != -1;
         
@@ -904,7 +911,7 @@ public class CheckIndex {
               totalTermFreq += docsNoDel.freq();
             }
           } else {
-            final DocsEnum docsNoDel = termsEnum.docs(null, docs, 0);
+            final DocsEnum docsNoDel = termsEnum.docs(null, docs, DocsEnum.FLAG_NONE);
             docCount = 0;
             totalTermFreq = -1;
             while(docsNoDel.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
@@ -990,7 +997,7 @@ public class CheckIndex {
         } else {
           for(int idx=0;idx<7;idx++) {
             final int skipDocID = (int) (((idx+1)*(long) maxDoc)/8);
-            docs = termsEnum.docs(liveDocs, docs, 0);
+            docs = termsEnum.docs(liveDocs, docs, DocsEnum.FLAG_NONE);
             final int docID = docs.advance(skipDocID);
             if (docID == DocIdSetIterator.NO_MORE_DOCS) {
               break;
@@ -1056,7 +1063,7 @@ public class CheckIndex {
           }
           
           int expectedDocFreq = termsEnum.docFreq();
-          DocsEnum d = termsEnum.docs(null, null, 0);
+          DocsEnum d = termsEnum.docs(null, null, DocsEnum.FLAG_NONE);
           int docFreq = 0;
           while (d.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
             docFreq++;
@@ -1069,11 +1076,11 @@ public class CheckIndex {
         // check unique term count
         long termCount = -1;
         
-        if (status.termCount-termCountStart > 0) {
+        if ((status.delTermCount+status.termCount)-termCountStart > 0) {
           termCount = fields.terms(field).size();
           
-          if (termCount != -1 && termCount != status.termCount - termCountStart) {
-            throw new RuntimeException("termCount mismatch " + termCount + " vs " + (status.termCount - termCountStart));
+          if (termCount != -1 && termCount != status.delTermCount + status.termCount - termCountStart) {
+            throw new RuntimeException("termCount mismatch " + (status.delTermCount + termCount) + " vs " + (status.termCount - termCountStart));
           }
         }
         
@@ -1097,7 +1104,7 @@ public class CheckIndex {
                 throw new RuntimeException("seek to existing term " + seekTerms[i] + " failed");
               }
               
-              docs = termsEnum.docs(liveDocs, docs, 0);
+              docs = termsEnum.docs(liveDocs, docs, DocsEnum.FLAG_NONE);
               if (docs == null) {
                 throw new RuntimeException("null DocsEnum from to existing term " + seekTerms[i]);
               }
@@ -1115,7 +1122,7 @@ public class CheckIndex {
               }
               
               totDocFreq += termsEnum.docFreq();
-              docs = termsEnum.docs(null, docs, 0);
+              docs = termsEnum.docs(null, docs, DocsEnum.FLAG_NONE);
               if (docs == null) {
                 throw new RuntimeException("null DocsEnum from to existing term " + seekTerms[i]);
               }
@@ -1159,8 +1166,8 @@ public class CheckIndex {
       throw new RuntimeException("invalid termCount: -1");
     }
     
-    if (status.termCount != uniqueTermCountAllFields) {
-      throw new RuntimeException("termCount mismatch " + uniqueTermCountAllFields + " vs " + (status.termCount));
+    if (status.termCount + status.delTermCount != uniqueTermCountAllFields) {
+      throw new RuntimeException("termCount mismatch " + uniqueTermCountAllFields + " vs " + (status.termCount + status.delTermCount));
     }
 
     if (doPrint) {

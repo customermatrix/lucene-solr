@@ -129,124 +129,124 @@ var logging_handler = function( response, text_status, xhr )
   self
       .die( 'clear' )
       .live
-      (
-          'clear',
-          function( event )
-          {
-            $( '.open', this )
-                .removeClass( 'open' );
-          }
-      );
+  (
+      'clear',
+      function( event )
+      {
+        $( '.open', this )
+            .removeClass( 'open' );
+      }
+  );
 
   $( 'li:last-child', this )
       .addClass( 'jstree-last' );
 
   $( 'li.jstree-leaf > a', this )
       .each
-      (
-          function( index, element )
+  (
+      function( index, element )
+      {
+        element = $( element );
+        var level = element.attr( 'rel' );
+
+        if( level )
+        {
+          var selector = $( '.selector-holder', element.closest( 'li' ) );
+
+          var trigger = $( 'a.trigger', selector );
+
+          trigger
+              .text( level.esc() );
+
+          if( element.hasClass( 'set' ) )
           {
-            element = $( element );
-            var level = element.attr( 'rel' );
-
-            if( level )
-            {
-              var selector = $( '.selector-holder', element.closest( 'li' ) );
-
-              var trigger = $( 'a.trigger', selector );
-
-              trigger
-                  .text( level.esc() );
-
-              if( element.hasClass( 'set' ) )
-              {
-                trigger.first()
-                    .addClass( 'set' );
-              }
-
-              $( 'ul a[data-level="' + level + '"]', selector ).first()
-                  .addClass( 'level' );
-            }
+            trigger.first()
+                .addClass( 'set' );
           }
-      )
+
+          $( 'ul a[data-level="' + level + '"]', selector ).first()
+              .addClass( 'level' );
+        }
+      }
+  )
 
   $( '.trigger', this )
       .die( 'click' )
       .live
-      (
-          'click',
-          function( event )
-          {
-            self.trigger( 'clear' );
+  (
+      'click',
+      function( event )
+      {
+        self.trigger( 'clear' );
 
-            $( '.selector-holder', $( this ).parents( 'li' ).first() ).first()
-                .trigger( 'toggle' );
+        $( '.selector-holder', $( this ).parents( 'li' ).first() ).first()
+            .trigger( 'toggle' );
 
-            return false;
-          }
-      );
+        return false;
+      }
+  );
 
   $( '.selector .close', this )
       .die( 'click' )
       .live
-      (
-          'click',
-          function( event )
-          {
-            self.trigger( 'clear' );
-            return false;
-          }
-      );
+  (
+      'click',
+      function( event )
+      {
+        self.trigger( 'clear' );
+        return false;
+      }
+  );
 
   $( '.selector-holder', this )
       .die( 'toggle')
       .live
-      (
-          'toggle',
-          function( event )
-          {
-            var row = $( this ).closest( 'li' );
+  (
+      'toggle',
+      function( event )
+      {
+        var row = $( this ).closest( 'li' );
 
-            $( 'a:first', row )
-                .toggleClass( 'open' );
+        $( 'a:first', row )
+            .toggleClass( 'open' );
 
-            $( '.selector-holder:first', row )
-                .toggleClass( 'open' );
-          }
-      );
+        $( '.selector-holder:first', row )
+            .toggleClass( 'open' );
+      }
+  );
 
   $( '.selector ul a', this )
       .die( 'click' )
       .live
-      (
-          'click',
-          function( event )
-          {
-            var element = $( this );
+  (
+      'click',
+      function( event )
+      {
+        var element = $( this );
 
-            $.ajax
-                (
-                    {
-                      url : loglevel_path,
-                      dataType : 'json',
-                      data : {
-                        'wt' : 'json',
-                        'set' : $( this ).parents( 'li[data-logger]' ).data( 'logger' ) + ':' + element.data( 'level' )
-                      },
-                      type : 'POST',
-                      context : self,
-                      beforeSend : function( xhr, settings )
-                      {
-                        element
-                            .addClass( 'loader' );
-                      },
-                      success : logging_handler
-                    }
-                );
+        $.ajax
+        (
+            {
+              url : loglevel_path,
+              dataType : 'json',
+              data : {
+                'wt' : 'json',
+                'set' : $( this ).parents( 'li[data-logger]' ).data( 'logger' ) + ':' + element.data( 'level' )
+              },
+              type : 'POST',
+              context : self,
+              beforeSend : function( xhr, settings )
+              {
+                element
+                    .addClass( 'loader' );
+              },
+              success : logging_handler
+            }
+        );
 
-            return false;
-          }
-      );
+        return false;
+      }
+  );
 
 };
 
@@ -264,256 +264,264 @@ var load_logging_viewer = function()
   var sticky_mode = null;
 
   $.ajax
-      (
+  (
+      {
+        url : loglevel_path + '?wt=json&since=' + since,
+        dataType : 'json',
+        beforeSend : function( xhr, settings )
+        {
+          // initial request
+          if( 0 === since )
           {
-            url : loglevel_path + '?wt=json&since=' + since,
-            dataType : 'json',
-            beforeSend : function( xhr, settings )
-            {
-              // initial request
-              if( 0 === since )
-              {
-                sticky_mode = true;
-              }
-
-              // state element is in viewport
-              else if( state.position().top <= $( window ).scrollTop() + $( window ).height() - ( $( 'body' ).height() - state.position().top ) )
-              {
-                sticky_mode = true;
-              }
-
-              else
-              {
-                sticky_mode = false;
-              }
-            },
-            success : function( response, text_status, xhr )
-            {
-              var docs = response.history.docs;
-              var docs_count = docs.length;
-
-              var table = $( 'table', frame_element );
-
-              $( 'h2 span', frame_element )
-                  .text( response.watcher.esc() );
-
-              state
-                  .html( 'Last Check: ' + format_time() );
-
-              app.timeout = setTimeout
-                  (
-                      load_logging_viewer,
-                      10000
-                  );
-
-              if( 0 === docs_count )
-              {
-                table.trigger( 'update' );
-                return false;
-              }
-
-              var content = '<tbody>';
-
-              for( var i = 0; i < docs_count; i++ )
-              {
-                var doc = docs[i];
-
-                if( !doc.trace )
-                {
-                  var lines = doc.message.split( "\n" );
-                  if( 1 < lines.length )
-                  {
-                    doc.message = lines[0];
-                    doc.trace = doc.message;
-                    delete lines;
-                  }
-                }
-
-                var has_trace = 'undefined' !== typeof( doc.trace );
-
-                doc.logger = '<abbr title="' + doc.logger.esc() + '">' + doc.logger.split( '.' ).pop().esc() + '</abbr>';
-
-                var classes = [ 'level-' + doc.level.toLowerCase().esc() ];
-                if( has_trace )
-                {
-                  classes.push( 'has-trace' );
-                }
-
-                content += '<tr class="' + classes.join( ' ' ) + '">' + "\n";
-                content += '<td class="span"><a><span>' + format_time( doc.time ) + '</span></a></td>' + "\n";
-                content += '<td class="level span"><a><span>' + doc.level.esc() + '</span></span></a></td>' + "\n";
-                content += '<td class="span"><a><span>' + doc.logger + '</span></a></td>' + "\n";
-                content += '<td class="message span"><a><span>' + doc.message.replace( /,/g, ',&#8203;' ).esc() + '</span></a></td>' + "\n";
-                content += '</tr>' + "\n";
-
-                if( has_trace )
-                {
-                  content += '<tr class="trace">' + "\n";
-
-                  // (1) with colspan
-                  content += '<td colspan="4"><pre>' + doc.trace.esc() + '</pre></td>' + "\n";
-
-                  // (2) without colspan
-                  //content += '<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>';
-                  //content += '<td>' + doc.trace.esc().replace( /\n/g, '<br>' ) + '</td>' + "\n";
-
-                  content += '</tr>' + "\n";
-                }
-
-              }
-
-              content += '</tbody>';
-
-              $( 'table', frame_element )
-                  .append( content );
-
-              table
-                  .data( 'latest', response.info.last )
-                  .removeClass( 'has-data' )
-                  .trigger( 'update' );
-
-              if( sticky_mode )
-              {
-                $( 'body' )
-                    .animate
-                    (
-                        { scrollTop: state.position().top },
-                        1000
-                    );
-              }
-            },
-            error : function( xhr, text_status, error_thrown)
-            {
-            },
-            complete : function( xhr, text_status )
-            {
-            }
+            sticky_mode = true;
           }
-      );
+
+          // state element is in viewport
+          else if( state.position().top <= $( window ).scrollTop() + $( window ).height() - ( $( 'body' ).height() - state.position().top ) )
+          {
+            sticky_mode = true;
+          }
+
+          else
+          {
+            sticky_mode = false;
+          }
+        },
+        success : function( response, text_status, xhr )
+        {
+          var docs = response.history.docs;
+          var docs_count = docs.length;
+
+          var table = $( 'table', frame_element );
+
+          $( 'h2 span', frame_element )
+              .text( response.watcher.esc() );
+
+          state
+              .html( 'Last Check: ' + format_time() );
+
+          app.timeout = setTimeout
+          (
+              load_logging_viewer,
+              10000
+          );
+
+          if( 0 === docs_count )
+          {
+            table.trigger( 'update' );
+            return false;
+          }
+
+          var content = '<tbody>';
+
+          for( var i = 0; i < docs_count; i++ )
+          {
+            var doc = docs[i];
+
+            if( 1 === doc.time.length )
+            {
+              for( var key in doc )
+              {
+                doc[key] = doc[key][0];
+              }
+            }
+
+            if( !doc.trace )
+            {
+              var lines = doc.message.split( "\n" );
+              if( 1 < lines.length )
+              {
+                doc.message = lines[0];
+                doc.trace = doc.message;
+                delete lines;
+              }
+            }
+
+            var has_trace = 'undefined' !== typeof( doc.trace );
+
+            doc.logger = '<abbr title="' + doc.logger.esc() + '">' + doc.logger.split( '.' ).pop().esc() + '</abbr>';
+
+            var classes = [ 'level-' + doc.level.toLowerCase().esc() ];
+            if( has_trace )
+            {
+              classes.push( 'has-trace' );
+            }
+
+            content += '<tr class="' + classes.join( ' ' ) + '">' + "\n";
+            content += '<td class="span"><a><span>' + format_time( doc.time ) + '</span></a></td>' + "\n";
+            content += '<td class="level span"><a><span>' + doc.level.esc() + '</span></span></a></td>' + "\n";
+            content += '<td class="span"><a><span>' + doc.logger + '</span></a></td>' + "\n";
+            content += '<td class="message span"><a><span>' + doc.message.replace( /,/g, ',&#8203;' ).esc() + '</span></a></td>' + "\n";
+            content += '</tr>' + "\n";
+
+            if( has_trace )
+            {
+              content += '<tr class="trace">' + "\n";
+
+              // (1) with colspan
+              content += '<td colspan="4"><pre>' + doc.trace.esc() + '</pre></td>' + "\n";
+
+              // (2) without colspan
+              //content += '<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>';
+              //content += '<td>' + doc.trace.esc().replace( /\n/g, '<br>' ) + '</td>' + "\n";
+
+              content += '</tr>' + "\n";
+            }
+
+          }
+
+          content += '</tbody>';
+
+          $( 'table', frame_element )
+              .append( content );
+
+          table
+              .data( 'latest', response.info.last )
+              .removeClass( 'has-data' )
+              .trigger( 'update' );
+
+          if( sticky_mode )
+          {
+            $( 'body' )
+                .animate
+            (
+                { scrollTop: state.position().top },
+                1000
+            );
+          }
+        },
+        error : function( xhr, text_status, error_thrown)
+        {
+        },
+        complete : function( xhr, text_status )
+        {
+        }
+      }
+  );
 }
 
 // #/~logging
 sammy.get
-    (
-        /^#\/(~logging)$/,
-        function( context )
-        {
-          var core_basepath = $( 'li[data-basepath]', app.menu_element ).attr( 'data-basepath' );
-          loglevel_path = core_basepath + '/admin/logging';
-          var content_element = $( '#content' );
+(
+    /^#\/(~logging)$/,
+    function( context )
+    {
+      var core_basepath = $( 'li[data-basepath]', app.menu_element ).attr( 'data-basepath' );
+      loglevel_path = core_basepath + '/admin/logging';
+      var content_element = $( '#content' );
 
-          $.get
-              (
-                  'tpl/logging.html',
-                  function( template )
-                  {
-                    content_element
-                        .html( template );
+      $.get
+      (
+          'tpl/logging.html',
+          function( template )
+          {
+            content_element
+                .html( template );
 
-                    frame_element = $( '#frame', content_element );
-                    frame_element
-                        .html
-                        (
-                            '<div id="viewer">' + "\n" +
-                                '<div class="block">' + "\n" +
-                                '<h2><span>&nbsp;</span></h2>' + "\n" +
-                                '</div>' + "\n" +
-                                '<table border="0" cellpadding="0" cellspacing="0">' + "\n" +
-                                '<thead>' + "\n" +
-                                '<tr>' + "\n" +
-                                '<th class="time">Time</th>' + "\n" +
-                                '<th class="level">Level</th>' + "\n" +
-                                '<th class="logger">Logger</th>' + "\n" +
-                                '<th class="message">Message</th>' + "\n" +
-                                '</tr>' + "\n" +
-                                '</thead>' + "\n" +
-                                '<tfoot>' + "\n" +
-                                '<tr>' + "\n" +
-                                '<td colspan="4">No Events available</td>' + "\n" +
-                                '</tr>' + "\n" +
-                                '</thead>' + "\n" +
-                                '</table>' + "\n" +
-                                '<div id="state" class="loader">&nbsp;</div>' + "\n" +
-                                '</div>'
-                        );
+            frame_element = $( '#frame', content_element );
+            frame_element
+                .html
+                (
+                    '<div id="viewer">' + "\n" +
+                        '<div class="block">' + "\n" +
+                        '<h2><span>&nbsp;</span></h2>' + "\n" +
+                        '</div>' + "\n" +
+                        '<table border="0" cellpadding="0" cellspacing="0">' + "\n" +
+                        '<thead>' + "\n" +
+                        '<tr>' + "\n" +
+                        '<th class="time">Time</th>' + "\n" +
+                        '<th class="level">Level</th>' + "\n" +
+                        '<th class="logger">Logger</th>' + "\n" +
+                        '<th class="message">Message</th>' + "\n" +
+                        '</tr>' + "\n" +
+                        '</thead>' + "\n" +
+                        '<tfoot>' + "\n" +
+                        '<tr>' + "\n" +
+                        '<td colspan="4">No Events available</td>' + "\n" +
+                        '</tr>' + "\n" +
+                        '</thead>' + "\n" +
+                        '</table>' + "\n" +
+                        '<div id="state" class="loader">&nbsp;</div>' + "\n" +
+                        '</div>'
+                );
 
-                    var table = $( 'table', frame_element );
+            var table = $( 'table', frame_element );
 
-                    table
-                        .die( 'update' )
-                        .live
-                        (
-                            'update',
-                            function( event )
-                            {
-                              var table = $( this );
-                              var tbody = $( 'tbody', table );
+            table
+                .die( 'update' )
+                .live
+            (
+                'update',
+                function( event )
+                {
+                  var table = $( this );
+                  var tbody = $( 'tbody', table );
 
-                              0 !== tbody.size()
-                                  ? table.addClass( 'has-data' )
-                                  : table.removeClass( 'has-data' );
+                  0 !== tbody.size()
+                      ? table.addClass( 'has-data' )
+                      : table.removeClass( 'has-data' );
 
-                              return false;
-                            }
-                        );
+                  return false;
+                }
+            );
 
-                    load_logging_viewer();
+            load_logging_viewer();
 
-                    $( '.has-trace a', table )
-                        .die( 'click' )
-                        .live
-                        (
-                            'click',
-                            function( event )
-                            {
-                              $( this ).closest( 'tr' )
-                                  .toggleClass( 'open' )
-                                  .next().toggle();
+            $( '.has-trace a', table )
+                .die( 'click' )
+                .live
+            (
+                'click',
+                function( event )
+                {
+                  $( this ).closest( 'tr' )
+                      .toggleClass( 'open' )
+                      .next().toggle();
 
-                              return false;
-                            }
-                        );
-                  }
-              );
-        }
-    );
+                  return false;
+                }
+            );
+          }
+      );
+    }
+);
 
 // #/~logging/level
 sammy.get
-    (
-        /^#\/(~logging)\/level$/,
-        function( context )
-        {
-          var core_basepath = $( 'li[data-basepath]', app.menu_element ).attr( 'data-basepath' );
-          loglevel_path = core_basepath + '/admin/logging';
-          var content_element = $( '#content' );
+(
+    /^#\/(~logging)\/level$/,
+    function( context )
+    {
+      var core_basepath = $( 'li[data-basepath]', app.menu_element ).attr( 'data-basepath' );
+      loglevel_path = core_basepath + '/admin/logging';
+      var content_element = $( '#content' );
 
-          $.get
-              (
-                  'tpl/logging.html',
-                  function( template )
+      $.get
+      (
+          'tpl/logging.html',
+          function( template )
+          {
+            content_element
+                .html( template );
+
+            $( '#menu a[href="' + context.path + '"]' )
+                .parent().addClass( 'active' );
+
+            $.ajax
+            (
+                {
+                  url : loglevel_path + '?wt=json',
+                  dataType : 'json',
+                  context : $( '#frame', content_element ),
+                  beforeSend : function( xhr, settings )
                   {
-                    content_element
-                        .html( template );
-
-                    $( '#menu a[href="' + context.path + '"]' )
-                        .parent().addClass( 'active' );
-
-                    $.ajax
-                        (
-                            {
-                              url : loglevel_path + '?wt=json',
-                              dataType : 'json',
-                              context : $( '#frame', content_element ),
-                              beforeSend : function( xhr, settings )
-                              {
-                                this
-                                    .html( '<div class="loader">Loading ...</div>' );
-                              },
-                              success : logging_handler
-                            }
-                        );
-                  }
-              );
-        }
-    );
+                    this
+                        .html( '<div class="loader">Loading ...</div>' );
+                  },
+                  success : logging_handler
+                }
+            );
+          }
+      );
+    }
+);

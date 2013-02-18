@@ -46,8 +46,8 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * SolrServer that connects directly to SolrCore
- * 
+ * SolrServer that connects directly to SolrCore.
+ * <p>
  * TODO -- this implementation sends the response to XML and then parses it.  
  * It *should* be able to convert the response directly into a named list.
  * 

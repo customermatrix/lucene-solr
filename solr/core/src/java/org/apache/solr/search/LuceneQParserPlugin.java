@@ -16,7 +16,6 @@
  */
 package org.apache.solr.search;
 
-import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Sort;
 import org.apache.solr.common.params.CommonParams;
@@ -38,6 +37,7 @@ import java.util.List;
 public class LuceneQParserPlugin extends QParserPlugin {
   public static String NAME = "lucene";
 
+  @Override
   public void init(NamedList args) {
   }
 
@@ -56,7 +56,7 @@ class LuceneQParser extends QParser {
 
 
   @Override
-  public Query parse() throws ParseException {
+  public Query parse() throws SyntaxError {
     String qstr = getString();
     if (qstr == null || qstr.length()==0) return null;
 
@@ -76,7 +76,7 @@ class LuceneQParser extends QParser {
 
   @Override
   public String[] getDefaultHighlightFields() {
-    return lparser == null ? new String[]{} : new String[]{lparser.getField()};
+    return lparser == null ? new String[]{} : new String[]{lparser.getDefaultField()};
   }
   
 }
@@ -90,7 +90,7 @@ class OldLuceneQParser extends LuceneQParser {
   }
 
   @Override
-  public Query parse() throws ParseException {
+  public Query parse() throws SyntaxError {
     // handle legacy "query;sort" syntax
     if (getLocalParams() == null) {
       String qstr = getString();
@@ -108,7 +108,7 @@ class OldLuceneQParser extends LuceneQParser {
           qstr = commands.get(0);
         }
         else if (commands.size() > 2) {
-          throw new ParseException("If you want to use multiple ';' in the query, use the 'sort' param.");
+          throw new SyntaxError("If you want to use multiple ';' in the query, use the 'sort' param.");
         }
       }
       setString(qstr);
@@ -118,7 +118,7 @@ class OldLuceneQParser extends LuceneQParser {
   }
 
   @Override
-  public SortSpec getSort(boolean useGlobal, IndexSchema schema) throws ParseException {
+  public SortSpec getSort(boolean useGlobal, IndexSchema schema) throws SyntaxError {
     SortSpec sort = super.getSort(useGlobal, schema);
     if (sortStr != null && sortStr.length()>0 && sort.getSort()==null) {
       Sort oldSort = QueryParsing.parseSort(sortStr, getReq());

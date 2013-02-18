@@ -54,6 +54,7 @@ class ConjunctionScorer extends Scorer {
     // Also we use mergeSort here to be stable (so order of Scoreres that
     // match on first document keeps preserved):
     ArrayUtil.mergeSort(scorers, new Comparator<Scorer>() { // sort the array
+      @Override
       public int compare(Scorer o1, Scorer o2) {
         return o1.docID() - o2.docID();
       }
@@ -138,7 +139,7 @@ class ConjunctionScorer extends Scorer {
   }
 
   @Override
-  public float freq() throws IOException {
+  public int freq() throws IOException {
     return scorers.length;
   }
 

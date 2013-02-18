@@ -121,7 +121,7 @@ public class PointType extends CoordinateFieldType implements SpatialQueryable {
 
   @Override
   public void write(TextResponseWriter writer, String name, IndexableField f) throws IOException {
-    writer.writeStr(name, f.stringValue(), false);
+    writer.writeStr(name, f.stringValue(), true);
   }
 
   @Override
@@ -177,6 +177,7 @@ public class PointType extends CoordinateFieldType implements SpatialQueryable {
    * @param options The {@link org.apache.solr.search.SpatialOptions} for this filter.
    * @return The Query representing the bounding box around the point.
    */
+  @Override
   public Query createSpatialQuery(QParser parser, SpatialOptions options) {
     Query result = null;
     double [] point = new double[0];
