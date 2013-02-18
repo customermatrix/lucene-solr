@@ -5,11 +5,11 @@ import java.util.Map;
 
 public class VirtualIndexSchema extends IndexSchema {
   public void putAllFields(Map<String, SchemaField> fields) {
-    this.fields = fields;
+    this.fields.putAll(fields);
   }
 
   public void putAllFieldTypes(Map<String, FieldType> fieldTypes) {
-    this.fieldTypes = fieldTypes;
+    this.fieldTypes.putAll(fieldTypes);
   }
 
   public void setUniqueKeyField(SchemaField uniqueKeyField) {
@@ -22,13 +22,5 @@ public class VirtualIndexSchema extends IndexSchema {
 
   public void setDefaultSearchFieldName(String defaultSearchFieldName) {
     this.defaultSearchFieldName = defaultSearchFieldName;
-  }
-
-  @Override
-  public Map<String,SchemaField> getFields() {
-    if (fields == null) {
-      return new HashMap<String, SchemaField>();
-    }
-    return fields;
   }
 }

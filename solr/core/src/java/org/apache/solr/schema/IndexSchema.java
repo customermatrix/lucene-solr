@@ -92,8 +92,7 @@ public class IndexSchema {
    * @see SolrResourceLoader#openResource
    */
   public IndexSchema(SolrConfig solrConfig, String name, InputSource is) {
-    fields = new HashMap<String,SchemaField>();
-    fieldTypes = new HashMap<String,FieldType>();
+    this();
     fieldsWithDefaultValue = new ArrayList<SchemaField>();
     requiredFields = new HashSet<SchemaField>();
     defaultSearchFieldName = null;
@@ -119,6 +118,8 @@ public class IndexSchema {
 
   public IndexSchema()
   {
+    fields = new HashMap<String,SchemaField>();
+    fieldTypes = new HashMap<String,FieldType>();
   }
   
   /**
