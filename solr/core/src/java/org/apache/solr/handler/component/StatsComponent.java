@@ -112,7 +112,11 @@ public class StatsComponent extends SearchComponent {
           String field = stats_fields.getName(i);
           StatsValues stv = si.statsFields.get(field);
           NamedList shardStv = (NamedList) stats_fields.get(field);
-          stv.accumulate(shardStv);
+          Object min = shardStv.get("min");
+          Object max = shardStv.get("max");
+          if (min != null && max != null) {
+            stv.accumulate(shardStv);
+          }
         }
       }
     }
