@@ -388,6 +388,15 @@ public class SolrReturnFields extends ReturnFields {
   @Override
   public boolean wantsField(String name)
   {
+    if (!_wantsAllFields) {
+      if (name.startsWith("[")) {
+        int spaceIdx = name.indexOf(" ");
+        if (spaceIdx>0) {
+          name = name.substring(0, spaceIdx) + "]";
+        }
+      }
+    }
+
     if( _wantsAllFields || okFieldNames.contains( name ) ){
       return true;
     }

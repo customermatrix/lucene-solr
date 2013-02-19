@@ -85,14 +85,14 @@ public abstract class SolrQueryParserBase {
   public static final Operator OR_OPERATOR = Operator.OR;
 
   /** The default operator that parser uses to combine query terms */
-  Operator operator = OR_OPERATOR;
+  public Operator operator = OR_OPERATOR;
 
   MultiTermQuery.RewriteMethod multiTermRewriteMethod = MultiTermQuery.CONSTANT_SCORE_AUTO_REWRITE_DEFAULT;
   boolean allowLeadingWildcard = true;
-  boolean enablePositionIncrements = true;
+  public boolean enablePositionIncrements = true;
 
   String defaultField;
-  int phraseSlop = 0;     // default slop for phrase queries
+  public int phraseSlop = 0;     // default slop for phrase queries
   float fuzzyMinSim = FuzzyQuery.defaultMinSimilarity;
   int fuzzyPrefixLength = FuzzyQuery.defaultPrefixLength;
 
@@ -580,7 +580,7 @@ public abstract class SolrQueryParserBase {
   * @param disableCoord disable coord
   * @return new BooleanQuery instance
   */
-  protected BooleanQuery newBooleanQuery(boolean disableCoord) {
+  public BooleanQuery newBooleanQuery(boolean disableCoord) {
     return new BooleanQuery(disableCoord);
   }
 
@@ -590,7 +590,7 @@ public abstract class SolrQueryParserBase {
   * @param occur how this clause should occur when matching documents
   * @return new BooleanClause instance
   */
-  protected BooleanClause newBooleanClause(Query q, BooleanClause.Occur occur) {
+ public BooleanClause newBooleanClause(Query q, BooleanClause.Occur occur) {
     return new BooleanClause(q, occur);
   }
 
@@ -599,7 +599,7 @@ public abstract class SolrQueryParserBase {
    * @param term term
    * @return new TermQuery instance
    */
-  protected Query newTermQuery(Term term){
+  public Query newTermQuery(Term term){
     return new TermQuery(term);
   }
 
@@ -607,7 +607,7 @@ public abstract class SolrQueryParserBase {
    * Builds a new PhraseQuery instance
    * @return new PhraseQuery instance
    */
-  protected PhraseQuery newPhraseQuery(){
+  public PhraseQuery newPhraseQuery(){
     return new PhraseQuery();
   }
 
@@ -615,7 +615,7 @@ public abstract class SolrQueryParserBase {
    * Builds a new MultiPhraseQuery instance
    * @return new MultiPhraseQuery instance
    */
-  protected MultiPhraseQuery newMultiPhraseQuery(){
+  public MultiPhraseQuery newMultiPhraseQuery(){
     return new MultiPhraseQuery();
   }
 
@@ -624,7 +624,7 @@ public abstract class SolrQueryParserBase {
    * @param prefix Prefix term
    * @return new PrefixQuery instance
    */
-  protected Query newPrefixQuery(Term prefix){
+  public Query newPrefixQuery(Term prefix){
     PrefixQuery query = new PrefixQuery(prefix);
     query.setRewriteMethod(multiTermRewriteMethod);
     return query;
@@ -635,7 +635,7 @@ public abstract class SolrQueryParserBase {
    * @param regexp Regexp term
    * @return new RegexpQuery instance
    */
-  protected Query newRegexpQuery(Term regexp) {
+  public Query newRegexpQuery(Term regexp) {
     RegexpQuery query = new RegexpQuery(regexp);
     query.setRewriteMethod(multiTermRewriteMethod);
     return query;
@@ -648,7 +648,7 @@ public abstract class SolrQueryParserBase {
    * @param prefixLength prefix length
    * @return new FuzzyQuery Instance
    */
-  protected Query newFuzzyQuery(Term term, float minimumSimilarity, int prefixLength) {
+  public Query newFuzzyQuery(Term term, float minimumSimilarity, int prefixLength) {
     // FuzzyQuery doesn't yet allow constant score rewrite
     String text = term.text();
     int numEdits = FuzzyQuery.floatToEdits(minimumSimilarity, 
@@ -660,7 +660,7 @@ public abstract class SolrQueryParserBase {
    * Builds a new MatchAllDocsQuery instance
    * @return new MatchAllDocsQuery instance
    */
-  protected Query newMatchAllDocsQuery() {
+  public Query newMatchAllDocsQuery() {
     return new MatchAllDocsQuery();
   }
 
@@ -669,7 +669,7 @@ public abstract class SolrQueryParserBase {
    * @param t wildcard term
    * @return new WildcardQuery instance
    */
-  protected Query newWildcardQuery(Term t) {
+  public Query newWildcardQuery(Term t) {
     WildcardQuery query = new WildcardQuery(t);
     query.setRewriteMethod(multiTermRewriteMethod);
     return query;
@@ -687,7 +687,7 @@ public abstract class SolrQueryParserBase {
    *
    * @return Resulting {@link org.apache.lucene.search.Query} object.
    */
-  protected Query getBooleanQuery(List<BooleanClause> clauses) throws SyntaxError {
+  public Query getBooleanQuery(List<BooleanClause> clauses) throws SyntaxError {
     return getBooleanQuery(clauses, false);
   }
 
@@ -704,7 +704,7 @@ public abstract class SolrQueryParserBase {
    *
    * @return Resulting {@link org.apache.lucene.search.Query} object.
    */
-  protected Query getBooleanQuery(List<BooleanClause> clauses, boolean disableCoord)
+  public Query getBooleanQuery(List<BooleanClause> clauses, boolean disableCoord)
     throws SyntaxError
   {
     if (clauses.size()==0) {

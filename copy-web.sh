@@ -1,3 +1,4 @@
+#!/bin/sh
 DESTINATION=../search/solr/src/main/webapp
 SOURCE=solr/webapp/web
 EXCLUDE=WEB-INF
