@@ -50,6 +50,7 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
   protected SolrParams params;
   protected Map<Object, Object> context;
   protected Iterable<ContentStream> streams;
+  protected VirtualIndexSchema virtualSchema;
 
   public SolrQueryRequestBase(SolrCore core, SolrParams params) {
     this.core = core;
@@ -57,7 +58,7 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
   }
 
   @Override
-  public Map<Object,Object> getContext() {
+  public Map<Object, Object> getContext() {
     // SolrQueryRequest as a whole isn't thread safe, and this isn't either.
     if (context == null) context = new HashMap<Object, Object>();
     return context;
@@ -88,6 +89,7 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
 
   // The index searcher associated with this request
   protected RefCounted<SolrIndexSearcher> searcherHolder;
+
   @Override
   public SolrIndexSearcher getSearcher() {
     if (core == null) return null;//a request for a core admin will no have a core
@@ -114,24 +116,32 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
     if (core != null && core.getName().equals(API_CORE_NAME)) {
       List<String> collections = getCollections();
 
-      if (collections != null) {
-        VirtualIndexSchema virtualIndexSchema = new VirtualIndexSchema();
-        Collection<SolrCore> cores = core.getCoreDescriptor().getCoreContainer().getCores();
+      if (!collections.isEmpty()) {
+        if (virtualSchema == null) {
+          synchronized (this) {
+            if (virtualSchema == null) {
+              VirtualIndexSchema virtualIndexSchema = new VirtualIndexSchema();
+              Collection<SolrCore> cores = core.getCoreDescriptor().getCoreContainer().getCores();
 
-        for (SolrCore solrCore : cores) {
-          if (collections.contains(solrCore.getCoreDescriptor().getCloudDescriptor().getCollectionName())) {
-            IndexSchema schema = solrCore.getSchema();
-            virtualIndexSchema.putAllFields(schema.getFields());
-            virtualIndexSchema.putAllFieldTypes(schema.getFieldTypes());
-            virtualIndexSchema.setUniqueKeyField(schema.getUniqueKeyField());
-            virtualIndexSchema.setQueryParserDefaultOperator(schema.getQueryParserDefaultOperator());
-            virtualIndexSchema.setDefaultSearchFieldName(schema.getDefaultSearchFieldName());
-            if( core.getSchema().getDynamicFieldPrototypes()!=null ) {
-              virtualIndexSchema.registerDynamicField(core.getSchema().getDynamicFieldPrototypes());
+              for (SolrCore solrCore : cores) {
+                if (collections.contains(solrCore.getCoreDescriptor().getCloudDescriptor().getCollectionName())) {
+                  IndexSchema schema = solrCore.getSchema();
+                  virtualIndexSchema.putAllFields(schema.getFields());
+                  virtualIndexSchema.putAllFieldTypes(schema.getFieldTypes());
+                  virtualIndexSchema.setUniqueKeyField(schema.getUniqueKeyField());
+                  virtualIndexSchema.setQueryParserDefaultOperator(schema.getQueryParserDefaultOperator());
+                  virtualIndexSchema.setDefaultSearchFieldName(schema.getDefaultSearchFieldName());
+                  if (core.getSchema().getDynamicFieldPrototypes() != null) {
+                    virtualIndexSchema.registerDynamicField(core.getSchema().getDynamicFieldPrototypes());
+                  }
+                }
+              }
+              virtualSchema = virtualIndexSchema;
+              virtualSchema.refreshAnalyzers();
             }
           }
         }
-        return virtualIndexSchema;
+        return virtualSchema;
       }
     }
 
