@@ -124,6 +124,7 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentInfoPerCom
   /** Used for the segments.gen file only!
    * Whenever you add a new format, make it 1 smaller (negative version logic)! */
   public static final int FORMAT_SEGMENTS_GEN_CURRENT = -2;
+  public static final String DISABLE_INDEX_CHECKSUM = "disableIndexChecksum";
 
   /** Used to name new segments. */
   public int counter;
@@ -316,10 +317,13 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentInfoPerCom
         }
       }
 
-      final long checksumNow = input.getChecksum();
-      final long checksumThen = input.readLong();
-      if (checksumNow != checksumThen) {
-        throw new CorruptIndexException("checksum mismatch in segments file (resource: " + input + ")");
+      String ignoreIndexChecksum = System.getProperty(DISABLE_INDEX_CHECKSUM);
+      if (!Boolean.valueOf(ignoreIndexChecksum)) {
+        final long checksumNow = input.getChecksum();
+        final long checksumThen = input.readLong();
+        if (checksumNow != checksumThen) {
+          throw new CorruptIndexException("checksum mismatch in segments file (resource: " + input + ")");
+        }
       }
 
       success = true;
