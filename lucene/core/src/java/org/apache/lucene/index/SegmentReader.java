@@ -17,15 +17,15 @@ package org.apache.lucene.index;
  * limitations under the License.
  */
 
-import java.io.IOException;
-
-import org.apache.lucene.store.Directory;
 import org.apache.lucene.codecs.PerDocProducer;
 import org.apache.lucene.codecs.StoredFieldsReader;
 import org.apache.lucene.codecs.TermVectorsReader;
-import org.apache.lucene.search.FieldCache; // javadocs
+import org.apache.lucene.codecs.lucene41.Lucene41BetaCodec;
+import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.util.Bits;
+
+import java.io.IOException;
 
 /**
  * IndexReader implementation over a single segment. 
@@ -49,7 +49,7 @@ public final class SegmentReader extends AtomicReader {
   /**
    * Constructs a new SegmentReader with a new core.
    * @throws CorruptIndexException if the index is corrupt
-   * @throws IOException if there is a low-level IO error
+   * @throws java.io.IOException if there is a low-level IO error
    */
   // TODO: why is this public?
   public SegmentReader(SegmentInfoPerCommit si, int termInfosIndexDivisor, IOContext context) throws IOException {
@@ -59,7 +59,7 @@ public final class SegmentReader extends AtomicReader {
     try {
       if (si.hasDeletions()) {
         // NOTE: the bitvector is stored using the regular directory, not cfs
-        liveDocs = si.info.getCodec().liveDocsFormat().readLiveDocs(directory(), si, new IOContext(IOContext.READ, true));
+        liveDocs = new Lucene41BetaCodec() .liveDocsFormat().readLiveDocs(directory(), si, new IOContext(IOContext.READ, true));
       } else {
         assert si.getDelCount() == 0;
         liveDocs = null;
@@ -83,8 +83,8 @@ public final class SegmentReader extends AtomicReader {
    *  deletes file.  Used by openIfChanged. */
   SegmentReader(SegmentInfoPerCommit si, SegmentCoreReaders core, IOContext context) throws IOException {
     this(si, core,
-         si.info.getCodec().liveDocsFormat().readLiveDocs(si.info.dir, si, context),
-         si.info.getDocCount() - si.getDelCount());
+      si.info.getCodec().liveDocsFormat().readLiveDocs(si.info.dir, si, context),
+      si.info.getDocCount() - si.getDelCount());
   }
 
   /** Create new SegmentReader sharing core from a previous
@@ -127,13 +127,13 @@ public final class SegmentReader extends AtomicReader {
   }
 
   /** Expert: retrieve thread-private {@link
-   *  StoredFieldsReader}
+   *  org.apache.lucene.codecs.StoredFieldsReader}
    *  @lucene.internal */
   public StoredFieldsReader getFieldsReader() {
     ensureOpen();
     return core.fieldsReaderLocal.get();
   }
-  
+
   @Override
   public void document(int docID, StoredFieldVisitor visitor) throws IOException {
     checkBounds(docID);
@@ -159,7 +159,7 @@ public final class SegmentReader extends AtomicReader {
   }
 
   /** Expert: retrieve thread-private {@link
-   *  TermVectorsReader}
+   *  org.apache.lucene.codecs.TermVectorsReader}
    *  @lucene.internal */
   public TermVectorsReader getTermVectorsReader() {
     ensureOpen();
@@ -175,9 +175,9 @@ public final class SegmentReader extends AtomicReader {
     checkBounds(docID);
     return termVectorsReader.get(docID);
   }
-  
+
   private void checkBounds(int docID) {
-    if (docID < 0 || docID >= maxDoc()) {       
+    if (docID < 0 || docID >= maxDoc()) {
       throw new IndexOutOfBoundsException("docID must be >= 0 and < maxDoc=" + maxDoc() + " (got docID=" + docID + ")");
     }
   }
@@ -188,14 +188,14 @@ public final class SegmentReader extends AtomicReader {
     // *pending* deletions; so we reverse compute that here:
     return si.toString(si.info.dir, si.info.getDocCount() - numDocs - si.getDelCount());
   }
-  
+
   /**
    * Return the name of the segment this reader is reading.
    */
   public String getSegmentName() {
     return si.info.name;
   }
-  
+
   /**
    * Return the SegmentInfoPerCommit of the segment this reader is reading.
    */
@@ -225,11 +225,11 @@ public final class SegmentReader extends AtomicReader {
   }
 
   /** Returns term infos index divisor originally passed to
-   *  {@link #SegmentReader(SegmentInfoPerCommit, int, IOContext)}. */
+   *  {@link #SegmentReader(SegmentInfoPerCommit, int, org.apache.lucene.store.IOContext)}. */
   public int getTermInfosIndexDivisor() {
     return core.termsIndexDivisor;
   }
-  
+
   @Override
   public DocValues docValues(String field) throws IOException {
     ensureOpen();
@@ -239,7 +239,7 @@ public final class SegmentReader extends AtomicReader {
     }
     return perDoc.docValues(field);
   }
-  
+
   @Override
   public DocValues normValues(String field) throws IOException {
     ensureOpen();
@@ -249,33 +249,33 @@ public final class SegmentReader extends AtomicReader {
     }
     return perDoc.docValues(field);
   }
-  
+
 
   /**
    * Called when the shared core for this SegmentReader
    * is closed.
    * <p>
-   * This listener is called only once all SegmentReaders 
-   * sharing the same core are closed.  At this point it 
-   * is safe for apps to evict this reader from any caches 
-   * keyed on {@link #getCoreCacheKey}.  This is the same 
-   * interface that {@link FieldCache} uses, internally, 
+   * This listener is called only once all SegmentReaders
+   * sharing the same core are closed.  At this point it
+   * is safe for apps to evict this reader from any caches
+   * keyed on {@link #getCoreCacheKey}.  This is the same
+   * interface that {@link org.apache.lucene.search.FieldCache} uses, internally,
    * to evict entries.</p>
-   * 
+   *
    * @lucene.experimental
    */
   public static interface CoreClosedListener {
     /** Invoked when the shared core of the provided {@link
-     *  SegmentReader} has closed. */
+     *  org.apache.lucene.index.SegmentReader} has closed. */
     public void onClose(SegmentReader owner);
   }
-  
+
   /** Expert: adds a CoreClosedListener to this reader's shared core */
   public void addCoreClosedListener(CoreClosedListener listener) {
     ensureOpen();
     core.addCoreClosedListener(listener);
   }
-  
+
   /** Expert: removes a CoreClosedListener from this reader's shared core */
   public void removeCoreClosedListener(CoreClosedListener listener) {
     ensureOpen();

@@ -17,18 +17,13 @@ package org.apache.lucene.index;
  * limitations under the License.
  */
 
-import java.io.IOException;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
-
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.FieldsProducer;
 import org.apache.lucene.codecs.PerDocProducer;
 import org.apache.lucene.codecs.PostingsFormat;
 import org.apache.lucene.codecs.StoredFieldsReader;
 import org.apache.lucene.codecs.TermVectorsReader;
+import org.apache.lucene.codecs.lucene41.Lucene41BetaCodec;
 import org.apache.lucene.index.SegmentReader.CoreClosedListener;
 import org.apache.lucene.store.CompoundFileDirectory;
 import org.apache.lucene.store.Directory;
@@ -36,10 +31,16 @@ import org.apache.lucene.store.IOContext;
 import org.apache.lucene.util.CloseableThreadLocal;
 import org.apache.lucene.util.IOUtils;
 
+import java.io.IOException;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+
 /** Holds core readers that are shared (unchanged) when
  * SegmentReader is cloned or reopened */
 final class SegmentCoreReaders {
-  
+
   // Counts how many other reader share the core objects
   // (freqStream, proxStream, tis, etc.) of this reader;
   // when coreRef drops to 0, these core objects may be
@@ -47,17 +48,17 @@ final class SegmentCoreReaders {
   // closed, even those it shares core objects with other
   // SegmentReaders:
   private final AtomicInteger ref = new AtomicInteger(1);
-  
+
   final FieldInfos fieldInfos;
-  
+
   final FieldsProducer fields;
   final PerDocProducer perDocProducer;
   final PerDocProducer norms;
 
   final int termsIndexDivisor;
-  
+
   private final SegmentReader owner;
-  
+
   final StoredFieldsReader fieldsReaderOrig;
   final TermVectorsReader termVectorsReaderOrig;
   final CompoundFileDirectory cfsReader;
@@ -68,7 +69,7 @@ final class SegmentCoreReaders {
       return fieldsReaderOrig.clone();
     }
   };
-  
+
   final CloseableThreadLocal<TermVectorsReader> termVectorsLocal = new CloseableThreadLocal<TermVectorsReader>() {
     @Override
     protected TermVectorsReader initialValue() {
@@ -76,21 +77,21 @@ final class SegmentCoreReaders {
         null : termVectorsReaderOrig.clone();
     }
   };
-  
-  private final Set<CoreClosedListener> coreClosedListeners = 
-      Collections.synchronizedSet(new LinkedHashSet<CoreClosedListener>());
-  
+
+  private final Set<CoreClosedListener> coreClosedListeners =
+    Collections.synchronizedSet(new LinkedHashSet<CoreClosedListener>());
+
   SegmentCoreReaders(SegmentReader owner, Directory dir, SegmentInfoPerCommit si, IOContext context, int termsIndexDivisor) throws IOException {
-    
+
     if (termsIndexDivisor == 0) {
       throw new IllegalArgumentException("indexDivisor must be < 0 (don't load terms index) or greater than 0 (got 0)");
     }
-    
-    final Codec codec = si.info.getCodec();
+
+    final Codec codec = new Lucene41BetaCodec();
     final Directory cfsDir; // confusing name: if (cfs) its the cfsdir, otherwise its the segment's directory.
 
     boolean success = false;
-    
+
     try {
       if (si.info.getUseCompoundFile()) {
         cfsDir = cfsReader = new CompoundFileDirectory(dir, IndexFileNames.segmentFileName(si.info.name, "", IndexFileNames.COMPOUND_FILE_EXTENSION), context, false);
@@ -111,11 +112,11 @@ final class SegmentCoreReaders {
       // kinda jaky to assume the codec handles the case of no norms file at all gracefully?!
       norms = codec.normsFormat().docsProducer(segmentReadState);
       perDocProducer = codec.docValuesFormat().docsProducer(segmentReadState);
-  
-      fieldsReaderOrig = si.info.getCodec().storedFieldsFormat().fieldsReader(cfsDir, si.info, fieldInfos, context);
+
+      fieldsReaderOrig = codec.storedFieldsFormat().fieldsReader(cfsDir, si.info, fieldInfos, context);
 
       if (fieldInfos.hasVectors()) { // open term vector files only as needed
-        termVectorsReaderOrig = si.info.getCodec().termVectorsFormat().vectorsReader(cfsDir, si.info, fieldInfos, context);
+        termVectorsReaderOrig =codec.termVectorsFormat().vectorsReader(cfsDir, si.info, fieldInfos, context);
       } else {
         termVectorsReaderOrig = null;
       }
@@ -126,18 +127,18 @@ final class SegmentCoreReaders {
         decRef();
       }
     }
-    
+
     // Must assign this at the end -- if we hit an
     // exception above core, we don't want to attempt to
     // purge the FieldCache (will hit NPE because core is
     // not assigned yet).
     this.owner = owner;
   }
-  
+
   void incRef() {
     ref.incrementAndGet();
   }
-  
+
   void decRef() throws IOException {
     //System.out.println("core.decRef seg=" + owner.getSegmentInfo() + " rc=" + ref);
     if (ref.decrementAndGet() == 0) {
@@ -146,7 +147,7 @@ final class SegmentCoreReaders {
       notifyCoreClosedListeners();
     }
   }
-  
+
   private final void notifyCoreClosedListeners() {
     synchronized(coreClosedListeners) {
       for (CoreClosedListener listener : coreClosedListeners) {
@@ -158,7 +159,7 @@ final class SegmentCoreReaders {
   void addCoreClosedListener(CoreClosedListener listener) {
     coreClosedListeners.add(listener);
   }
-  
+
   void removeCoreClosedListener(CoreClosedListener listener) {
     coreClosedListeners.remove(listener);
   }
