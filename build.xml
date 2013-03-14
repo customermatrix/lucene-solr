@@ -31,7 +31,7 @@
   </target>
 
   <property name="tests.heap-dump-dir" location="heapdumps"/>
-  
+
   <target name="precommit" description="Run basic checks before committing"
           depends="check-svn-working-copy,validate,documentation-lint"/>
 
@@ -69,7 +69,7 @@
       <fileset dir="solr" includes="build.xml" />
     </subant>
   </target>
-  
+
   <target name="-validate-source-patterns" unless="disable.source-patterns">
     <!-- check that there are no nocommits or @author javadoc tags: -->
     <property name="validate.currDir" location="."/>
@@ -87,7 +87,7 @@
     </pathconvert>
     <fail if="validate.patternsFound">The following files contain @author tags, tabs or nocommits:${line.separator}${validate.patternsFound}</fail>
   </target>
-	
+
   <target name="rat-sources" description="Runs rat across all sources and tests">
     <subant target="rat-sources" inheritall="false" failonerror="true">
       <fileset dir="lucene" includes="build.xml" />
@@ -102,6 +102,7 @@
     </subant>
   </target>
 
+  <!-- lucene/test-framework and solr/test-framework are excluded from compilation -->
   <target name="compile" description="Compile Lucene and Solr">
     <subant target="compile" inheritall="false" failonerror="true">
       <fileset dir="lucene" includes="build.xml" />
@@ -109,10 +110,24 @@
     </subant>
   </target>
 
-  <property name="version" value="4.1-SNAPSHOT"/>
+  <target name="compile-test" description="Compile Lucene and Solr tests and test-frameworks">
+    <subant target="compile-test" inheritAll="false" failonerror="true">
+      <fileset dir="lucene" includes="build.xml" />
+      <fileset dir="solr" includes="build.xml" />
+    </subant>
+  </target>
+
+  <target name="jar" description="Build Lucene and Solr Jar files">
+    <subant target="jar" inheritall="false" failonerror="true">
+      <fileset dir="lucene" includes="build.xml"/>
+      <fileset dir="solr" includes="build.xml"/>
+    </subant>
+  </target>
+
+  <property name="version" value="4.2-SNAPSHOT"/>
   <property name="maven-build-dir" value="maven-build"/>
   <property name="maven-version" value="2.2.1"/>
-  
+
   <target name="get-maven-poms"
           description="Copy Maven POMs from dev-tools/maven/ to maven-build/">
     <copy todir="${maven-build-dir}" overwrite="true">
@@ -149,7 +164,7 @@
       <fileset dir="solr" includes="build.xml"/>
     </subant>
   </target>
-  
+
   <target name="run-maven-build" depends="get-maven-poms" description="Runs the Maven build using automatically generated POMs">
     <subant buildpath="." antfile="extra-targets.xml" target="-run-maven-build" inheritall="false" failonerror="true">
       <propertyset>
@@ -158,7 +173,7 @@
       </propertyset>
     </subant>
   </target>
-  
+
   <target name="remove-maven-artifacts" description="Removes all Lucene/Solr Maven artifacts from the local repository">
     <echo message="Removing all Lucene/Solr Maven artifacts from '${user.home}/.m2/repository'..."/>
     <delete includeemptydirs="true">
@@ -175,7 +190,7 @@
     <copy todir=".settings/" overwrite="true">
       <fileset dir="dev-tools/eclipse/dot.settings" includes="*.prefs" />
     </copy>
-    
+
     <pathconvert property="eclipse.fileset.sourcefolders" pathsep="|" dirsep="/">
       <dirset dir="${basedir}/lucene" includes="**/src/java, **/src/resources, **/src/test, **/src/test-files, **/src/examples" excludes="tools/**, build/**, backwards/**" />
       <dirset dir="${basedir}/solr" includes="**/src/java, **/src/resources, **/src/test, **/src/test-files, **/src/examples" excludes="build/**" />
@@ -195,7 +210,7 @@
 
     <echo>
       SUCCESS: You must right-click your project and choose Refresh.
-               Your project must use a Java 6 JRE.
+      Your project must use a Java 6 JRE.
     </echo>
   </target>
 
@@ -252,53 +267,55 @@
   <property name="python32.exe" value="python3.2" />
   <property name="fakeRelease" location="lucene/build/fakeRelease"/>
   <property name="fakeReleaseTmp" location="lucene/build/fakeReleaseTmp"/>
-  <property name="fakeReleaseVersion" value="4.1.1"/> <!-- *not* -SNAPSHOT, the real version -->
+  <property name="fakeReleaseVersion" value="4.2.0"/> <!-- *not* -SNAPSHOT, the real version -->
 
   <target name="-load-env">
-     <!-- load the properties only here, so not on every invocation /usr/bin/env is called: -->
-     <property environment="env"/>
+    <!-- load the properties only here, so not on every invocation /usr/bin/env is called: -->
+    <property environment="env"/>
   </target>
-  
+
   <target name="-env-JAVA6_HOME" depends="-load-env" if="env.JAVA6_HOME">
-     <property name="JAVA6_HOME" value="${env.JAVA6_HOME}"/>
+    <property name="JAVA6_HOME" value="${env.JAVA6_HOME}"/>
   </target>
-  
+
   <target name="-env-JAVA7_HOME" depends="-load-env" if="env.JAVA7_HOME">
-     <property name="JAVA7_HOME" value="${env.JAVA7_HOME}"/>
+    <property name="JAVA7_HOME" value="${env.JAVA7_HOME}"/>
   </target>
-  
+
   <target name="nightly-smoke" description="Builds an unsigned release and smoke tests it" depends="clean,-env-JAVA6_HOME,-env-JAVA7_HOME">
-   <fail unless="JAVA6_HOME">JAVA6_HOME property or environment variable is not defined.</fail>
-   <fail unless="JAVA7_HOME">JAVA7_HOME property or environment variable is not defined.</fail>
-   <subant target="prepare-release-no-sign" inheritall="false" failonerror="true">
-     <fileset dir="lucene" includes="build.xml" />
-     <fileset dir="solr" includes="build.xml" />
-     <property name="version" value="${fakeReleaseVersion}" />
-   </subant>
-   <delete dir="${fakeRelease}"/>
-   <delete dir="${fakeReleaseTmp}"/>
-   <mkdir dir="${fakeRelease}"/>
-   <copy todir="${fakeRelease}/lucene">
-     <fileset dir="lucene/dist"/>
-   </copy>
-   <copy todir="${fakeRelease}/solr">
-     <fileset dir="solr/package"/>
-   </copy>
-   <makeurl file="${fakeRelease}" validate="false" property="fakeRelease.uri"/>
-   <exec executable="${python32.exe}" failonerror="true">
-     <arg value="-u"/>
-     <arg file="dev-tools/scripts/smokeTestRelease.py"/>
-     <arg value="${fakeRelease.uri}"/>
-     <arg value="${fakeReleaseVersion}"/>
-     <arg file="${fakeReleaseTmp}"/>
-     <arg value="false"/>
-     <env key="JAVA6_HOME" file="${JAVA6_HOME}"/>
-     <env key="JAVA7_HOME" file="${JAVA7_HOME}"/>
-   </exec>
-   <delete dir="${fakeRelease}"/>
-   <delete dir="${fakeReleaseTmp}"/>
+    <fail unless="JAVA6_HOME">JAVA6_HOME property or environment variable is not defined.</fail>
+    <fail unless="JAVA7_HOME">JAVA7_HOME property or environment variable is not defined.</fail>
+    <subant target="prepare-release-no-sign" inheritall="false" failonerror="true">
+      <fileset dir="lucene" includes="build.xml" />
+      <fileset dir="solr" includes="build.xml" />
+      <property name="version" value="${fakeReleaseVersion}" />
+    </subant>
+    <delete dir="${fakeRelease}"/>
+    <delete dir="${fakeReleaseTmp}"/>
+    <mkdir dir="${fakeRelease}"/>
+    <copy todir="${fakeRelease}/lucene">
+      <fileset dir="lucene/dist"/>
+    </copy>
+    <copy todir="${fakeRelease}/solr">
+      <fileset dir="solr/package"/>
+    </copy>
+    <makeurl file="${fakeRelease}" validate="false" property="fakeRelease.uri"/>
+    <exec executable="${python32.exe}" failonerror="true">
+      <arg value="-u"/>
+      <!-- Tell Python not to write any bytecode cache into the filesystem: -->
+      <arg value="-B"/>
+      <arg file="dev-tools/scripts/smokeTestRelease.py"/>
+      <arg value="${fakeRelease.uri}"/>
+      <arg value="${fakeReleaseVersion}"/>
+      <arg file="${fakeReleaseTmp}"/>
+      <arg value="false"/>
+      <env key="JAVA6_HOME" file="${JAVA6_HOME}"/>
+      <env key="JAVA7_HOME" file="${JAVA7_HOME}"/>
+    </exec>
+    <delete dir="${fakeRelease}"/>
+    <delete dir="${fakeReleaseTmp}"/>
   </target>
-  
+
   <target name="check-svn-working-copy" description="Checks the status of the SVN working copy">
     <subant buildpath="." antfile="extra-targets.xml" target="-check-svn-working-copy" inheritall="false" failonerror="true"/>
   </target>
@@ -315,7 +332,7 @@
       <param name="tests.badapples" value="true"/>
       <!-- The idea behind Clover is to determine test coverage, so be immune to failing tests: -->
       <param name="tests.haltonfailure" value="false"/>
-      
+
       <target name="test"/>
       <target name="-generate-clover-reports"/>
     </antcall>
@@ -326,7 +343,7 @@
   </target>
 
   <target name="test-with-heapdumps" depends="-test-with-heapdumps-enabled,-test-with-heapdumps-disabled" description="Runs tests with heap dumps on OOM enabled (if VM supports this)"/>
-  
+
   <condition property="vm.supports.heapdumps">
     <or>
       <contains string="${java.vm.name}" substring="hotspot" casesensitive="false"/>
@@ -358,28 +375,44 @@
   </target>
 
   <!-- Jenkins tasks -->
-  <target name="jenkins-hourly" depends="clean,test-with-heapdumps,validate,documentation-lint,jar-checksums,check-svn-working-copy"/>
-  
-  <target name="jenkins-nightly">
+  <target name="-jenkins-base" depends="clean,test-with-heapdumps,validate,documentation-lint,jar-checksums,check-svn-working-copy"/>
+
+  <target name="jenkins-hourly">
     <antcall>
-      <param name="tests.nightly" value="true"/>
-      <target name="jenkins-hourly"/>
+      <param name="is.jenkins.build" value="true"/>
+      <target name="-jenkins-base"/>
     </antcall>
   </target>
-  
+
+  <target name="jenkins-nightly">
+    <antcall>
+      <param name="is.jenkins.build" value="true"/>
+      <param name="tests.nightly" value="true"/>
+      <target name="-jenkins-base"/>
+    </antcall>
+  </target>
+
   <target name="jenkins-maven-nightly" depends="clean,clean-maven-build">
     <!-- step 1: build, install, deploy, and validate ANT-generated maven artifacts: -->
     <antcall>
+      <param name="is.jenkins.build" value="true"/>
       <target name="remove-maven-artifacts"/>
       <!-- this implicitely publishes the maven artifacts: -->
       <target name="validate-maven-dependencies"/>
     </antcall>
     <!-- step 2: run the maven build to check that the pom templates also work to drive "mvn": -->
     <antcall>
+      <param name="is.jenkins.build" value="true"/>
       <target name="remove-maven-artifacts"/>
       <target name="run-maven-build"/>
     </antcall>
   </target>
-  
-  <target name="jenkins-clover" depends="run-clover"/>
+
+  <target name="jenkins-clover">
+    <antcall>
+      <param name="is.jenkins.build" value="true"/>
+      <target name="run-clover"/>
+    </antcall>
+  </target>
+
 </project>

@@ -1,5 +1,6 @@
 package org.apache.lucene.facet.taxonomy;
 
+import java.util.Arrays;
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -42,29 +43,46 @@ public class CategoryPath implements Comparable<CategoryPath> {
 
   // Used by singleton EMPTY
   private CategoryPath() {
-    components = new String[0];
+    components = null;
     length = 0;
   }
 
   // Used by subpath
-  private CategoryPath(CategoryPath copyFrom, int prefixLen) {
+  private CategoryPath(final CategoryPath copyFrom, final int prefixLen) {
+    // while the code which calls this method is safe, at some point a test
+    // tripped on AIOOBE in toString, but we failed to reproduce. adding the
+    // assert as a safety check.
+    assert prefixLen > 0 && prefixLen <= copyFrom.components.length : 
+      "prefixLen cannot be negative nor larger than the given components' length: prefixLen=" + prefixLen
+        + " components.length=" + copyFrom.components.length;
     this.components = copyFrom.components;
     length = prefixLen;
   }
   
   /** Construct from the given path components. */
-  public CategoryPath(String... components) {
+  public CategoryPath(final String... components) {
+    assert components.length > 0 : "use CategoryPath.EMPTY to create an empty path";
+    for (String comp : components) {
+      if (comp == null || comp.isEmpty()) {
+        throw new IllegalArgumentException("empty or null components not allowed: " + Arrays.toString(components));
+      }
+    }
     this.components = components;
     length = components.length;
   }
 
   /** Construct from a given path, separating path components with {@code delimiter}. */
-  public CategoryPath(String pathString, char delimiter) {
+  public CategoryPath(final String pathString, final char delimiter) {
     String[] comps = pathString.split(Character.toString(delimiter));
     if (comps.length == 1 && comps[0].isEmpty()) {
-      components = EMPTY.components;
+      components = null;
       length = 0;
     } else {
+      for (String comp : comps) {
+        if (comp == null || comp.isEmpty()) {
+          throw new IllegalArgumentException("empty or null components not allowed: " + Arrays.toString(comps));
+        }
+      }
       components = comps;
       length = components.length;
     }
@@ -92,8 +110,8 @@ public class CategoryPath implements Comparable<CategoryPath> {
    */
   @Override
   public int compareTo(CategoryPath other) {
-    int length = this.length < other.length ? this.length : other.length;
-    for (int i = 0, j = 0; i < length; i++, j++) {
+    final int len = length < other.length ? length : other.length;
+    for (int i = 0, j = 0; i < len; i++, j++) {
       int cmp = components[i].compareTo(other.components[j]);
       if (cmp < 0) return -1; // this is 'before'
       if (cmp > 0) return 1; // this is 'after'
@@ -101,6 +119,14 @@ public class CategoryPath implements Comparable<CategoryPath> {
     
     // one is a prefix of the other
     return length - other.length;
+  }
+
+  private void noDelimiter(char[] buf, int offset, int len, char delimiter) {
+    for(int idx=0;idx<len;idx++) {
+      if (buf[offset+idx] == delimiter) {
+        throw new IllegalArgumentException("delimiter character U+" + Integer.toHexString(delimiter) + " appears in path");
+      }
+    }
   }
 
   /**
@@ -123,10 +149,12 @@ public class CategoryPath implements Comparable<CategoryPath> {
     for (int i = 0; i < upto; i++) {
       int len = components[i].length();
       components[i].getChars(0, len, buf, idx);
+      noDelimiter(buf, idx, len, delimiter);
       idx += len;
       buf[idx++] = delimiter;
     }
     components[upto].getChars(0, components[upto].length(), buf, idx);
+    noDelimiter(buf, idx, components[upto].length(), delimiter);
     
     return idx + components[upto].length() - start;
   }
@@ -179,7 +207,7 @@ public class CategoryPath implements Comparable<CategoryPath> {
   }
 
   /** Returns a sub-path of this path up to {@code length} components. */
-  public CategoryPath subpath(int length) {
+  public CategoryPath subpath(final int length) {
     if (length >= this.length || length < 0) {
       return this;
     } else if (length == 0) {

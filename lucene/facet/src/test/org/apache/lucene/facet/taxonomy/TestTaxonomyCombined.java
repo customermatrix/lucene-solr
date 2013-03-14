@@ -7,15 +7,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.lucene.facet.FacetTestCase;
+import org.apache.lucene.facet.SlowRAMDirectory;
 import org.apache.lucene.facet.taxonomy.directory.DirectoryTaxonomyReader;
 import org.apache.lucene.facet.taxonomy.directory.DirectoryTaxonomyWriter;
 import org.apache.lucene.facet.taxonomy.directory.ParallelTaxonomyArrays;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.LockObtainFailedException;
 import org.apache.lucene.store.RAMDirectory;
-import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.util.LuceneTestCase.SuppressCodecs;
-import org.apache.lucene.util.SlowRAMDirectory;
 import org.junit.Test;
 
 /*
@@ -36,8 +36,8 @@ import org.junit.Test;
  */
 
 // TODO: remove this suppress if we fix the TaxoWriter Codec to a non-default (see todo in DirTW)
-@SuppressCodecs("SimpleText")
-public class TestTaxonomyCombined extends LuceneTestCase {
+@SuppressCodecs({"SimpleText","Lucene3x"})
+public class TestTaxonomyCombined extends FacetTestCase {
 
   /**  The following categories will be added to the taxonomy by
     fillTaxonomy(), and tested by all tests below:
@@ -353,7 +353,7 @@ public class TestTaxonomyCombined extends LuceneTestCase {
     }
 
     // test TaxonomyReader.getCategory():
-    for (int i=0; i<tr.getSize(); i++) {
+    for (int i = 1; i < tr.getSize(); i++) {
       CategoryPath expectedCategory = new CategoryPath(expectedCategories[i]);
       CategoryPath category = tr.getPath(i);
       if (!expectedCategory.equals(category)) {
@@ -367,7 +367,7 @@ public class TestTaxonomyCombined extends LuceneTestCase {
     assertNull(tr.getPath(TaxonomyReader.INVALID_ORDINAL));
 
     // test TaxonomyReader.getOrdinal():
-    for (int i=0; i<expectedCategories.length; i++) {
+    for (int i = 1; i < expectedCategories.length; i++) {
       int expectedOrdinal = i;
       int ordinal = tr.getOrdinal(new CategoryPath(expectedCategories[i]));
       if (expectedOrdinal != ordinal) {

@@ -378,7 +378,7 @@ public final class PostingsHighlighter {
         throw new IllegalArgumentException("field '" + field + "' was indexed without offsets, cannot highlight");
       }
       int end = dp.endOffset();
-      if (start > current.endOffset) {
+      if (start >= current.endOffset) {
         if (current.startOffset >= 0) {
           // finalize current
           current.score *= scorer.norm(current.startOffset);
@@ -399,6 +399,9 @@ public final class PostingsHighlighter {
         if (start >= contentLength) {
           Passage passages[] = new Passage[passageQueue.size()];
           passageQueue.toArray(passages);
+          for (Passage p : passages) {
+            p.sort();
+          }
           // sort in ascending order
           Arrays.sort(passages, new Comparator<Passage>() {
             @Override

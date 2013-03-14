@@ -4,20 +4,17 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Map;
 
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
-import org.apache.lucene.analysis.tokenattributes.PayloadAttribute;
+import org.apache.lucene.document.BinaryDocValuesField;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;
-import org.apache.lucene.facet.index.params.CategoryListParams;
-import org.apache.lucene.facet.index.params.FacetIndexingParams;
+import org.apache.lucene.facet.params.CategoryListParams;
+import org.apache.lucene.facet.params.FacetIndexingParams;
 import org.apache.lucene.facet.taxonomy.CategoryPath;
 import org.apache.lucene.facet.taxonomy.TaxonomyWriter;
 import org.apache.lucene.index.FieldInfo.IndexOptions;
@@ -51,32 +48,6 @@ import org.apache.lucene.util.IntsRef;
  */
 public class FacetFields {
 
-  // a TokenStream for writing the counting list payload
-  private static final class CountingListStream extends TokenStream {
-    private final PayloadAttribute payloadAtt = addAttribute(PayloadAttribute.class);
-    private final CharTermAttribute termAtt = addAttribute(CharTermAttribute.class);
-    private Iterator<Entry<String,BytesRef>> categoriesData;
-    
-    CountingListStream() {}
-    
-    @Override
-    public boolean incrementToken() throws IOException {
-      if (!categoriesData.hasNext()) {
-        return false;
-      }
-      
-      Entry<String,BytesRef> entry = categoriesData.next();
-      termAtt.setEmpty().append(entry.getKey());
-      payloadAtt.setPayload(entry.getValue());
-      return true;
-    }
-    
-    void setCategoriesData(Map<String,BytesRef> categoriesData) {
-      this.categoriesData = categoriesData.entrySet().iterator();
-    }
-    
-  }
-
   // The counting list is written in a payload, but we don't store it
   // nor need norms.
   private static final FieldType COUNTING_LIST_PAYLOAD_TYPE = new FieldType();
@@ -94,9 +65,8 @@ public class FacetFields {
   // Therefore we set its IndexOptions to DOCS_ONLY.
   private static final FieldType DRILL_DOWN_TYPE = new FieldType(TextField.TYPE_NOT_STORED);
   static {
-    // TODO: once we cutover to DocValues, we can set it to DOCS_ONLY for this 
-    // FacetFields (not associations)
-    DRILL_DOWN_TYPE.setIndexOptions(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
+    DRILL_DOWN_TYPE.setIndexOptions(IndexOptions.DOCS_ONLY);
+    DRILL_DOWN_TYPE.setOmitNorms(true);
     DRILL_DOWN_TYPE.freeze();
   }
   
@@ -105,14 +75,14 @@ public class FacetFields {
   protected final FacetIndexingParams indexingParams;
 
   /**
-   * Constructs a new instance with the {@link FacetIndexingParams#ALL_PARENTS
+   * Constructs a new instance with the {@link FacetIndexingParams#DEFAULT
    * default} facet indexing params.
    * 
    * @param taxonomyWriter
    *          used to resolve given categories to ordinals
    */
   public FacetFields(TaxonomyWriter taxonomyWriter) {
-    this(taxonomyWriter, FacetIndexingParams.ALL_PARENTS);
+    this(taxonomyWriter, FacetIndexingParams.DEFAULT);
   }
 
   /**
@@ -175,10 +145,20 @@ public class FacetFields {
    * Returns the {@link FieldType} with which the drill-down terms should be
    * indexed. The default is {@link IndexOptions#DOCS_ONLY}.
    */
-  protected FieldType fieldType() {
+  protected FieldType drillDownFieldType() {
     return DRILL_DOWN_TYPE;
   }
 
+  /**
+   * Add the counting list data to the document under the given field. Note that
+   * the field is determined by the {@link CategoryListParams}.
+   */
+  protected void addCountingListData(Document doc, Map<String,BytesRef> categoriesData, String field) {
+    for (Entry<String,BytesRef> entry : categoriesData.entrySet()) {
+      doc.add(new BinaryDocValuesField(field + entry.getKey(), entry.getValue()));
+    }
+  }
+  
   /** Adds the needed facet fields to the document. */
   public void addFields(Document doc, Iterable<CategoryPath> categories) throws IOException {
     if (categories == null) {
@@ -198,7 +178,7 @@ public class FacetFields {
     IntsRef ordinals = new IntsRef(32); // should be enough for most common applications
     for (Entry<CategoryListParams, Iterable<CategoryPath>> e : categoryLists.entrySet()) {
       final CategoryListParams clp = e.getKey();
-      final String field = clp.getTerm().field();
+      final String field = clp.field;
 
       // build category list data
       ordinals.length = 0; // reset
@@ -214,13 +194,11 @@ public class FacetFields {
       Map<String,BytesRef> categoriesData = getCategoryListData(clp, ordinals, e.getValue());
       
       // add the counting list data
-      CountingListStream ts = new CountingListStream();
-      ts.setCategoriesData(categoriesData);
-      doc.add(new Field(field, ts, COUNTING_LIST_PAYLOAD_TYPE));
+      addCountingListData(doc, categoriesData, field);
       
       // add the drill-down field
       DrillDownStream drillDownStream = getDrillDownStream(e.getValue());
-      Field drillDown = new Field(field, drillDownStream, fieldType());
+      Field drillDown = new Field(field, drillDownStream, drillDownFieldType());
       doc.add(drillDown);
     }
   }

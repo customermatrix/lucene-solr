@@ -134,9 +134,19 @@ class SortableFloatFieldSource extends FieldCacheSource {
       }
 
       @Override
+      public boolean exists(int doc) {
+        return termsIndex.getOrd(doc) >= 0;
+      }
+
+      @Override
       public float floatVal(int doc) {
         int ord=termsIndex.getOrd(doc);
-        return ord==0 ? def  : NumberUtils.SortableStr2float(termsIndex.lookup(ord, spare));
+        if (ord==-1) {
+          return def;
+        } else {
+          termsIndex.lookupOrd(ord, spare);
+          return NumberUtils.SortableStr2float(spare);
+        }
       }
 
       @Override
@@ -166,8 +176,7 @@ class SortableFloatFieldSource extends FieldCacheSource {
 
       @Override
       public Object objectVal(int doc) {
-        int ord=termsIndex.getOrd(doc);
-        return ord==0 ? null  : NumberUtils.SortableStr2float(termsIndex.lookup(ord, spare));
+        return exists(doc) ? floatVal(doc) : null;
       }
 
       @Override
@@ -183,11 +192,12 @@ class SortableFloatFieldSource extends FieldCacheSource {
           @Override
           public void fillValue(int doc) {
             int ord=termsIndex.getOrd(doc);
-            if (ord == 0) {
+            if (ord == -1) {
               mval.value = def;
               mval.exists = false;
             } else {
-              mval.value = NumberUtils.SortableStr2float(termsIndex.lookup(ord, spare));
+              termsIndex.lookupOrd(ord, spare);
+              mval.value = NumberUtils.SortableStr2float(spare);
               mval.exists = true;
             }
           }

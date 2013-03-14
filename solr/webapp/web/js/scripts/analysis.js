@@ -42,7 +42,7 @@ sammy.get
 
         var type_or_name = $( '#type_or_name', analysis_form );
         var schema_browser_element = $( '#tor_schema' );
-        var schema_browser_path = $( 'p > a', active_core ).attr( 'href' ) + '/schema-browser'
+        var schema_browser_path = app.core_menu.find( '.schema-browser a' ).attr( 'href' );
         var schema_browser_map = { 'fieldname' : 'field', 'fieldtype' : 'type' };
 
         type_or_name
@@ -269,7 +269,7 @@ sammy.get
                   dataType : 'json',
                   beforeSend : function( xhr, settings )
                   {
-                    loader.show( button );
+                    loader.show( $( 'span', button ) );
                     button.attr( 'disabled', true );
                   },
                   success : function( response, status_text, xhr, form )
@@ -325,7 +325,7 @@ sammy.get
                   },
                   complete : function()
                   {
-                    loader.hide( $( 'button', analysis_form ) );
+                    loader.hide( $( 'span', button ) );
                     button.removeAttr( 'disabled' );
                   }
                 }

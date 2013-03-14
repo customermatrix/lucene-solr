@@ -17,6 +17,8 @@
 
 package org.apache.solr.request;
 
+import org.apache.lucene.index.AtomicReader;
+import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.search.FieldCache;
 import org.apache.lucene.index.DocTermOrds;
 import org.apache.lucene.index.Term;
@@ -43,6 +45,7 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.UnicodeUtil;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -176,7 +179,8 @@ public class UnInvertedField extends DocTermOrds {
     final String prefix = TrieField.getMainValuePrefix(searcher.getSchema().getFieldType(field));
     this.searcher = searcher;
     try {
-      uninvert(searcher.getAtomicReader(), prefix == null ? null : new BytesRef(prefix));
+      AtomicReader r = searcher.getAtomicReader();
+      uninvert(r, r.getLiveDocs(), prefix == null ? null : new BytesRef(prefix));
     } catch (IllegalStateException ise) {
       throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, ise.getMessage());
     }
@@ -488,16 +492,10 @@ public class UnInvertedField extends DocTermOrds {
     int i = 0;
     final FieldFacetStats[] finfo = new FieldFacetStats[facet.length];
     //Initialize facetstats, if facets have been passed in
-    FieldCache.DocTermsIndex si;
+
     for (String f : facet) {
       SchemaField facet_sf = searcher.getSchema().getField(f);
-      try {
-        si = FieldCache.DEFAULT.getTermsIndex(searcher.getAtomicReader(), f);
-      }
-      catch (IOException e) {
-        throw new RuntimeException("failed to open field cache for: " + f, e);
-      }
-      finfo[i] = new FieldFacetStats(f, si, sf, facet_sf, numTermsInField);
+      finfo[i] = new FieldFacetStats(searcher, f, sf, facet_sf);
       i++;
     }
 

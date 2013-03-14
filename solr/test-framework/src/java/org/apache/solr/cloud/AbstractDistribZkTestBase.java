@@ -67,11 +67,15 @@ public abstract class AbstractDistribZkTestBase extends BaseDistributedSearchTes
 
     String schema = getSchemaFile();
     if (schema == null) schema = "schema.xml";
-    AbstractZkTestCase.buildZooKeeper(zkServer.getZkHost(), zkServer.getZkAddress(), "solrconfig.xml", schema);
+    AbstractZkTestCase.buildZooKeeper(zkServer.getZkHost(), zkServer.getZkAddress(), getCloudSolrConfig(), schema);
 
     // set some system properties for use by tests
     System.setProperty("solr.test.sys.prop1", "propone");
     System.setProperty("solr.test.sys.prop2", "proptwo");
+  }
+  
+  protected String getCloudSolrConfig() {
+    return "solrconfig-tlog.xml";
   }
   
   @Override
@@ -79,6 +83,7 @@ public abstract class AbstractDistribZkTestBase extends BaseDistributedSearchTes
     // give everyone there own solrhome
     File controlHome = new File(new File(getSolrHome()).getParentFile(), "control" + homeCount.incrementAndGet());
     FileUtils.copyDirectory(new File(getSolrHome()), controlHome);
+    setupJettySolrHome(controlHome);
     
     System.setProperty("collection", "control_collection");
     String numShardsS = System.getProperty(ZkStateReader.NUM_SHARDS_PROP);
@@ -98,7 +103,7 @@ public abstract class AbstractDistribZkTestBase extends BaseDistributedSearchTes
       if (sb.length() > 0) sb.append(',');
       // give everyone there own solrhome
       File jettyHome = new File(new File(getSolrHome()).getParentFile(), "jetty" + homeCount.incrementAndGet());
-      FileUtils.copyDirectory(new File(getSolrHome()), jettyHome);
+      setupJettySolrHome(jettyHome);
       JettySolrRunner j = createJetty(jettyHome, null, "shard" + (i + 2));
       jettys.add(j);
       clients.add(createNewSolrServer(j.getLocalPort()));
@@ -207,7 +212,6 @@ public abstract class AbstractDistribZkTestBase extends BaseDistributedSearchTes
     if (DEBUG) {
       printLayout();
     }
-    zkServer.shutdown();
     System.clearProperty("zkHost");
     System.clearProperty("collection");
     System.clearProperty("enable.update.log");
@@ -217,6 +221,7 @@ public abstract class AbstractDistribZkTestBase extends BaseDistributedSearchTes
     System.clearProperty("solr.test.sys.prop2");
     resetExceptionIgnores();
     super.tearDown();
+    zkServer.shutdown();
   }
   
   protected void printLayout() throws Exception {

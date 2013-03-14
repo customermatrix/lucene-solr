@@ -697,7 +697,7 @@ public class ExtendedDismaxQParser extends QParser {
       
       start = pos;      
       
-      if (ch=='+' || ch=='-') {
+      if ((ch=='+' || ch=='-') && (pos+1)<end) {
         clause.must = ch;
         pos++;
       }
@@ -1055,7 +1055,7 @@ public class ExtendedDismaxQParser extends QParser {
     @Override
     protected Query getWildcardQuery(String field, String val) throws SyntaxError {
       if (val.equals("*")) {
-        if (field.equals("*")) {
+        if (field.equals("*") || getExplicitField() == null) {
           return new MatchAllDocsQuery();
         } else{
           return getPrefixQuery(field,"");

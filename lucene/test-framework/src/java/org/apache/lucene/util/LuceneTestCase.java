@@ -226,7 +226,7 @@ public abstract class LuceneTestCase extends Assert {
    * Use this constant when creating Analyzers and any other version-dependent stuff.
    * <p><b>NOTE:</b> Change this when development starts for new Lucene version:
    */
-  public static final Version TEST_VERSION_CURRENT = Version.LUCENE_40;
+  public static final Version TEST_VERSION_CURRENT = Version.LUCENE_42;
 
   /**
    * True if and only if tests are run in verbose mode. If this flag is false
@@ -254,6 +254,9 @@ public abstract class LuceneTestCase extends Assert {
 
   /** Gets the postingsFormat to run tests with. */
   public static final String TEST_POSTINGSFORMAT = System.getProperty("tests.postingsformat", "random");
+  
+  /** Gets the docValuesFormat to run tests with */
+  public static final String TEST_DOCVALUESFORMAT = System.getProperty("tests.docvaluesformat", "random");
 
   /** Gets the directory to run tests with */
   public static final String TEST_DIRECTORY = System.getProperty("tests.directory", "random");
@@ -1248,6 +1251,11 @@ public abstract class LuceneTestCase extends Assert {
       if (maybeWrap) {
         r = maybeWrapReader(r);
       }
+      if (rarely() && r instanceof AtomicReader) {
+        // TODO: not useful to check DirectoryReader (redundant with checkindex)
+        // but maybe sometimes run this on the other crazy readers maybeWrapReader creates?
+        _TestUtil.checkReader(r);
+      }
       IndexSearcher ret = random.nextBoolean() ? new AssertingIndexSearcher(random, r) : new AssertingIndexSearcher(random, r.getContext());
       ret.setSimilarity(classEnvRule.similarity);
       return ret;
@@ -1294,5 +1302,17 @@ public abstract class LuceneTestCase extends Assert {
     } catch (Exception e) {
       throw new IOException("Cannot find resource: " + name);
     }
+  }
+  
+  /** Returns true if the default codec supports SORTED_SET docvalues */ 
+  public static boolean defaultCodecSupportsSortedSet() {
+    if (!defaultCodecSupportsDocValues()) {
+      return false;
+    }
+    String name = Codec.getDefault().getName();
+    if (name.equals("Lucene40") || name.equals("Lucene41") || name.equals("Appending")) {
+      return false;
+    }
+    return true;
   }
 }

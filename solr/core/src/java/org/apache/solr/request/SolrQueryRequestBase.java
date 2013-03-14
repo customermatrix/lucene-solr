@@ -132,7 +132,7 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
                   virtualIndexSchema.setQueryParserDefaultOperator(schema.getQueryParserDefaultOperator());
                   virtualIndexSchema.setDefaultSearchFieldName(schema.getDefaultSearchFieldName());
                   if (core.getSchema().getDynamicFieldPrototypes() != null) {
-                    virtualIndexSchema.registerDynamicField(core.getSchema().getDynamicFieldPrototypes());
+                    virtualIndexSchema.registerDynamicFields(core.getSchema().getDynamicFieldPrototypes());
                   }
                 }
               }

@@ -76,6 +76,8 @@ public interface CoreAdminParams
   
   public static final String ROLES = "roles";
   
+  public static final String CORE_NODE_NAME = "coreNodeName";
+  
   /** Prefix for core property name=value pair **/
   public final static String PROPERTY_PREFIX = "property.";
 
@@ -100,7 +102,9 @@ public interface CoreAdminParams
     SPLIT,
     PREPRECOVERY,
     REQUESTRECOVERY, 
-    REQUESTSYNCSHARD;
+    REQUESTSYNCSHARD,
+    CREATEALIAS,
+    DELETEALIAS;
     
     public static CoreAdminAction get( String p )
     {

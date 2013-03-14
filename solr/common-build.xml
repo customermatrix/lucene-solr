@@ -24,7 +24,7 @@
   <dirname file="${ant.file.common-solr}" property="common-solr.dir"/>
   
   <property name="Name" value="Solr" />
-  <property name="version" value="4.1-SNAPSHOT"/>
+  <property name="version" value="4.2-SNAPSHOT"/>
   <property name="fullname" value="${ant.project.name}"/>
   <property name="fullnamever" value="${fullname}-${version}"/>
   <property name="final.name" value="${fullnamever}"/>
@@ -67,7 +67,11 @@
        By default, this should be set to "X.Y.M.${dateversion}"
        where X.Y.M is the last version released (on this branch).
     -->
-  <property name="solr.spec.version" value="4.1.1.${dateversion}" />
+  <property name="solr.spec.version" value="4.2.0.${dateversion}" />
+  
+  <!-- defined here to be able to make the forbidden-api checker correctly
+   reference it. 'ivy.xml' is also referencing this property. -->
+  <property name="commons-io.version" value="2.1" />
 
   <path id="solr.lucene.libs">
     <!-- List of jars that will be used as the foundation for both
@@ -81,6 +85,7 @@
     <pathelement location="${analyzers-common.jar}"/>
     <pathelement location="${analyzers-kuromoji.jar}"/>
     <pathelement location="${analyzers-phonetic.jar}"/>
+    <pathelement location="${codecs.jar}"/>
     <pathelement location="${highlighter.jar}"/>
     <pathelement location="${memory.jar}"/>
     <pathelement location="${misc.jar}"/>
@@ -135,7 +140,7 @@
   </target>
 
   <target name="prep-lucene-jars" 
-  	      depends="jar-lucene-core, jar-analyzers-phonetic, jar-analyzers-kuromoji, jar-suggest, jar-highlighter, jar-memory,
+  	      depends="jar-lucene-core, jar-analyzers-phonetic, jar-analyzers-kuromoji, jar-codecs, jar-suggest, jar-highlighter, jar-memory,
   	               jar-misc, jar-spatial, jar-grouping, jar-queries, jar-queryparser">
   	  <property name="solr.deps.compiled" value="true"/>
   </target>
@@ -179,7 +184,7 @@
       </jarify>
     </sequential>
   </macrodef>
-  
+
   <target name="jar-core" depends="compile-core">
     <solr-jarify/>
   </target>
@@ -194,7 +199,7 @@
   <property name="lucenedocs" location="${common.dir}/build/docs"/>
 
   <!-- dependency to ensure all lucene javadocs are present -->
-  <target name="lucene-javadocs" depends="javadocs-lucene-core,javadocs-analyzers-common,javadocs-analyzers-icu,javadocs-analyzers-kuromoji,javadocs-analyzers-phonetic,javadocs-analyzers-smartcn,javadocs-analyzers-morfologik,javadocs-analyzers-stempel,javadocs-analyzers-uima,javadocs-suggest,javadocs-grouping,javadocs-queries,javadocs-queryparser,javadocs-highlighter,javadocs-memory,javadocs-misc,javadocs-spatial,javadocs-test-framework"/>
+  <target name="lucene-javadocs" depends="javadocs-lucene-core,javadocs-analyzers-common,javadocs-analyzers-icu,javadocs-analyzers-kuromoji,javadocs-analyzers-phonetic,javadocs-analyzers-smartcn,javadocs-analyzers-morfologik,javadocs-analyzers-stempel,javadocs-analyzers-uima,javadocs-codecs,javadocs-suggest,javadocs-grouping,javadocs-queries,javadocs-queryparser,javadocs-highlighter,javadocs-memory,javadocs-misc,javadocs-spatial,javadocs-test-framework"/>
 
   <!-- create javadocs for the current module -->
   <target name="javadocs" depends="compile-core,define-lucene-javadoc-url,lucene-javadocs,javadocs-solr-core">
@@ -260,6 +265,7 @@
           <link offline="true" href="${lucene.javadoc.url}analyzers-smartcn" packagelistloc="${lucenedocs}/analyzers-smartcn"/>
           <link offline="true" href="${lucene.javadoc.url}analyzers-stempel" packagelistloc="${lucenedocs}/analyzers-stempel"/>
           <link offline="true" href="${lucene.javadoc.url}analyzers-uima" packagelistloc="${lucenedocs}/analyzers-uima"/>
+          <link offline="true" href="${lucene.javadoc.url}codecs" packagelistloc="${lucenedocs}/codecs"/>
           <link offline="true" href="${lucene.javadoc.url}suggest" packagelistloc="${lucenedocs}/suggest"/>
           <link offline="true" href="${lucene.javadoc.url}grouping" packagelistloc="${lucenedocs}/grouping"/>
           <link offline="true" href="${lucene.javadoc.url}queries" packagelistloc="${lucenedocs}/queries"/>
@@ -363,6 +369,11 @@
       <propertyset refid="uptodate.and.compiled.properties"/>
     </ant>
   </target>
+  <target name="jar-solrj" description="Jar Solr-J">
+    <ant dir="${common-solr.dir}/solrj" target="jar-core" inheritAll="false">
+      <propertyset refid="uptodate.and.compiled.properties"/>
+    </ant>
+  </target>
 
   <!-- TODO: really a copy should work: but sync is currently safer
        since some buggy tests don't create their own tempdir but
@@ -380,6 +391,12 @@
     </ant>
   	<property name="solr.core.compiled" value="true"/>
     <property name="solr.test.framework.compiled" value="true"/>
+  </target>
+
+  <target name="jar-solr-test-framework" depends="compile-solr-test-framework">
+    <ant dir="${common-solr.dir}/test-framework" target="jar-core" inheritAll="false">
+      <propertyset refid="uptodate.and.compiled.properties"/>
+    </ant>
   </target>
 
   <!-- resolve dependencies in the example (relied upon by compile/tests) -->
@@ -415,6 +432,10 @@
 
   <target name="javadocs-contrib" description="Compile contrib modules">
   	<contrib-crawl target="javadocs"/>
+  </target>
+
+  <target name="jar-contrib" description="Jar contrib modules">
+    <contrib-crawl target="jar-core"/>
   </target>
 
   <target name="contribs-add-to-war">
