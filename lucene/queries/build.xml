@@ -21,4 +21,20 @@
   </description>
 
   <import file="../module-build.xml"/>
+
+  <path id="queriesjar">
+    <fileset dir="lib"/>
+  </path>
+
+
+  <path id="classpath">
+    <path refid="base.classpath"/>
+    <path refid="queriesjar"/>
+  </path>
+
+  <path id="test.classpath">
+    <path refid="test.base.classpath" />
+    <path refid="queriesjar"/>
+  </path>
+
 </project>

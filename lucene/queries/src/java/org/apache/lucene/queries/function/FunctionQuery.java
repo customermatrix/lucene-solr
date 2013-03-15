@@ -21,8 +21,10 @@ import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.*;
-import org.apache.lucene.index.MultiFields;
 import org.apache.lucene.util.Bits;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Set;
@@ -38,6 +40,7 @@ import java.util.Map;
  *
  */
 public class FunctionQuery extends Query {
+  private final Logger logger = LoggerFactory.getLogger(FunctionQuery.class);
   final ValueSource func;
 
   /**
@@ -150,7 +153,14 @@ public class FunctionQuery extends Query {
 
     @Override
     public float score() throws IOException {
-      float score = qWeight * vals.floatVal(doc);
+      float v = -Float.MAX_VALUE ;
+
+      try {
+        v = vals.floatVal(doc);
+      } catch (Exception e) {
+        logger.error("", e);
+      }
+      float score = qWeight * v;
 
       // Current Lucene priority queues can't handle NaN and -Infinity, so
       // map to -Float.MAX_VALUE. This conditional handles both -infinity
