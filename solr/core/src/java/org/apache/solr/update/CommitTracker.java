@@ -63,8 +63,8 @@ public class CommitTracker implements Runnable {
 
   private final SolrCore core;
 
-  private final boolean softCommit;
-  private final boolean openSearcher;
+  private boolean softCommit;
+  private boolean openSearcher;
   private final boolean waitSearcher = true;
 
   private String name;
@@ -74,14 +74,22 @@ public class CommitTracker implements Runnable {
     this.name = name;
     pending = null;
     
+    update(docsUpperBound, timeUpperBound, openSearcher, softCommit);
+
+    SolrCore.log.info(name + " AutoCommit: " + this);
+  }
+
+
+  public void update(int docsUpperBound, int timeUpperBound, boolean openSearcher, boolean softCommit) {
     this.docsUpperBound = docsUpperBound;
     this.timeUpperBound = timeUpperBound;
-    
+
     this.softCommit = softCommit;
     this.openSearcher = openSearcher;
 
     SolrCore.log.info(name + " AutoCommit: " + this);
   }
+
 
   public boolean getOpenSearcher() {
     return openSearcher;

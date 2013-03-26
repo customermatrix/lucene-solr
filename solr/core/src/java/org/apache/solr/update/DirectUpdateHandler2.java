@@ -88,8 +88,8 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
   AtomicLong numErrorsCumulative = new AtomicLong();
 
   // tracks when auto-commit should occur
-  protected CommitTracker commitTracker;
-  protected CommitTracker softCommitTracker;
+  protected final CommitTracker commitTracker;
+  protected final CommitTracker softCommitTracker;
 
   protected boolean commitWithinSoftCommit;
 
@@ -131,14 +131,6 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
     }
     
     commitWithinSoftCommit = updateHandlerInfo.commitWithinSoftCommit;
-  }
-
-  public void setSoftCommitTracker(CommitTracker softCommitTracker) {
-    this.softCommitTracker = softCommitTracker;
-  }
-
-  public void setCommitTracker(CommitTracker commitTracker) {
-    this.commitTracker = commitTracker;
   }
 
   private void deleteAll() throws IOException {
