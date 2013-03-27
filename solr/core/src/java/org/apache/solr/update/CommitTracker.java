@@ -86,6 +86,7 @@ public class CommitTracker implements Runnable {
 
     this.softCommit = softCommit;
     this.openSearcher = openSearcher;
+    docsSinceCommit.set(0);
 
     SolrCore.log.info(name + " AutoCommit: " + this);
   }
