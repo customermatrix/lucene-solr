@@ -1,5 +1,5 @@
 #!/bin/sh
-DESTINATION=../search/solr/src/main/webapp
+DESTINATION=$1/search/solr/src/main/webapp
 SOURCE=solr/webapp/web
 EXCLUDE=WEB-INF
 
