@@ -16,6 +16,7 @@ package org.apache.solr.core;
  * limitations under the License.
  */
 
+import java.io.File;
 import java.io.IOException;
 
 import org.apache.lucene.store.Directory;
@@ -49,6 +50,6 @@ public abstract class EphemeralDirectoryFactory extends CachingDirectoryFactory 
   
   @Override
   public boolean isAbsolute(String path) {
-    return true;
+    return new File(path).isAbsolute();
   }
 }
