@@ -22,8 +22,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Vector;
 
-import org.apache.solr.common.SolrException;
-import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.core.PluginInfo;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.core.SolrEventListener;
@@ -122,6 +120,10 @@ public abstract class UpdateHandler implements SolrInfoMBean {
   }
 
   public UpdateHandler(SolrCore core)  {
+    this(core, null);
+  }
+  
+  public UpdateHandler(SolrCore core, UpdateLog updateLog)  {
     this.core=core;
     schema = core.getSchema();
     idField = schema.getUniqueKeyField();
@@ -131,7 +133,11 @@ public abstract class UpdateHandler implements SolrInfoMBean {
     if (!core.isReloaded() && !core.getDirectoryFactory().isPersistent()) {
       clearLog(ulogPluginInfo);
     }
-    initLog(ulogPluginInfo);
+    if (updateLog == null) {
+      initLog(ulogPluginInfo);
+    } else {
+      this.ulog = updateLog;
+    }
   }
 
   /**

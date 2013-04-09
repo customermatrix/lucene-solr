@@ -44,6 +44,7 @@ import org.xml.sax.InputSource;
 
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -53,6 +54,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * <code>IndexSchema</code> contains information about the valid fields in an index
@@ -107,7 +109,6 @@ public class IndexSchema {
   /**
    * Constructs a schema using the specified resource name and stream.
    * If the is stream is null, the resource loader will load the schema resource by name.
-   *
    * @see SolrResourceLoader#openSchema
    *      By default, this follows the normal config path directory searching rules.
    * @see SolrResourceLoader#openResource
@@ -483,7 +484,7 @@ public class IndexSchema {
             requiredFields.add(f);
           }
         } else if (node.getNodeName().equals("dynamicField")) {
-          if (isValidDynamicFieldName(name)) {
+          if (isValidFieldGlob(name)) {
             // make sure nothing else has the same path
             addDynamicField(dFields, f);
           } else {
@@ -650,10 +651,8 @@ public class IndexSchema {
     refreshAnalyzers();
   }
 
-  /**
-   * Returns true if the given name has exactly one asterisk either at the start or end of the name
-   */
-  private boolean isValidDynamicFieldName(String name) {
+  /** Returns true if the given name has exactly one asterisk either at the start or end of the name */
+  private static boolean isValidFieldGlob(String name) {
     if (name.startsWith("*") || name.endsWith("*")) {
       int count = 0;
       for (int pos = 0; pos < name.length() && -1 != (pos = name.indexOf('*', pos)); ++pos) ++count;
@@ -726,11 +725,22 @@ public class IndexSchema {
     DynamicField destDynamicBase = null;
 
     boolean sourceIsDynamicFieldReference = false;
-
-    if (null == destSchemaField || null == sourceSchemaField) {
+    boolean sourceIsExplicitFieldGlob = false;
+    
+    if (null == sourceSchemaField && isValidFieldGlob(source)) {
+      Pattern pattern = Pattern.compile(source.replace("*", ".*")); // glob->regex
+      for (String field : fields.keySet()) {
+        if (pattern.matcher(field).matches()) {
+          sourceIsExplicitFieldGlob = true;
+          break;
+        }
+      }
+    }
+    
+    if (null == destSchemaField || (null == sourceSchemaField && ! sourceIsExplicitFieldGlob)) {
       // Go through dynamicFields array only once, collecting info for both source and dest fields, if needed
       for (DynamicField dynamicField : dynamicFields) {
-        if (null == sourceSchemaField && !sourceIsDynamicFieldReference) {
+        if (null == sourceSchemaField && ! sourceIsDynamicFieldReference && ! sourceIsExplicitFieldGlob) {
           if (dynamicField.matches(source)) {
             sourceIsDynamicFieldReference = true;
             if (!source.equals(dynamicField.getRegex())) {
@@ -748,19 +758,22 @@ public class IndexSchema {
             destDynamicBase = dynamicField;
           }
         }
-        if (null != destSchemaField && (null != sourceSchemaField || sourceIsDynamicFieldReference)) break;
+        if (null != destSchemaField 
+            && (null != sourceSchemaField || sourceIsDynamicFieldReference || sourceIsExplicitFieldGlob)) {
+          break;
+        }
       }
     }
-    if (null == sourceSchemaField && !sourceIsDynamicFieldReference) {
-      String msg = "copyField source :'" + source + "' is not an explicit field and doesn't match a dynamicField.";
+    if (null == sourceSchemaField && ! sourceIsDynamicFieldReference && ! sourceIsExplicitFieldGlob) {
+      String msg = "copyField source :'" + source + "' doesn't match any explicit field or dynamicField.";
       throw new SolrException(ErrorCode.SERVER_ERROR, msg);
     }
     if (null == destSchemaField) {
       String msg = "copyField dest :'" + dest + "' is not an explicit field and doesn't match a dynamicField.";
       throw new SolrException(ErrorCode.SERVER_ERROR, msg);
     }
-    if (sourceIsDynamicFieldReference) {
-      if (null != destDynamicField) { // source & dest: dynamic field references
+    if (sourceIsDynamicFieldReference || sourceIsExplicitFieldGlob) {
+      if (null != destDynamicField) { // source: dynamic field ref or explicit field glob; dest: dynamic field ref
         registerDynamicCopyField(new DynamicCopy(source, destDynamicField, maxChars, sourceDynamicBase, destDynamicBase));
         incrementCopyFieldTargetCount(destSchemaField);
       } else {                        // source: dynamic field reference; dest: explicit field
@@ -776,7 +789,7 @@ public class IndexSchema {
           incrementCopyFieldTargetCount(destSchemaField);
         } else {
           String msg = "copyField only supports a dynamic destination with an asterisk "
-              + "if the source is also dynamic with an asterisk";
+                     + "if the source also has an asterisk";
           throw new SolrException(ErrorCode.SERVER_ERROR, msg);
         }
       } else {                        // source & dest: explicit fields
@@ -962,7 +975,8 @@ public class IndexSchema {
 
 
   public final static class DynamicField extends DynamicReplacement {
-    final SchemaField prototype;
+    private final SchemaField prototype;
+    public SchemaField getPrototype() { return prototype; }
 
     DynamicField(SchemaField prototype) {
       super(prototype.name);

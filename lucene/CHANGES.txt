@@ -4,6 +4,54 @@ Lucene Change Log
 For more information on past and future Lucene versions, please see:
 http://s.apache.org/luceneversions
 
+======================= Lucene 4.2.1 =======================
+
+Bug Fixes
+
+* LUCENE-4713: The SPI components used to load custom codecs or analysis
+  components were fixed to also scan the Lucene ClassLoader in addition
+  to the context ClassLoader, so Lucene is always able to find its own
+  codecs. The special case of a null context ClassLoader is now also
+  supported.  (Christian Kohlschütter, Uwe Schindler)
+
+* LUCENE-4819: seekExact(BytesRef, boolean) did not work correctly with 
+  Sorted[Set]DocValuesTermsEnum.  (Robert Muir)
+
+* LUCENE-4826: PostingsHighlighter was not returning the top N best
+  scoring passages. (Robert Muir, Mike McCandless)
+
+* LUCENE-4854: Fix DocTermOrds.getOrdTermsEnum() to not return negative
+  ord on initial next().  (Robert Muir)
+
+* LUCENE-4836: Fix SimpleRateLimiter#pause to return the actual time spent
+  sleeping instead of the wakeup timestamp in nano seconds. (Simon Willnauer)
+
+* LUCENE-4828: BooleanQuery no longer extracts terms from its MUST_NOT
+  clauses.  (Mike McCandless)
+
+* SOLR-4589: Fixed CPU spikes and poor performance in lazy field loading 
+  of multivalued fields. (hossman)
+
+* LUCENE-4870: Fix bug where an entire index might be deleted by the IndexWriter
+  due to false detection if an index exists in the directory when
+  OpenMode.CREATE_OR_APPEND is used. This might also affect application that set
+  the open mode manually using DirectoryReader#indexExists. (Simon Willnauer)
+
+* LUCENE-4878: Override getRegexpQuery in MultiFieldQueryParser to prefent
+  NullPointerException when regular expression syntax is used with
+  MultiFieldQueryParser. (Simon Willnauer, Adam Rauch)
+
+Optimizations
+
+* LUCENE-4819: Added Sorted[Set]DocValues.termsEnum(), and optimized the
+  default codec for improved enumeration performance.  (Robert Muir)
+
+* LUCENE-4854: Speed up TermsEnum of FieldCache.getDocTermOrds.
+  (Robert Muir)
+
+* LUCENE-4857: Don't unnecessarily copy stem override map in
+  StemmerOverrideFilter. (Simon Willnauer)
+
 ======================= Lucene 4.2.0 =======================
 
 Changes in backwards compatibility policy
