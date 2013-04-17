@@ -201,9 +201,11 @@ public class TestStressIndexing2 extends LuceneTestCase {
   public Map<String,Document> indexRandom(int nThreads, int iterations, int range, Directory dir, int maxThreadStates,
                                           boolean doReaderPooling) throws IOException, InterruptedException {
     Map<String,Document> docs = new HashMap<String,Document>();
+    IndexWriterConfig iwc = newIndexWriterConfig(TEST_VERSION_CURRENT,
+        new MockAnalyzer(random()));
     IndexWriter w = new MockIndexWriter(dir, newIndexWriterConfig(
         TEST_VERSION_CURRENT, new MockAnalyzer(random())).setOpenMode(OpenMode.CREATE)
-             .setRAMBufferSizeMB(0.1).setMaxBufferedDocs(maxBufferedDocs).setIndexerThreadPool(new ThreadAffinityDocumentsWriterThreadPool(maxThreadStates))
+             .setRAMBufferSizeMB(0.1).setMaxBufferedDocs(maxBufferedDocs).setIndexerThreadPool(new ThreadAffinityDocumentsWriterThreadPool(iwc, maxThreadStates))
              .setReaderPooling(doReaderPooling).setMergePolicy(newLogMergePolicy()));
     LogMergePolicy lmp = (LogMergePolicy) w.getConfig().getMergePolicy();
     lmp.setUseCompoundFile(false);

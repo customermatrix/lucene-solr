@@ -253,7 +253,7 @@ public class CommitTracker implements Runnable {
     return timeUpperBound;
   }
 
-  int getDocsUpperBound() {
+  public int getDocsUpperBound() {
     return docsUpperBound;
   }
 

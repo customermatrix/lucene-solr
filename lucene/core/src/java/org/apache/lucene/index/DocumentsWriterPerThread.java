@@ -43,7 +43,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 import static org.apache.lucene.util.ByteBlockPool.BYTE_BLOCK_MASK;
 import static org.apache.lucene.util.ByteBlockPool.BYTE_BLOCK_SIZE;
 
-class DocumentsWriterPerThread {
+public class DocumentsWriterPerThread {
 
   /**
    * The IndexingChain must define the {@link #getChain(DocumentsWriterPerThread)} method

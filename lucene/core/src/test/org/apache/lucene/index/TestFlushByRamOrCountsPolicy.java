@@ -67,8 +67,7 @@ public class TestFlushByRamOrCountsPolicy extends LuceneTestCase {
     IndexWriterConfig iwc = newIndexWriterConfig(TEST_VERSION_CURRENT,
         new MockAnalyzer(random())).setFlushPolicy(flushPolicy);
     final int numDWPT = 1 + atLeast(2);
-    DocumentsWriterPerThreadPool threadPool = new ThreadAffinityDocumentsWriterThreadPool(
-        numDWPT);
+    DocumentsWriterPerThreadPool threadPool = new ThreadAffinityDocumentsWriterThreadPool(iwc, numDWPT);
     iwc.setIndexerThreadPool(threadPool);
     iwc.setRAMBufferSizeMB(maxRamMB);
     iwc.setMaxBufferedDocs(IndexWriterConfig.DISABLE_AUTO_FLUSH);
@@ -124,8 +123,7 @@ public class TestFlushByRamOrCountsPolicy extends LuceneTestCase {
           new MockAnalyzer(random())).setFlushPolicy(flushPolicy);
 
       final int numDWPT = 1 + atLeast(2);
-      DocumentsWriterPerThreadPool threadPool = new ThreadAffinityDocumentsWriterThreadPool(
-          numDWPT);
+      DocumentsWriterPerThreadPool threadPool = new ThreadAffinityDocumentsWriterThreadPool(iwc, numDWPT);
       iwc.setIndexerThreadPool(threadPool);
       iwc.setMaxBufferedDocs(2 + atLeast(10));
       iwc.setRAMBufferSizeMB(IndexWriterConfig.DISABLE_AUTO_FLUSH);
@@ -176,7 +174,7 @@ public class TestFlushByRamOrCountsPolicy extends LuceneTestCase {
 
     final int numDWPT = 1 + random().nextInt(8);
     DocumentsWriterPerThreadPool threadPool = new ThreadAffinityDocumentsWriterThreadPool(
-        numDWPT);
+        iwc, numDWPT);
     iwc.setIndexerThreadPool(threadPool);
 
     IndexWriter writer = new IndexWriter(dir, iwc);
@@ -242,7 +240,7 @@ public class TestFlushByRamOrCountsPolicy extends LuceneTestCase {
       iwc.setFlushPolicy(flushPolicy);
       
       DocumentsWriterPerThreadPool threadPool = new ThreadAffinityDocumentsWriterThreadPool(
-          numThreads[i]== 1 ? 1 : 2);
+          iwc, numThreads[i]== 1 ? 1 : 2);
       iwc.setIndexerThreadPool(threadPool);
       // with such a small ram buffer we should be stalled quiet quickly
       iwc.setRAMBufferSizeMB(0.25);

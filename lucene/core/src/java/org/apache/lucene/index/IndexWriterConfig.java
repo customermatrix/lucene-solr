@@ -110,6 +110,8 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig implements Cl
    *  than this many threads arrive they will wait for
    *  others to finish. Default value is 8. */
   public final static int DEFAULT_MAX_THREAD_STATES = 8;
+
+  public static final String DEFAULT_DOCUMENTS_WRITER_PER_THREAD_IMPL = DocumentsWriterPerThread.class.getName();
   
   /**
    * Sets the default (for any instance) maximum time to wait for a write lock
@@ -342,14 +344,14 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig implements Cl
    *
    * <p>Only takes effect when IndexWriter is first created. */
   public IndexWriterConfig setMaxThreadStates(int maxThreadStates) {
-    this.indexerThreadPool = new ThreadAffinityDocumentsWriterThreadPool(maxThreadStates);
+    this.indexerThreadPool = new ThreadAffinityDocumentsWriterThreadPool(this, maxThreadStates);
     return this;
   }
 
   @Override
   public int getMaxThreadStates() {
     try {
-      return ((ThreadAffinityDocumentsWriterThreadPool) indexerThreadPool).getMaxThreadStates();
+      return indexerThreadPool.getMaxThreadStates();
     } catch (ClassCastException cce) {
       throw new IllegalStateException(cce);
     }
@@ -512,10 +514,15 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig implements Cl
   public IndexWriterConfig setReaderTermsIndexDivisor(int divisor) {
     return (IndexWriterConfig) super.setReaderTermsIndexDivisor(divisor);
   }
-  
+
   @Override
   public IndexWriterConfig setTermIndexInterval(int interval) {
     return (IndexWriterConfig) super.setTermIndexInterval(interval);
+  }
+
+  @Override
+  public IndexWriterConfig setDocumentsWriterPerThreadImpl(String impl) {
+    return (IndexWriterConfig) super.setDocumentsWriterPerThreadImpl(impl);
   }
 
 }

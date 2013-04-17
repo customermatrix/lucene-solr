@@ -25,8 +25,11 @@ import org.apache.lucene.index.IndexWriter.IndexReaderWarmer;
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.similarities.Similarity;
+import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.InfoStream;
 import org.apache.lucene.util.Version;
+
+import java.lang.reflect.Constructor;
 
 /**
  * Holds all the configuration used by {@link IndexWriter} with few setters for
@@ -35,7 +38,7 @@ import org.apache.lucene.util.Version;
  * @since 4.0
  */
 public class LiveIndexWriterConfig {
-  
+
   protected Analyzer analyzer;
   
   private volatile int maxBufferedDocs;
@@ -98,6 +101,8 @@ public class LiveIndexWriterConfig {
   /** {@link Version} that {@link IndexWriter} should emulate. */
   protected final Version matchVersion;
 
+  protected volatile String documentsWriterPerThreadImpl;
+
   // used by IndexWriterConfig
   LiveIndexWriterConfig(Analyzer analyzer, Version matchVersion) {
     this.analyzer = analyzer;
@@ -106,6 +111,7 @@ public class LiveIndexWriterConfig {
     maxBufferedDocs = IndexWriterConfig.DEFAULT_MAX_BUFFERED_DOCS;
     maxBufferedDeleteTerms = IndexWriterConfig.DEFAULT_MAX_BUFFERED_DELETE_TERMS;
     readerTermsIndexDivisor = IndexWriterConfig.DEFAULT_READER_TERMS_INDEX_DIVISOR;
+    documentsWriterPerThreadImpl = IndexWriterConfig.DEFAULT_DOCUMENTS_WRITER_PER_THREAD_IMPL;
     mergedSegmentWarmer = null;
     termIndexInterval = IndexWriterConfig.DEFAULT_TERM_INDEX_INTERVAL; // TODO: this should be private to the codec, not settable here
     delPolicy = new KeepOnlyLastCommitDeletionPolicy();
@@ -123,7 +129,7 @@ public class LiveIndexWriterConfig {
     mergePolicy = new TieredMergePolicy();
     flushPolicy = new FlushByRamOrCountsPolicy();
     readerPooling = IndexWriterConfig.DEFAULT_READER_POOLING;
-    indexerThreadPool = new ThreadAffinityDocumentsWriterThreadPool(IndexWriterConfig.DEFAULT_MAX_THREAD_STATES);
+    indexerThreadPool = new ThreadAffinityDocumentsWriterThreadPool(this, IndexWriterConfig.DEFAULT_MAX_THREAD_STATES);
     perThreadHardLimitMB = IndexWriterConfig.DEFAULT_RAM_PER_THREAD_HARD_LIMIT_MB;
   }
   
@@ -154,6 +160,7 @@ public class LiveIndexWriterConfig {
     readerPooling = config.getReaderPooling();
     flushPolicy = config.getFlushPolicy();
     perThreadHardLimitMB = config.getRAMPerThreadHardLimitMB();
+    documentsWriterPerThreadImpl = config.getDocumentsWriterPerThreadImpl();
   }
 
   /** Returns the default analyzer to use for indexing documents. */
@@ -546,6 +553,15 @@ public class LiveIndexWriterConfig {
   public InfoStream getInfoStream() {
     return infoStream;
   }
+
+  public String getDocumentsWriterPerThreadImpl() {
+    return documentsWriterPerThreadImpl;
+  }
+
+  public LiveIndexWriterConfig setDocumentsWriterPerThreadImpl(String documentsWriterPerThreadImpl) {
+    this.documentsWriterPerThreadImpl = documentsWriterPerThreadImpl;
+    return this;
+  }
   
   @Override
   public String toString() {
@@ -572,7 +588,27 @@ public class LiveIndexWriterConfig {
     sb.append("indexerThreadPool=").append(getIndexerThreadPool()).append("\n");
     sb.append("readerPooling=").append(getReaderPooling()).append("\n");
     sb.append("perThreadHardLimitMB=").append(getRAMPerThreadHardLimitMB()).append("\n");
+    sb.append("documentsWriterPerThreadImpl=").append(getDocumentsWriterPerThreadImpl()).append("\n");
     return sb.toString();
   }
 
+  public DocumentsWriterPerThread newDocumentsWriterPerThread(Directory directory, DocumentsWriter documentsWriter, FieldInfos.Builder infos, IndexingChain chain) {
+    try {
+      Class<?> aClass = Class.forName(documentsWriterPerThreadImpl);
+      Constructor<?> constructor = aClass.getConstructor(Directory.class, DocumentsWriter.class, FieldInfos.Builder.class, IndexingChain.class);
+      return (DocumentsWriterPerThread)constructor.newInstance(directory, documentsWriter, infos, chain);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public DocumentsWriterPerThread newDocumentsWriterPerThread(DocumentsWriterPerThread dwpt, FieldInfos.Builder infos) {
+    try {
+      Class<?> aClass = Class.forName(documentsWriterPerThreadImpl);
+      Constructor<?> constructor = aClass.getConstructor(DocumentsWriterPerThread.class, FieldInfos.Builder.class);
+      return (DocumentsWriterPerThread)constructor.newInstance(dwpt, infos);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
 }

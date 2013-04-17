@@ -54,7 +54,8 @@ public class SolrIndexConfig {
   public final PluginInfo mergePolicyInfo;
   public final PluginInfo mergeSchedulerInfo;
   public final int termIndexInterval;
-  
+  public final String documentsWriterPerThreadImpl;
+
   public String infoStreamFile = null;
 
   // Available lock types
@@ -78,6 +79,7 @@ public class SolrIndexConfig {
     writeLockTimeout = -1;
     lockType = LOCK_TYPE_NATIVE;
     termIndexInterval = IndexWriterConfig.DEFAULT_TERM_INDEX_INTERVAL;
+    documentsWriterPerThreadImpl = IndexWriterConfig.DEFAULT_DOCUMENTS_WRITER_PER_THREAD_IMPL;
     mergePolicyInfo = null;
     mergeSchedulerInfo = null;
     defaultMergePolicyClassName = TieredMergePolicy.class.getName();
@@ -129,7 +131,8 @@ public class SolrIndexConfig {
     mergePolicyInfo = getPluginInfo(prefix + "/mergePolicy", solrConfig, def.mergePolicyInfo);
     
     termIndexInterval = solrConfig.getInt(prefix + "/termIndexInterval", def.termIndexInterval);
-    
+    documentsWriterPerThreadImpl = solrConfig.get(prefix + "/documentsWriterPerThread", def.documentsWriterPerThreadImpl);
+
     boolean infoStreamEnabled = solrConfig.getBool(prefix + "/infoStream", false);
     if(infoStreamEnabled) {
       infoStreamFile= solrConfig.get(prefix + "/infoStream/@file", null);
@@ -178,6 +181,7 @@ public class SolrIndexConfig {
     iwc.setSimilarity(schema.getSimilarity());
     iwc.setMergePolicy(buildMergePolicy(schema));
     iwc.setMergeScheduler(buildMergeScheduler(schema));
+    iwc.setDocumentsWriterPerThreadImpl(documentsWriterPerThreadImpl);
 
     if (maxIndexingThreads != -1) {
       iwc.setMaxThreadStates(maxIndexingThreads);

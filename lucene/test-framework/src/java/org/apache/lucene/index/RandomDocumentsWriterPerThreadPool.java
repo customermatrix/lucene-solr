@@ -30,8 +30,8 @@ class RandomDocumentsWriterPerThreadPool extends DocumentsWriterPerThreadPool {
   private final Random random;
   private final int maxRetry;
 
-  public RandomDocumentsWriterPerThreadPool(int maxNumPerThreads, Random random) {
-    super(maxNumPerThreads);
+  public RandomDocumentsWriterPerThreadPool(LiveIndexWriterConfig indexWriterConfig, int maxNumPerThreads, Random random) {
+    super(indexWriterConfig, maxNumPerThreads);
     assert getMaxThreadStates() >= 1;
     states = new ThreadState[maxNumPerThreads];
     this.random = new Random(random.nextLong());

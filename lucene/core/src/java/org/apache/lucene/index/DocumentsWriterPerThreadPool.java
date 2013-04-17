@@ -37,7 +37,9 @@ import org.apache.lucene.util.SetOnce;
  * </p>
  */
 abstract class DocumentsWriterPerThreadPool implements Cloneable {
-  
+
+  private final LiveIndexWriterConfig indexWriterConfig;
+
   /**
    * {@link ThreadState} references and guards a
    * {@link DocumentsWriterPerThread} instance that is used during indexing to
@@ -127,7 +129,8 @@ abstract class DocumentsWriterPerThreadPool implements Cloneable {
   /**
    * Creates a new {@link DocumentsWriterPerThreadPool} with a given maximum of {@link ThreadState}s.
    */
-  DocumentsWriterPerThreadPool(int maxNumThreadStates) {
+  DocumentsWriterPerThreadPool(LiveIndexWriterConfig indexWriterConfig, int maxNumThreadStates) {
+    this.indexWriterConfig = indexWriterConfig;
     if (maxNumThreadStates < 1) {
       throw new IllegalArgumentException("maxNumThreadStates must be >= 1 but was: " + maxNumThreadStates);
     }
@@ -140,7 +143,7 @@ abstract class DocumentsWriterPerThreadPool implements Cloneable {
     this.globalFieldMap.set(globalFieldMap);
     for (int i = 0; i < threadStates.length; i++) {
       final FieldInfos.Builder infos = new FieldInfos.Builder(globalFieldMap);
-      threadStates[i] = new ThreadState(new DocumentsWriterPerThread(documentsWriter.directory, documentsWriter, infos, documentsWriter.chain));
+      threadStates[i] = new ThreadState(config.newDocumentsWriterPerThread(documentsWriter.directory, documentsWriter, infos, documentsWriter.chain));
     }
   }
 
@@ -246,7 +249,7 @@ abstract class DocumentsWriterPerThreadPool implements Cloneable {
     final DocumentsWriterPerThread dwpt = threadState.dwpt;
     if (!closed) {
       final FieldInfos.Builder infos = new FieldInfos.Builder(globalFieldMap.get());
-      final DocumentsWriterPerThread newDwpt = new DocumentsWriterPerThread(dwpt, infos);
+      final DocumentsWriterPerThread newDwpt = indexWriterConfig.newDocumentsWriterPerThread(dwpt, infos);
       newDwpt.initialize();
       threadState.resetWriter(newDwpt);
     } else {

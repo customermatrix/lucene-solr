@@ -36,8 +36,8 @@ class ThreadAffinityDocumentsWriterThreadPool extends DocumentsWriterPerThreadPo
   /**
    * Creates a new {@link ThreadAffinityDocumentsWriterThreadPool} with a given maximum of {@link ThreadState}s.
    */
-  public ThreadAffinityDocumentsWriterThreadPool(int maxNumPerThreads) {
-    super(maxNumPerThreads);
+  public ThreadAffinityDocumentsWriterThreadPool(LiveIndexWriterConfig indexWriterConfig, int maxNumPerThreads) {
+    super(indexWriterConfig, maxNumPerThreads);
     assert getMaxThreadStates() >= 1;
   }
 
