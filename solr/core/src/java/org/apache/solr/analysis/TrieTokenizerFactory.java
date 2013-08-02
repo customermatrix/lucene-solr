@@ -22,12 +22,17 @@ import org.apache.lucene.analysis.tokenattributes.CharTermAttributeImpl;
 import org.apache.lucene.analysis.tokenattributes.OffsetAttribute;
 import org.apache.lucene.analysis.Tokenizer;
 import org.apache.lucene.analysis.util.TokenizerFactory;
+import org.apache.lucene.util.Attribute;
+import org.apache.lucene.util.AttributeImpl;
+import org.apache.lucene.util.AttributeSource.AttributeFactory;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.schema.DateField;
 import static org.apache.solr.schema.TrieField.TrieTypes;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.util.HashMap;
+import java.util.Iterator;
 
 /**
  * Tokenizer for trie fields. It uses NumericTokenStream to create multiple trie encoded string per number.
@@ -46,13 +51,14 @@ public class TrieTokenizerFactory extends TokenizerFactory {
   protected final TrieTypes type;
 
   public TrieTokenizerFactory(TrieTypes type, int precisionStep) {
+    super(new HashMap<String,String>());
     this.type = type;
     this.precisionStep = precisionStep;
   }
 
   @Override
-  public TrieTokenizer create(Reader input) {
-    return new TrieTokenizer(input, type, TrieTokenizer.getNumericTokenStream(precisionStep));
+  public TrieTokenizer create(AttributeFactory factory, Reader input) {
+    return new TrieTokenizer(input, type, TrieTokenizer.getNumericTokenStream(factory, precisionStep));
   }
 }
 
@@ -67,13 +73,22 @@ final class TrieTokenizer extends Tokenizer {
   protected int startOfs, endOfs;
   protected boolean hasValue;
 
-  static NumericTokenStream getNumericTokenStream(int precisionStep) {
-    return new NumericTokenStream(precisionStep);
+  static NumericTokenStream getNumericTokenStream(AttributeFactory factory, int precisionStep) {
+    return new NumericTokenStream(factory, precisionStep);
   }
 
-  public TrieTokenizer(Reader input, TrieTypes type, NumericTokenStream ts) {
-    // must share the attribute source with the NumericTokenStream we delegate to
-    super(ts, input);
+  public TrieTokenizer(Reader input, TrieTypes type, final NumericTokenStream ts) {
+    // Häckidy-Hick-Hack: must share the attributes with the NumericTokenStream we delegate to, so we create a fake factory:
+    super(new AttributeFactory() {
+      @Override
+      public AttributeImpl createAttributeInstance(Class<? extends Attribute> attClass) {
+        return (AttributeImpl) ts.addAttribute(attClass);
+      }
+    }, input);
+    // add all attributes:
+    for (Iterator<Class<? extends Attribute>> it = ts.getAttributeClassesIterator(); it.hasNext();) {
+      addAttribute(it.next());
+    }
     this.type = type;
     this.ts = ts;
     // dates tend to be longer, especially when math is involved

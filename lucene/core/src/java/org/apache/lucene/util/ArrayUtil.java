@@ -28,6 +28,11 @@ import java.util.Comparator;
 
 public final class ArrayUtil {
 
+  // affordable memory overhead to merge sorted arrays
+  static final float MERGE_OVERHEAD_RATIO = 0.01f;
+  // arrays below this size will always be sorted in-place
+  static final int MERGE_EXTRA_MEMORY_THRESHOLD = (int) (15 / MERGE_OVERHEAD_RATIO);
+
   private ArrayUtil() {} // no instance
 
   /*
@@ -604,63 +609,140 @@ public final class ArrayUtil {
 
     return result;
   }
-  
+
+  private static abstract class ArraySorterTemplate<T> extends SorterTemplate {
+
+    protected final T[] a;
+
+    ArraySorterTemplate(T[] a) {
+      this.a = a;
+    }
+
+    protected abstract int compare(T a, T b);
+
+    @Override
+    protected void swap(int i, int j) {
+      final T o = a[i];
+      a[i] = a[j];
+      a[j] = o;
+    }
+
+    @Override
+    protected int compare(int i, int j) {
+      return compare(a[i], a[j]);
+    }
+
+    @Override
+    protected void setPivot(int i) {
+      pivot = a[i];
+    }
+
+    @Override
+    protected int comparePivot(int j) {
+      return compare(pivot, a[j]);
+    }
+
+    private T pivot;
+
+  }
+
+  // a template for merge-based sorts which uses extra memory to speed up merging
+  private static abstract class ArrayMergeSorterTemplate<T> extends ArraySorterTemplate<T> {
+
+    private final int threshold; // maximum length of a merge that can be made using extra memory
+    private final T[] tmp;
+
+    ArrayMergeSorterTemplate(T[] a, float overheadRatio) {
+      super(a);
+      this.threshold = (int) (a.length * overheadRatio);
+      @SuppressWarnings("unchecked")
+      final T[] tmpBuf = (T[]) new Object[threshold];
+      this.tmp = tmpBuf;
+    }
+
+    private void mergeWithExtraMemory(int lo, int pivot, int hi, int len1, int len2) {
+      System.arraycopy(a, lo, tmp, 0, len1);
+      int i = 0, j = pivot, dest = lo;
+      while (i < len1 && j < hi) {
+        if (compare(tmp[i], a[j]) <= 0) {
+          a[dest++] = tmp[i++];
+        } else {
+          a[dest++] = a[j++];
+        }
+      }
+      while (i < len1) {
+        a[dest++] = tmp[i++];
+      }
+      assert j == dest;
+    }
+
+    @Override
+    protected void merge(int lo, int pivot, int hi, int len1, int len2) {
+      if (len1 <= threshold) {
+        mergeWithExtraMemory(lo, pivot, hi, len1, len2);
+      } else {
+        // since this method recurses to run merge on smaller arrays, it will
+        // end up using mergeWithExtraMemory
+        super.merge(lo, pivot, hi, len1, len2);
+      }
+    }
+
+  }
+
   /** SorterTemplate with custom {@link Comparator} */
   private static <T> SorterTemplate getSorter(final T[] a, final Comparator<? super T> comp) {
-    return new SorterTemplate() {
-      @Override
-      protected void swap(int i, int j) {
-        final T o = a[i];
-        a[i] = a[j];
-        a[j] = o;
-      }
-      
-      @Override
-      protected int compare(int i, int j) {
-        return comp.compare(a[i], a[j]);
-      }
+    return new ArraySorterTemplate<T>(a) {
 
       @Override
-      protected void setPivot(int i) {
-        pivot = a[i];
+      protected int compare(T a, T b) {
+        return comp.compare(a, b);
       }
-  
-      @Override
-      protected int comparePivot(int j) {
-        return comp.compare(pivot, a[j]);
-      }
-      
-      private T pivot;
+
     };
   }
-  
+
   /** Natural SorterTemplate */
   private static <T extends Comparable<? super T>> SorterTemplate getSorter(final T[] a) {
-    return new SorterTemplate() {
-      @Override
-      protected void swap(int i, int j) {
-        final T o = a[i];
-        a[i] = a[j];
-        a[j] = o;
-      }
-      
-      @Override
-      protected int compare(int i, int j) {
-        return a[i].compareTo(a[j]);
-      }
+    return new ArraySorterTemplate<T>(a) {
 
       @Override
-      protected void setPivot(int i) {
-        pivot = a[i];
+      protected int compare(T a, T b) {
+        return a.compareTo(b);
       }
-  
-      @Override
-      protected int comparePivot(int j) {
-        return pivot.compareTo(a[j]);
-      }
-      
-      private T pivot;
+
     };
+  }
+
+  /** SorterTemplate with custom {@link Comparator} for merge-based sorts. */
+  private static <T> SorterTemplate getMergeSorter(final T[] a, final Comparator<? super T> comp) {
+    if (a.length < MERGE_EXTRA_MEMORY_THRESHOLD) {
+      return getSorter(a, comp);
+    } else {
+      return new ArrayMergeSorterTemplate<T>(a, MERGE_OVERHEAD_RATIO) {
+
+        @Override
+        protected int compare(T a, T b) {
+          return comp.compare(a, b);
+        }
+
+      };
+    }
+  }
+
+  /** Natural SorterTemplate for merge-based sorts. */
+  private static <T extends Comparable<? super T>> SorterTemplate getMergeSorter(final T[] a) {
+    if (a.length < MERGE_EXTRA_MEMORY_THRESHOLD) {
+      return getSorter(a);
+    } else {
+      return new ArrayMergeSorterTemplate<T>(a, MERGE_OVERHEAD_RATIO) {
+
+        @Override
+        protected int compare(T a, T b) {
+          return a.compareTo(b);
+        }
+
+      };
+    }
   }
 
   // quickSorts (endindex is exclusive!):
@@ -714,7 +796,7 @@ public final class ArrayUtil {
   public static <T> void mergeSort(T[] a, int fromIndex, int toIndex, Comparator<? super T> comp) {
     if (toIndex-fromIndex <= 1) return;
     //System.out.println("SORT: " + (toIndex-fromIndex));
-    getSorter(a, comp).mergeSort(fromIndex, toIndex-1);
+    getMergeSorter(a, comp).mergeSort(fromIndex, toIndex-1);
   }
   
   /**
@@ -733,7 +815,7 @@ public final class ArrayUtil {
    */
   public static <T extends Comparable<? super T>> void mergeSort(T[] a, int fromIndex, int toIndex) {
     if (toIndex-fromIndex <= 1) return;
-    getSorter(a).mergeSort(fromIndex, toIndex-1);
+    getMergeSorter(a).mergeSort(fromIndex, toIndex-1);
   }
   
   /**
@@ -742,6 +824,46 @@ public final class ArrayUtil {
    */
   public static <T extends Comparable<? super T>> void mergeSort(T[] a) {
     mergeSort(a, 0, a.length);
+  }
+
+  // timSorts:
+
+  /**
+   * Sorts the given array slice using the {@link Comparator}. This method uses the TimSort
+   * algorithm, but falls back to binary sort for small arrays.
+   * @param fromIndex start index (inclusive)
+   * @param toIndex end index (exclusive)
+   */
+  public static <T> void timSort(T[] a, int fromIndex, int toIndex, Comparator<? super T> comp) {
+    if (toIndex-fromIndex <= 1) return;
+    getMergeSorter(a, comp).timSort(fromIndex, toIndex-1);
+  }
+  
+  /**
+   * Sorts the given array using the {@link Comparator}. This method uses the TimSort
+   * algorithm, but falls back to binary sort for small arrays.
+   */
+  public static <T> void timSort(T[] a, Comparator<? super T> comp) {
+    timSort(a, 0, a.length, comp);
+  }
+  
+  /**
+   * Sorts the given array slice in natural order. This method uses the TimSort
+   * algorithm, but falls back to binary sort for small arrays.
+   * @param fromIndex start index (inclusive)
+   * @param toIndex end index (exclusive)
+   */
+  public static <T extends Comparable<? super T>> void timSort(T[] a, int fromIndex, int toIndex) {
+    if (toIndex-fromIndex <= 1) return;
+    getMergeSorter(a).timSort(fromIndex, toIndex-1);
+  }
+  
+  /**
+   * Sorts the given array in natural order. This method uses the TimSort
+   * algorithm, but falls back to binary sort for small arrays.
+   */
+  public static <T extends Comparable<? super T>> void timSort(T[] a) {
+    timSort(a, 0, a.length);
   }
 
   // insertionSorts:
@@ -782,6 +904,46 @@ public final class ArrayUtil {
    */
   public static <T extends Comparable<? super T>> void insertionSort(T[] a) {
     insertionSort(a, 0, a.length);
+  }
+
+  // binarySorts:
+
+  /**
+   * Sorts the given array slice using the {@link Comparator}. This method uses the binary sort
+   * algorithm. It is only recommended to use this algorithm for small arrays!
+   * @param fromIndex start index (inclusive)
+   * @param toIndex end index (exclusive)
+   */
+  public static <T> void binarySort(T[] a, int fromIndex, int toIndex, Comparator<? super T> comp) {
+    if (toIndex-fromIndex <= 1) return;
+    getSorter(a, comp).binarySort(fromIndex, toIndex-1);
+  }
+  
+  /**
+   * Sorts the given array using the {@link Comparator}. This method uses the binary sort
+   * algorithm. It is only recommended to use this algorithm for small arrays!
+   */
+  public static <T> void binarySort(T[] a, Comparator<? super T> comp) {
+    binarySort(a, 0, a.length, comp);
+  }
+  
+  /**
+   * Sorts the given array slice in natural order. This method uses the binary sort
+   * algorithm. It is only recommended to use this algorithm for small arrays!
+   * @param fromIndex start index (inclusive)
+   * @param toIndex end index (exclusive)
+   */
+  public static <T extends Comparable<? super T>> void binarySort(T[] a, int fromIndex, int toIndex) {
+    if (toIndex-fromIndex <= 1) return;
+    getSorter(a).binarySort(fromIndex, toIndex-1);
+  }
+  
+  /**
+   * Sorts the given array in natural order. This method uses the binary sort
+   * algorithm. It is only recommended to use this algorithm for small arrays!
+   */
+  public static <T extends Comparable<? super T>> void binarySort(T[] a) {
+    binarySort(a, 0, a.length);
   }
 
 }

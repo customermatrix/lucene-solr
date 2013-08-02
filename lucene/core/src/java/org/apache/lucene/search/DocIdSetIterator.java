@@ -93,4 +93,24 @@ public abstract class DocIdSetIterator {
    */
   public abstract int advance(int target) throws IOException;
 
+  /** Slow (linear) implementation of {@link #advance} relying on
+   *  {@link #nextDoc()} to advance beyond the target position. */
+  protected final int slowAdvance(int target) throws IOException {
+    assert docID() == NO_MORE_DOCS // can happen when the enum is not positioned yet
+        || docID() < target;
+    int doc;
+    do {
+      doc = nextDoc();
+    } while (doc < target);
+    return doc;
+  }
+
+  /**
+   * Returns the estimated cost of this {@link DocIdSetIterator}.
+   * <p>
+   * This is generally an upper bound of the number of documents this iterator
+   * might match, but may be a rough heuristic, hardcoded value, or otherwise
+   * completely inaccurate.
+   */
+  public abstract long cost();
 }

@@ -36,6 +36,7 @@ import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.response.QueryResponseWriter;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.schema.IndexSchema;
+import org.apache.solr.schema.IndexSchemaFactory;
 import org.apache.solr.servlet.DirectSolrConnection;
 import org.apache.solr.common.util.NamedList.NamedListEntry;
 
@@ -87,6 +88,30 @@ public class TestHarness extends BaseTestHarness {
     return createConfig(solrHome, CoreContainer.DEFAULT_DEFAULT_CORE_NAME, confFile);
   }
 
+  /**
+   * @param coreName to initialize
+   * @param dataDirectory path for index data, will not be cleaned up
+   * @param solrConfig solronfig instance
+   * @param schemaFile schema filename
+   */
+     public TestHarness( String coreName,
+                         String dataDirectory,
+                         SolrConfig solrConfig,
+                         String schemaFile) {
+    this( coreName, dataDirectory, solrConfig, IndexSchemaFactory.buildIndexSchema(schemaFile, solrConfig));
+  } 
+  /**
+   * @param coreName to initialize
+   * @param dataDirectory path for index data, will not be cleaned up
+   * @param solrConfig solrconfig instance
+   * @param indexSchema schema instance
+   */
+    public TestHarness( String coreName,
+                        String dataDirectory,
+                        SolrConfig solrConfig,
+                        IndexSchema indexSchema) {
+        this(coreName, new Initializer(coreName, dataDirectory, solrConfig, indexSchema));
+    }
    /**
     * @param dataDirectory path for index data, will not be cleaned up
     * @param solrConfig solronfig instance
@@ -95,7 +120,7 @@ public class TestHarness extends BaseTestHarness {
       public TestHarness( String dataDirectory,
                           SolrConfig solrConfig,
                           String schemaFile) {
-     this( dataDirectory, solrConfig, new IndexSchema(solrConfig, schemaFile, null));
+     this( dataDirectory, solrConfig, IndexSchemaFactory.buildIndexSchema(schemaFile, solrConfig));
    }
    /**
     * @param dataDirectory path for index data, will not be cleaned up
@@ -151,7 +176,7 @@ public class TestHarness extends BaseTestHarness {
           hostPort = System.getProperty("hostPort");
           hostContext = "solr";
           defaultCoreName = CoreContainer.DEFAULT_DEFAULT_CORE_NAME;
-          initShardHandler(null);
+          initShardHandler();
           initZooKeeper(System.getProperty("zkHost"), 10000);
         }
       };

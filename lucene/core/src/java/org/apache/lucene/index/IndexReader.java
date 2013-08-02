@@ -22,16 +22,16 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.WeakHashMap;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.DocumentStoredFieldVisitor;
-import org.apache.lucene.search.SearcherManager; // javadocs
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.Bits;
+// javadocs
 
 /** IndexReader is an abstract class, providing an interface for accessing an
  index.  Search of an index is done entirely through this abstract interface,
@@ -180,7 +180,7 @@ public abstract class IndexReader implements Closeable {
    * and returns <code>true</code> iff the refCount was
    * successfully incremented, otherwise <code>false</code>.
    * If this method returns <code>false</code> the reader is either
-   * already closed or is currently been closed. Either way this
+   * already closed or is currently being closed. Either way this
    * reader instance shouldn't be used by an application unless
    * <code>true</code> is returned.
    * <p>
@@ -448,8 +448,12 @@ public abstract class IndexReader implements Closeable {
     return visitor.getDocument();
   }
 
-  /** Returns true if any documents have been deleted */
-  public abstract boolean hasDeletions();
+  /** Returns true if any documents have been deleted. Implementers should
+   *  consider overriding this method if {@link #maxDoc()} or {@link #numDocs()}
+   *  are not constant-time operations. */
+  public boolean hasDeletions() {
+    return numDeletedDocs() > 0;
+  }
 
   /**
    * Closes files associated with this index.
@@ -533,4 +537,33 @@ public abstract class IndexReader implements Closeable {
    * @see TermsEnum#totalTermFreq() 
    */
   public abstract long totalTermFreq(Term term) throws IOException;
+  
+  /**
+   * Returns the sum of {@link TermsEnum#docFreq()} for all terms in this field,
+   * or -1 if this measure isn't stored by the codec. Note that, just like other
+   * term measures, this measure does not take deleted documents into account.
+   * 
+   * @see Terms#getSumDocFreq()
+   */
+  public abstract long getSumDocFreq(String field) throws IOException;
+  
+  /**
+   * Returns the number of documents that have at least one term for this field,
+   * or -1 if this measure isn't stored by the codec. Note that, just like other
+   * term measures, this measure does not take deleted documents into account.
+   * 
+   * @see Terms#getDocCount()
+   */
+  public abstract int getDocCount(String field) throws IOException;
+
+  /**
+   * Returns the sum of {@link TermsEnum#totalTermFreq} for all terms in this
+   * field, or -1 if this measure isn't stored by the codec (or if this fields
+   * omits term freq and positions). Note that, just like other term measures,
+   * this measure does not take deleted documents into account.
+   * 
+   * @see Terms#getSumTotalTermFreq()
+   */
+  public abstract long getSumTotalTermFreq(String field) throws IOException;
+
 }

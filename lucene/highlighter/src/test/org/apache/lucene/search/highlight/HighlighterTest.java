@@ -90,7 +90,7 @@ public class HighlighterTest extends BaseTokenStreamTestCase implements Formatte
     phraseQuery.add(new Term(FIELD_NAME, "long"));
 
     query = phraseQuery;
-    searcher = new IndexSearcher(reader);
+    searcher = newSearcher(reader);
     TopDocs hits = searcher.search(query, 10);
     
     QueryScorer scorer = new QueryScorer(query, FIELD_NAME);
@@ -121,7 +121,7 @@ public class HighlighterTest extends BaseTokenStreamTestCase implements Formatte
     query.add(new Term(FIELD_NAME, "long"));
     query.add(new Term(FIELD_NAME, "very"));
 
-    searcher = new IndexSearcher(reader);
+    searcher = newSearcher(reader);
     TopDocs hits = searcher.search(query, 10);
     assertEquals(2, hits.totalHits);
     QueryScorer scorer = new QueryScorer(query, FIELD_NAME);
@@ -163,12 +163,21 @@ public class HighlighterTest extends BaseTokenStreamTestCase implements Formatte
       public String toString(String field) {
         return null;
       }
-      
+
+      @Override
+      public int hashCode() {
+        return 31 * super.hashCode();
+      }
+
+      @Override
+      public boolean equals(Object obj) {
+        return super.equals(obj);
+      }
     };
     
     Analyzer analyzer = new MockAnalyzer(random(), MockTokenizer.SIMPLE, true);
     
-    searcher = new IndexSearcher(reader);
+    searcher = newSearcher(reader);
     TopDocs hits = searcher.search(query, 10);
     assertEquals(2, hits.totalHits);
     QueryScorer scorer = new QueryScorer(query, FIELD_NAME);
@@ -412,7 +421,7 @@ public class HighlighterTest extends BaseTokenStreamTestCase implements Formatte
   
   public void testSpanRegexQuery() throws Exception {
     query = new SpanOrQuery(new SpanMultiTermQueryWrapper<RegexpQuery>(new RegexpQuery(new Term(FIELD_NAME, "ken.*"))));
-    searcher = new IndexSearcher(reader);
+    searcher = newSearcher(reader);
     hits = searcher.search(query, 100);
     int maxNumFragmentsRequired = 2;
 
@@ -436,7 +445,7 @@ public class HighlighterTest extends BaseTokenStreamTestCase implements Formatte
   
   public void testRegexQuery() throws Exception {
     query = new RegexpQuery(new Term(FIELD_NAME, "ken.*"));
-    searcher = new IndexSearcher(reader);
+    searcher = newSearcher(reader);
     hits = searcher.search(query, 100);
     int maxNumFragmentsRequired = 2;
 
@@ -458,10 +467,35 @@ public class HighlighterTest extends BaseTokenStreamTestCase implements Formatte
         numHighlights == 5);
   }
   
+  public void testExternalReader() throws Exception {
+    query = new RegexpQuery(new Term(FIELD_NAME, "ken.*"));
+    searcher = newSearcher(reader);
+    hits = searcher.search(query, 100);
+    int maxNumFragmentsRequired = 2;
+
+    QueryScorer scorer = new QueryScorer(query, reader, FIELD_NAME);
+    Highlighter highlighter = new Highlighter(this, scorer);
+    
+    for (int i = 0; i < hits.totalHits; i++) {
+      String text = searcher.doc(hits.scoreDocs[i].doc).get(FIELD_NAME);
+      TokenStream tokenStream = analyzer.tokenStream(FIELD_NAME, new StringReader(text));
+
+      highlighter.setTextFragmenter(new SimpleFragmenter(40));
+
+      String result = highlighter.getBestFragments(tokenStream, text, maxNumFragmentsRequired,
+          "...");
+      if (VERBOSE) System.out.println("\t" + result);
+    }
+    
+    assertTrue(reader.docFreq(new Term(FIELD_NAME, "hello")) > 0);
+    assertTrue("Failed to find correct number of highlights " + numHighlights + " found",
+        numHighlights == 5);
+  }
+  
   public void testNumericRangeQuery() throws Exception {
     // doesn't currently highlight, but make sure it doesn't cause exception either
     query = NumericRangeQuery.newIntRange(NUMERIC_FIELD_NAME, 2, 6, true, true);
-    searcher = new IndexSearcher(reader);
+    searcher = newSearcher(reader);
     hits = searcher.search(query, 100);
     int maxNumFragmentsRequired = 2;
 
@@ -860,7 +894,7 @@ public class HighlighterTest extends BaseTokenStreamTestCase implements Formatte
 
     query = new WildcardQuery(new Term(FIELD_NAME, "ken*"));
     ((WildcardQuery)query).setRewriteMethod(MultiTermQuery.CONSTANT_SCORE_FILTER_REWRITE);
-    searcher = new IndexSearcher(reader);
+    searcher = newSearcher(reader);
     // can't rewrite ConstantScore if you want to highlight it -
     // it rewrites to ConstantScoreQuery which cannot be highlighted
     // query = unReWrittenQuery.rewrite(reader);
@@ -1375,7 +1409,7 @@ public class HighlighterTest extends BaseTokenStreamTestCase implements Formatte
       public void run() throws Exception {
         numHighlights = 0;
         // test to show how rewritten query can still be used
-        searcher = new IndexSearcher(reader);
+        searcher = newSearcher(reader);
         Analyzer analyzer = new MockAnalyzer(random(), MockTokenizer.SIMPLE, true, MockTokenFilter.ENGLISH_STOPSET, true);
         
         BooleanQuery query = new BooleanQuery();
@@ -1755,7 +1789,7 @@ public class HighlighterTest extends BaseTokenStreamTestCase implements Formatte
   private void searchIndex() throws IOException, InvalidTokenOffsetsException {
     Query query = new TermQuery(new Term("t_text1", "random"));
     IndexReader reader = DirectoryReader.open(dir);
-    IndexSearcher searcher = new IndexSearcher(reader);
+    IndexSearcher searcher = newSearcher(reader);
     // This scorer can return negative idf -> null fragment
     Scorer scorer = new QueryTermScorer( query, searcher.getIndexReader(), "t_text1" );
     // This scorer doesn't use idf (patch version)
@@ -1808,7 +1842,7 @@ public class HighlighterTest extends BaseTokenStreamTestCase implements Formatte
   }
 
   public void doSearching(Query unReWrittenQuery) throws Exception {
-    searcher = new IndexSearcher(reader);
+    searcher = newSearcher(reader);
     // for any multi-term queries to work (prefix, wildcard, range,fuzzy etc)
     // you must use a rewritten query!
     query = unReWrittenQuery.rewrite(reader);

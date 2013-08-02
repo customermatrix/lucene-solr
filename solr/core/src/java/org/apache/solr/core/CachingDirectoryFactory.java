@@ -23,11 +23,13 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext.Context;
 import org.apache.lucene.store.NativeFSLockFactory;
@@ -92,7 +94,7 @@ public abstract class CachingDirectoryFactory extends DirectoryFactory {
   
   protected Map<String,CacheValue> byPathCache = new HashMap<String,CacheValue>();
   
-  protected Map<Directory,CacheValue> byDirectoryCache = new HashMap<Directory,CacheValue>();
+  protected Map<Directory,CacheValue> byDirectoryCache = new IdentityHashMap<Directory,CacheValue>();
   
   protected Map<Directory,List<CloseListener>> closeListeners = new HashMap<Directory,List<CloseListener>>();
   
@@ -141,6 +143,7 @@ public abstract class CachingDirectoryFactory extends DirectoryFactory {
             + " " + byDirectoryCache);
       }
       cacheValue.doneWithDir = true;
+      log.debug("Done with dir: {}", cacheValue);
       if (cacheValue.refCnt == 0 && !closed) {
         boolean cl = closeCacheValue(cacheValue);
         if (cl) {
@@ -162,6 +165,8 @@ public abstract class CachingDirectoryFactory extends DirectoryFactory {
       this.closed = true;
       Collection<CacheValue> values = byDirectoryCache.values();
       for (CacheValue val : values) {
+        log.debug("Closing {} - currently tracking: {}", 
+                  this.getClass().getSimpleName(), val);
         try {
           // if there are still refs out, we have to wait for them
           int cnt = 0;
@@ -215,9 +220,9 @@ public abstract class CachingDirectoryFactory extends DirectoryFactory {
   }
 
   private void removeFromCache(CacheValue v) {
+    log.debug("Removing from cache: {}", v);
     byDirectoryCache.remove(v.directory);
     byPathCache.remove(v.path);
-    
   }
 
   // be sure this is called with the this sync lock
@@ -320,27 +325,15 @@ public abstract class CachingDirectoryFactory extends DirectoryFactory {
    * (non-Javadoc)
    * 
    * @see org.apache.solr.core.DirectoryFactory#get(java.lang.String,
-   * java.lang.String)
+   * java.lang.String, boolean)
    */
   @Override
   public final Directory get(String path,  DirContext dirContext, String rawLockType)
       throws IOException {
-    return get(path, dirContext, rawLockType, false);
-  }
-  
-  /*
-   * (non-Javadoc)
-   * 
-   * @see org.apache.solr.core.DirectoryFactory#get(java.lang.String,
-   * java.lang.String, boolean)
-   */
-  @Override
-  public final Directory get(String path,  DirContext dirContext, String rawLockType, boolean forceNew)
-      throws IOException {
     String fullPath = normalize(path);
     synchronized (this) {
       if (closed) {
-        throw new RuntimeException("Already closed");
+        throw new AlreadyClosedException("Already closed");
       }
       
       final CacheValue cacheValue = byPathCache.get(fullPath);
@@ -360,9 +353,10 @@ public abstract class CachingDirectoryFactory extends DirectoryFactory {
         
         byDirectoryCache.put(directory, newCacheValue);
         byPathCache.put(fullPath, newCacheValue);
-        log.info("return new directory for " + fullPath + " forceNew: " + forceNew);
+        log.info("return new directory for " + fullPath);
       } else {
         cacheValue.refCnt++;
+        log.debug("Reusing cached directory: {}", cacheValue);
       }
       
       return directory;
@@ -407,6 +401,7 @@ public abstract class CachingDirectoryFactory extends DirectoryFactory {
       }
       
       cacheValue.refCnt++;
+      log.debug("incRef'ed: {}", cacheValue);
     }
   }
   
@@ -531,8 +526,20 @@ public abstract class CachingDirectoryFactory extends DirectoryFactory {
     return path;
   }
   
-  // for tests
-  public synchronized Set<String> getPaths() {
-    return byPathCache.keySet();
+  /**
+   * Test only method for inspecting the cache
+   * @return paths in the cache which have not been marked "done"
+   *
+   * @see #doneWithDirectory
+   * @lucene.internal
+   */
+  public synchronized Set<String> getLivePaths() {
+    HashSet<String> livePaths = new HashSet<String>();
+    for (CacheValue val : byPathCache.values()) {
+      if (!val.doneWithDir) {
+        livePaths.add(val.path);
+      }
+    }
+    return livePaths;
   }
 }

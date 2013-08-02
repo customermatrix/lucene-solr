@@ -54,7 +54,7 @@ public abstract class UpdateHandler implements SolrInfoMBean {
   protected Vector<SolrEventListener> softCommitCallbacks = new Vector<SolrEventListener>();
   protected Vector<SolrEventListener> optimizeCallbacks = new Vector<SolrEventListener>();
 
-  protected volatile UpdateLog ulog;
+  protected UpdateLog ulog;
 
   private void parseEventListeners() {
     final Class<SolrEventListener> clazz = SolrEventListener.class;
@@ -74,13 +74,15 @@ public abstract class UpdateHandler implements SolrInfoMBean {
   }
 
 
-  private void initLog(PluginInfo ulogPluginInfo) {
-    if (ulogPluginInfo != null && ulogPluginInfo.isEnabled()) {
+  private void initLog(PluginInfo ulogPluginInfo, UpdateLog existingUpdateLog) {
+    ulog = existingUpdateLog;
+    if (ulog == null && ulogPluginInfo != null && ulogPluginInfo.isEnabled()) {
       ulog = new UpdateLog();
       ulog.init(ulogPluginInfo);
       // ulog = core.createInitInstance(ulogPluginInfo, UpdateLog.class, "update log", "solr.NullUpdateLog");
       ulog.init(this, core);
     }
+    // ulog.init() when reusing an existing log is deferred (currently at the end of the DUH2 constructor
   }
 
   // not thread safe - for startup
@@ -133,11 +135,7 @@ public abstract class UpdateHandler implements SolrInfoMBean {
     if (!core.isReloaded() && !core.getDirectoryFactory().isPersistent()) {
       clearLog(ulogPluginInfo);
     }
-    if (updateLog == null) {
-      initLog(ulogPluginInfo);
-    } else {
-      this.ulog = updateLog;
-    }
+    initLog(ulogPluginInfo, updateLog);
   }
 
   /**
@@ -145,11 +143,10 @@ public abstract class UpdateHandler implements SolrInfoMBean {
    * all of the index files.
    * 
    * @param rollback IndexWriter if true else close
-   * @param forceNewDir Force a new Directory instance
    * 
    * @throws IOException If there is a low-level I/O error.
    */
-  public abstract void newIndexWriter(boolean rollback, boolean forceNewDir) throws IOException;
+  public abstract void newIndexWriter(boolean rollback) throws IOException;
 
   public abstract SolrCoreState getSolrCoreState();
 

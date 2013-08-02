@@ -18,8 +18,8 @@
 package org.apache.solr;
 
 import org.apache.lucene.search.FieldCache;
-import org.apache.noggit.JSONUtil;
-import org.apache.noggit.ObjectBuilder;
+import org.noggit.JSONUtil;
+import org.noggit.ObjectBuilder;
 import org.apache.solr.client.solrj.impl.BinaryResponseParser;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.GroupParams;
@@ -45,6 +45,7 @@ public class TestGroupingSearch extends SolrTestCaseJ4 {
 
   @BeforeClass
   public static void beforeTests() throws Exception {
+    System.setProperty("enable.update.log", "false"); // schema12 doesn't support _version_
     initCore("solrconfig.xml", "schema12.xml");
   }
 

@@ -190,13 +190,19 @@ def checkJARMetaData(desc, jarFile, version):
     s = decodeUTF8(z.read(MANIFEST_FILE_NAME))
     
     for verify in (
+      'Specification-Vendor: The Apache Software Foundation',
       'Implementation-Vendor: The Apache Software Foundation',
       # Make sure 1.6 compiler was used to build release bits:
       'X-Compile-Source-JDK: 1.6',
+      # Make sure 1.8 ant was used to build release bits: (this will match 1.8+)
+      'Ant-Version: Apache Ant 1.8',
       # Make sure .class files are 1.6 format:
       'X-Compile-Target-JDK: 1.6',
       # Make sure this matches the version we think we are releasing:
-      'Specification-Version: %s' % version):
+      'Implementation-Version: %s' % version,
+      'Specification-Version: %s' % version,
+      # Make sure the release was compiled with 1.6:
+      'Created-By: 1.6'):
       if s.find(verify) == -1:
         raise RuntimeError('%s is missing "%s" inside its META-INF/MANIFES.MF' % \
                            (desc, verify))
@@ -356,7 +362,7 @@ def checkSigs(project, urlString, version, tmpDir, isSigned):
     shutil.rmtree(gpgHomeDir)
   os.makedirs(gpgHomeDir, 0o700)
   run('gpg --homedir %s --import %s' % (gpgHomeDir, keysFile),
-      '%s/%s.gpg.import.log 2>&1' % (tmpDir, project))
+      '%s/%s.gpg.import.log' % (tmpDir, project))
 
   if mavenURL is None:
     raise RuntimeError('%s is missing maven' % project)
@@ -389,7 +395,7 @@ def checkSigs(project, urlString, version, tmpDir, isSigned):
 
       # Test trust (this is done with the real users config)
       run('gpg --import %s' % (keysFile),
-          '%s/%s.gpg.trust.import.log 2>&1' % (tmpDir, project))
+          '%s/%s.gpg.trust.import.log' % (tmpDir, project))
       print('    verify trust')
       logFile = '%s/%s.%s.gpg.trust.log' % (tmpDir, project, artifact)
       run('gpg --verify %s %s' % (sigFile, artifactFile), logFile)
@@ -422,7 +428,9 @@ def testChangesText(dir, version, project):
       fullPath = '%s/CHANGES.txt' % root
       #print 'CHECK %s' % fullPath
       checkChangesContent(open(fullPath, encoding='UTF-8').read(), version, fullPath, project, False)
-      
+
+reChangesSectionHREF = re.compile('<a id="(.*?)".*?>(.*?)</a>', re.IGNORECASE)
+
 def checkChangesContent(s, version, name, project, isHTML):
 
   if isHTML and s.find('Release %s' % version) == -1:
@@ -441,6 +449,23 @@ def checkChangesContent(s, version, name, project, isHTML):
       # benchmark never seems to include release info:
       if name.find('/benchmark/') == -1:
         raise RuntimeError('did not see "%s" in %s' % (sub, name))
+
+  if isHTML:
+    # Make sure a section only appears once under each release:
+    seenIDs = set()
+    seenText = set()
+
+    release = None
+    for id, text in reChangesSectionHREF.findall(s):
+      if text.lower().startswith('release '):
+        release = text[8:].strip()
+        seenText.clear()
+      if id in seenIDs:
+        raise RuntimeError('%s has duplicate section "%s" under release "%s"' % (name, text, release))
+      seenIDs.add(id)
+      if text in seenText:
+        raise RuntimeError('%s has duplicate section "%s" under release "%s"' % (name, text, release))
+      seenText.add(text)
 
 reUnixPath = re.compile(r'\b[a-zA-Z_]+=(?:"(?:\\"|[^"])*"' + '|(?:\\\\.|[^"\'\\s])*' + r"|'(?:\\'|[^'])*')" \
                         + r'|(/(?:\\.|[^"\'\s])*)' \
@@ -761,7 +786,7 @@ def readSolrOutput(p, startupEvent, failureEvent, logFile):
   f = open(logFile, 'wb')
   try:
     while True:
-      line = p.stderr.readline()
+      line = p.stdout.readline()
       if len(line) == 0:
         p.poll()
         if not startupEvent.isSet():
@@ -795,7 +820,7 @@ def testSolrExample(unpackPath, javaPath, isSrc):
   env.update(os.environ)
   env['JAVA_HOME'] = javaPath
   env['PATH'] = '%s/bin:%s' % (javaPath, env['PATH'])
-  server = subprocess.Popen(['java', '-jar', 'start.jar'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE, env=env)
+  server = subprocess.Popen(['java', '-jar', 'start.jar'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, env=env)
 
   startupEvent = threading.Event()
   failureEvent = threading.Event()
@@ -803,19 +828,21 @@ def testSolrExample(unpackPath, javaPath, isSrc):
   serverThread.setDaemon(True)
   serverThread.start()
 
-  # Make sure Solr finishes startup:
-  if not startupEvent.wait(1800):
-    raise RuntimeError('startup took more than 30 minutes')
-  if failureEvent.isSet():
-    logFile = os.path.abspath(logFile)
-    print
-    print('Startup failed; see log %s' % logFile)
-    printFileContents(logFile)
-    raise RuntimeError('failure on startup; see log %s' % logFile)
-    
-  print('      startup done')
-  
   try:
+
+    # Make sure Solr finishes startup:
+    if not startupEvent.wait(1800):
+      raise RuntimeError('startup took more than 30 minutes')
+
+    if failureEvent.isSet():
+      logFile = os.path.abspath(logFile)
+      print
+      print('Startup failed; see log %s' % logFile)
+      printFileContents(logFile)
+      raise RuntimeError('failure on startup; see log %s' % logFile)
+
+    print('      startup done')
+
     print('      test utf8...')
     run('sh ./exampledocs/test_utf8.sh', 'utf8.log')
     print('      index example docs...')

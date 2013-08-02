@@ -20,28 +20,27 @@ package org.apache.lucene.analysis.ru;
 import java.io.Reader;
 import java.util.Map;
 
-import org.apache.lucene.analysis.ru.RussianLetterTokenizer;
-import org.apache.lucene.analysis.standard.StandardTokenizerFactory; // javadocs
 import org.apache.lucene.analysis.util.TokenizerFactory;
+import org.apache.lucene.util.AttributeSource.AttributeFactory;
 
-/** @deprecated Use {@link StandardTokenizerFactory} instead.
+/** @deprecated Use {@link org.apache.lucene.analysis.standard.StandardTokenizerFactory} instead.
  *  This tokenizer has no Russian-specific functionality.
  */
 @Deprecated
 public class RussianLetterTokenizerFactory extends TokenizerFactory {
 
-  @Override
-  public void init(Map<String, String> args) {
-    super.init(args);
-    if (args.containsKey("charset"))
-      throw new IllegalArgumentException(
-          "The charset parameter is no longer supported.  "
-          + "Please process your documents as Unicode instead.");
+  /** Creates a new RussianLetterTokenizerFactory */
+  public RussianLetterTokenizerFactory(Map<String,String> args) {
+    super(args);
     assureMatchVersion();
+    if (!args.isEmpty()) {
+      throw new IllegalArgumentException("Unknown parameters: " + args);
+    }
   }
 
-  public RussianLetterTokenizer create(Reader in) {
-    return new RussianLetterTokenizer(luceneMatchVersion,in);
+  @Override
+  public RussianLetterTokenizer create(AttributeFactory factory, Reader in) {
+    return new RussianLetterTokenizer(luceneMatchVersion, factory, in);
   }
 }
 

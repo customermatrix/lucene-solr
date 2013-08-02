@@ -1,6 +1,4 @@
-package org.apache.solr.logging.log4j;
-
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -16,11 +14,20 @@ package org.apache.solr.logging.log4j;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.solr.logging.log4j;
 
-import com.google.common.base.Throwables;
+
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.log4j.AppenderSkeleton;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
-import org.apache.log4j.Priority;
 import org.apache.log4j.spi.LoggingEvent;
 import org.apache.log4j.spi.ThrowableInformation;
 import org.apache.solr.common.SolrDocument;
@@ -30,98 +37,110 @@ import org.apache.solr.logging.ListenerConfig;
 import org.apache.solr.logging.LogWatcher;
 import org.apache.solr.logging.LoggerInfo;
 
-import java.util.*;
-
-import static org.apache.log4j.Level.*;
-import static org.apache.log4j.LogManager.getCurrentLoggers;
-import static org.apache.log4j.LogManager.getRootLogger;
-import static org.apache.log4j.Logger.getLogger;
-import static org.apache.solr.logging.LoggerInfo.ROOT_NAME;
+import com.google.common.base.Throwables;
 
 public class Log4jWatcher extends LogWatcher<LoggingEvent> {
-  public static final String EMPTY_CATEGORY = "";
-  private final String name;
-  private final EventAppender appender;
+
+  final String name;
+  AppenderSkeleton appender = null;
 
   public Log4jWatcher(String name) {
-    this.name = "Log4j (" + name + ")";
-    this.appender = new EventAppender(this);
+    this.name = name;
   }
 
   @Override
   public String getName() {
-    return name;
+    return "Log4j ("+name+")";
   }
 
   @Override
   public List<String> getAllLevels() {
     return Arrays.asList(
-        ALL.toString(),
-        TRACE.toString(),
-        DEBUG.toString(),
-        INFO.toString(),
-        WARN.toString(),
-        ERROR.toString(),
-        FATAL.toString(),
-        OFF.toString()
-    );
+        org.apache.log4j.Level.ALL.toString(),
+        org.apache.log4j.Level.TRACE.toString(),
+        org.apache.log4j.Level.DEBUG.toString(),
+        org.apache.log4j.Level.INFO.toString(),
+        org.apache.log4j.Level.WARN.toString(),
+        org.apache.log4j.Level.ERROR.toString(),
+        org.apache.log4j.Level.FATAL.toString(),
+        org.apache.log4j.Level.OFF.toString());
   }
 
   @Override
-  public void setLogLevel(String category, String levelStr) {
-    if (ROOT_NAME.equals(category)) {
-      category = EMPTY_CATEGORY;
+  public void setLogLevel(String category, String level) {
+    org.apache.log4j.Logger log;
+    if(LoggerInfo.ROOT_NAME.equals(category)) {
+      log = org.apache.log4j.LogManager.getRootLogger();
+    } else {
+      log = org.apache.log4j.Logger.getLogger(category);
     }
-    Level level = null;
-    if (levelStr != null && !levelStr.equals("unset") && !levelStr.equals("null")) {
-      level = toLevel(levelStr);
+    if(level==null||"unset".equals(level)||"null".equals(level)) {
+      log.setLevel(null);
     }
-    getLogger(category).setLevel(level);
+    else {
+      log.setLevel(org.apache.log4j.Level.toLevel(level));
+    }
   }
 
   @Override
   public Collection<LoggerInfo> getAllLoggers() {
-    Map<String, LoggerInfo> map = new HashMap<String, LoggerInfo>();
-    Enumeration<?> loggers = getCurrentLoggers();
+    org.apache.log4j.Logger root = org.apache.log4j.LogManager.getRootLogger();
+    Map<String,LoggerInfo> map = new HashMap<String,LoggerInfo>();
+    Enumeration<?> loggers = org.apache.log4j.LogManager.getCurrentLoggers();
     while (loggers.hasMoreElements()) {
-      Logger logger = (Logger) loggers.nextElement();
+      org.apache.log4j.Logger logger = (org.apache.log4j.Logger)loggers.nextElement();
       String name = logger.getName();
-      if (logger != getRootLogger()) {
-        map.put(name, new Log4jInfo(name, logger));
-        while (true) {
-          int dot = name.lastIndexOf(".");
-          if (dot < 0) {
-            break;
-          }
-          name = name.substring(0, dot);
-          if (!map.containsKey(name)) {
-            map.put(name, new Log4jInfo(name, null));
-          }
+      if( logger == root) {
+        continue;
+      }
+      map.put(name, new Log4jInfo(name, logger));
+
+      while (true) {
+        int dot = name.lastIndexOf(".");
+        if (dot < 0)
+          break;
+        name = name.substring(0, dot);
+        if(!map.containsKey(name)) {
+          map.put(name, new Log4jInfo(name, null));
         }
       }
     }
-    map.put(ROOT_NAME, new Log4jInfo(ROOT_NAME, getRootLogger()));
+    map.put(LoggerInfo.ROOT_NAME, new Log4jInfo(LoggerInfo.ROOT_NAME, root));
     return map.values();
   }
 
   @Override
   public void setThreshold(String level) {
-    checkAppender();
-    appender.setThreshold(toLevel(level));
+    if(appender==null) {
+      throw new IllegalStateException("Must have an appender");
+    }
+    appender.setThreshold(Level.toLevel(level));
   }
 
   @Override
   public String getThreshold() {
-    checkAppender();
+    if(appender==null) {
+      throw new IllegalStateException("Must have an appender");
+    }
     return appender.getThreshold().toString();
   }
 
   @Override
   public void registerListener(ListenerConfig cfg, CoreContainer container) {
-    checkHistory();
+    if(history!=null) {
+      throw new IllegalStateException("History already registered");
+    }
     history = new CircularList<LoggingEvent>(cfg.size);
-    appender.setThreshold(defaultThreshold(cfg));
-    getRootLogger().addAppender(appender);
+
+    appender = new EventAppender(this);
+    if(cfg.threshold != null) {
+      appender.setThreshold(Level.toLevel(cfg.threshold));
+    }
+    else {
+      appender.setThreshold(Level.WARN);
+    }
+    Logger log = org.apache.log4j.LogManager.getRootLogger();
+    log.addAppender(appender);
   }
 
   @Override
@@ -137,33 +156,9 @@ public class Log4jWatcher extends LogWatcher<LoggingEvent> {
     doc.setField("logger", event.getLogger().getName());
     doc.setField("message", event.getMessage().toString());
     ThrowableInformation t = event.getThrowableInformation();
-    String trace = null;
-    if (t != null) {
-      trace = Throwables.getStackTraceAsString(t.getThrowable());
+    if(t!=null) {
+      doc.setField("trace", Throwables.getStackTraceAsString(t.getThrowable()));
     }
-    doc.setField("trace", trace);
     return doc;
-  }
-
-  private void checkAppender() {
-    if (appender == null) {
-      throw new IllegalStateException("Must have an appender");
-    }
-  }
-
-  private void checkHistory() {
-    if (history != null) {
-      throw new IllegalStateException("History already registered");
-    }
-  }
-
-  private Priority defaultThreshold(ListenerConfig cfg) {
-    Priority priority;
-    if (cfg.threshold != null) {
-      priority = toLevel(cfg.threshold);
-    } else {
-      priority = WARN;
-    }
-    return priority;
   }
 }

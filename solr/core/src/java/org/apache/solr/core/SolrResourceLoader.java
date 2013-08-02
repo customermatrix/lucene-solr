@@ -83,6 +83,7 @@ public class SolrResourceLoader implements ResourceLoader
   private final List<ResourceLoaderAware> waitingForResources = Collections.synchronizedList(new ArrayList<ResourceLoaderAware>());
   private static final Charset UTF_8 = Charset.forName("UTF-8");
 
+  //TODO: Solr5. Remove this completely when you obsolete putting <core> tags in solr.xml (See Solr-4196)
   private final Properties coreProperties;
 
   private volatile boolean live;
@@ -105,12 +106,12 @@ public class SolrResourceLoader implements ResourceLoader
                this.instanceDir);
     } else{
       this.instanceDir = normalizeDir(instanceDir);
-      log.info("new SolrResourceLoader for directory: '{}'", 
+      log.info("new SolrResourceLoader for directory: '{}'",
                this.instanceDir);
     }
     
     this.classLoader = createClassLoader(null, parent);
-    addToClassLoader("./lib/", null);
+    addToClassLoader("./lib/", null, true);
     reloadLuceneSPI();
     this.coreProperties = coreProperties;
   }
@@ -134,17 +135,35 @@ public class SolrResourceLoader implements ResourceLoader
    * only be called prior to using this ResourceLoader to get any resources, otherwise
    * it's behavior will be non-deterministic. You also have to {link @reloadLuceneSPI}
    * before using this ResourceLoader.
+   * 
+   * <p>This method will quietly ignore missing or non-directory <code>baseDir</code>
+   *  folder. 
    *
    * @param baseDir base directory whose children (either jars or directories of
    *                classes) will be in the classpath, will be resolved relative
    *                the instance dir.
    * @param filter The filter files must satisfy, if null all files will be accepted.
+   * @param quiet  Be quiet if baseDir does not point to a directory or if no file is 
+   *               left after applying the filter. 
    */
-  void addToClassLoader(final String baseDir, final FileFilter filter) {
+  void addToClassLoader(final String baseDir, final FileFilter filter, boolean quiet) {
     File base = FileUtils.resolvePath(new File(getInstanceDir()), baseDir);
-    this.classLoader = replaceClassLoader(classLoader, base, filter);
+    if (base != null && base.exists() && base.isDirectory()) {
+      File[] files = base.listFiles(filter);
+      if (!quiet && (files == null || files.length == 0)) {
+        log.warn("No files added to classloader from lib: "
+            + baseDir + " (resolved as: " + base.getAbsolutePath() + ").");
+      } else {
+        this.classLoader = replaceClassLoader(classLoader, base, filter);
+      }
+    } else {
+      if (!quiet) {
+        log.warn("Can't find (or read) directory to add to classloader: "
+            + baseDir + " (resolved as: " + base.getAbsolutePath() + ").");
+      }
+    }
   }
-  
+
   /**
    * Adds the specific file/dir specified to the ClassLoader used by this
    * ResourceLoader.  This method <b>MUST</b>
@@ -173,7 +192,7 @@ public class SolrResourceLoader implements ResourceLoader
   /**
    * Reloads all Lucene SPI implementations using the new classloader.
    * This method must be called after {@link #addToClassLoader(String)}
-   * and {@link #addToClassLoader(String,FileFilter)} before using
+   * and {@link #addToClassLoader(String,FileFilter,boolean)} before using
    * this ResourceLoader.
    */
   void reloadLuceneSPI() {
@@ -371,7 +390,12 @@ public class SolrResourceLoader implements ResourceLoader
   // Using this pattern, legacy analysis components from previous Solr versions are identified and delegated to SPI loader:
   private static final Pattern legacyAnalysisPattern = 
       Pattern.compile("((\\Q"+base+".analysis.\\E)|(\\Q"+project+".\\E))([\\p{L}_$][\\p{L}\\p{N}_$]+?)(TokenFilter|Filter|Tokenizer|CharFilter)Factory");
-      
+
+  @Override
+  public <T> Class<? extends T> findClass(String cname, Class<T> expectedType) {
+    return findClass(cname, expectedType, empty);
+  }
+  
   /**
    * This method loads a class either with it's FQN or a short-name (solr.class-simplename or class-simplename).
    * It tries to load the class with the name that is given first and if it fails, it tries all the known
@@ -380,7 +404,7 @@ public class SolrResourceLoader implements ResourceLoader
    * is loaded using a shortname.
    *
    * @param cname The name or the short name of the class.
-   * @param subpackages the packages to be tried if the cnams starts with solr.
+   * @param subpackages the packages to be tried if the cname starts with solr.
    * @return the loaded class. An exception is thrown if it fails
    */
   public <T> Class<? extends T> findClass(String cname, Class<T> expectedType, String... subpackages) {

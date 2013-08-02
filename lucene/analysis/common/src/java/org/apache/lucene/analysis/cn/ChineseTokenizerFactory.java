@@ -18,20 +18,29 @@ package org.apache.lucene.analysis.cn;
  */
 
 import java.io.Reader;
+import java.util.Map;
 
-import org.apache.lucene.analysis.cn.ChineseTokenizer;
-import org.apache.lucene.analysis.standard.StandardTokenizerFactory; // javadocs
 import org.apache.lucene.analysis.util.TokenizerFactory;
+import org.apache.lucene.util.AttributeSource.AttributeFactory;
 
 /** 
  * Factory for {@link ChineseTokenizer}
- * @deprecated Use {@link StandardTokenizerFactory} instead.
+ * @deprecated Use {@link org.apache.lucene.analysis.standard.StandardTokenizerFactory} instead.
  */
 @Deprecated
 public class ChineseTokenizerFactory extends TokenizerFactory {
   
-  public ChineseTokenizer create(Reader in) {
-    return new ChineseTokenizer(in);
+  /** Creates a new ChineseTokenizerFactory */
+  public ChineseTokenizerFactory(Map<String,String> args) {
+    super(args);
+    if (!args.isEmpty()) {
+      throw new IllegalArgumentException("Unknown parameters: " + args);
+    }
+  }
+  
+  @Override
+  public ChineseTokenizer create(AttributeFactory factory, Reader in) {
+    return new ChineseTokenizer(factory, in);
   }
 }
 

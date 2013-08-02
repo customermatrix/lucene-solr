@@ -1,6 +1,4 @@
-package org.apache.solr.logging.log4j;
-
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -16,21 +14,25 @@ package org.apache.solr.logging.log4j;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.solr.logging.log4j;
 
 import org.apache.log4j.AppenderSkeleton;
 import org.apache.log4j.spi.LoggingEvent;
 import org.apache.solr.logging.LogWatcher;
 
-public class EventAppender extends AppenderSkeleton {
-  private final LogWatcher<LoggingEvent> watcher;
+
+public final class EventAppender extends AppenderSkeleton {
+
+  final LogWatcher<LoggingEvent> watcher;
 
   public EventAppender(LogWatcher<LoggingEvent> framework) {
     this.watcher = framework;
   }
 
   @Override
-  public void append(LoggingEvent event) {
-    watcher.add(event, event.timeStamp);
+  public void append( LoggingEvent event )
+  {
+    watcher.add(event,event.timeStamp);
   }
 
   @Override

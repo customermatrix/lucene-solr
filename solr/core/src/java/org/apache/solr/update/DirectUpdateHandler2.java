@@ -29,8 +29,6 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.IndexReader;
@@ -90,7 +88,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
   // tracks when auto-commit should occur
   protected final CommitTracker commitTracker;
   protected final CommitTracker softCommitTracker;
-
+  
   protected boolean commitWithinSoftCommit;
 
   public DirectUpdateHandler2(SolrCore core) {
@@ -109,6 +107,8 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
     softCommitTracker = new CommitTracker("Soft", core, softCommitDocsUpperBound, softCommitTimeUpperBound, true, true);
     
     commitWithinSoftCommit = updateHandlerInfo.commitWithinSoftCommit;
+
+
   }
   
   public DirectUpdateHandler2(SolrCore core, UpdateHandler updateHandler) {
@@ -126,6 +126,13 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
     softCommitTracker = new CommitTracker("Soft", core, softCommitDocsUpperBound, softCommitTimeUpperBound, updateHandlerInfo.openSearcher, true);
     
     commitWithinSoftCommit = updateHandlerInfo.commitWithinSoftCommit;
+
+    UpdateLog existingLog = updateHandler.getUpdateLog();
+    if (this.ulog != null && this.ulog == existingLog) {
+      // If we are reusing the existing update log, inform the log that it's update handler has changed.
+      // We do this as late as possible.
+      this.ulog.init(this, core);
+    }
   }
 
   private void deleteAll() throws IOException {
@@ -133,9 +140,6 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
     RefCounted<IndexWriter> iw = solrCoreState.getIndexWriter(core);
     try {
       iw.get().deleteAll();
-      iw.get().forceMerge(1, true);
-      iw.get().deleteUnusedFiles();
-
     } finally {
       iw.decref();
     }
@@ -616,8 +620,8 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
   }
 
   @Override
-  public void newIndexWriter(boolean rollback, boolean forceNewDir) throws IOException {
-    solrCoreState.newIndexWriter(core, rollback, forceNewDir);
+  public void newIndexWriter(boolean rollback) throws IOException {
+    solrCoreState.newIndexWriter(core, rollback);
   }
   
   /**
@@ -749,7 +753,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
 
   @Override
   public void split(SplitIndexCommand cmd) throws IOException {
-    // TODO: do a commit first?
+    commit(new CommitUpdateCommand(cmd.req, false));
     SolrIndexSplitter splitter = new SolrIndexSplitter(cmd);
     splitter.split();
   }

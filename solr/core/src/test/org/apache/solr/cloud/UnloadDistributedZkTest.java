@@ -109,6 +109,9 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     createCmd.setDataDir(coreDataDir);
     
     server.request(createCmd);
+    
+    // does not mean they are active and up yet :*
+    waitForRecoveriesToFinish(collection, false);
 
     // now unload one of the two
     Unload unloadCmd = new Unload(false);
@@ -121,7 +124,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     while (shard2 != null) {
       if (System.currentTimeMillis() > timeoutAt) {
         printLayout();
-        fail("Still found shard");
+        fail("Still found shard2 in collection " + collection);
       }
       
       Thread.sleep(1000);

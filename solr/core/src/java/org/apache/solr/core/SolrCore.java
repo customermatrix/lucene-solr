@@ -90,11 +90,13 @@ import org.apache.solr.response.PythonResponseWriter;
 import org.apache.solr.response.QueryResponseWriter;
 import org.apache.solr.response.RawResponseWriter;
 import org.apache.solr.response.RubyResponseWriter;
+import org.apache.solr.response.SchemaXmlResponseWriter;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.response.XMLResponseWriter;
 import org.apache.solr.response.transform.TransformerFactory;
 import org.apache.solr.schema.FieldType;
 import org.apache.solr.schema.IndexSchema;
+import org.apache.solr.schema.IndexSchemaFactory;
 import org.apache.solr.schema.SchemaAware;
 import org.apache.solr.search.QParserPlugin;
 import org.apache.solr.search.SolrFieldCacheMBean;
@@ -126,7 +128,7 @@ import org.xml.sax.SAXException;
 /**
  *
  */
-public class SolrCore implements SolrInfoMBean {
+public final class SolrCore implements SolrInfoMBean {
   public static final String version="1.0";  
 
   // These should *only* be used for debugging or monitoring purposes
@@ -392,11 +394,9 @@ public class SolrCore implements SolrInfoMBean {
   public SolrCore reload(SolrResourceLoader resourceLoader, SolrCore prev) throws IOException,
       ParserConfigurationException, SAXException {
     
-    SolrConfig config = new SolrConfig(resourceLoader,
-        getSolrConfig().getName(), null);
+    SolrConfig config = new SolrConfig(resourceLoader, getSolrConfig().getName(), null);
     
-    IndexSchema schema = new IndexSchema(config,
-        getSchema().getResourceName(), null);
+    IndexSchema schema = IndexSchemaFactory.buildIndexSchema(getSchema().getResourceName(), config);
     
     solrCoreState.increfSolrCoreState();
     
@@ -409,7 +409,7 @@ public class SolrCore implements SolrInfoMBean {
         schema, coreDescriptor, updateHandler, this.solrDelPolicy, prev);
     core.solrDelPolicy = this.solrDelPolicy;
     
-    core.getUpdateHandler().getSolrCoreState().newIndexWriter(core, false, false);
+    core.getUpdateHandler().getSolrCoreState().newIndexWriter(core, false);
     
     core.getSearcher(true, false, null, true);
     
@@ -493,10 +493,10 @@ public class SolrCore implements SolrInfoMBean {
 
       // Create the index if it doesn't exist.
       if(!indexExists) {
-        log.info(logid+"Solr index directory '" + new File(indexDir) + "' doesn't exist."
+        log.warn(logid+"Solr index directory '" + new File(indexDir) + "' doesn't exist."
                 + " Creating new index...");
 
-        SolrIndexWriter writer = SolrIndexWriter.create("SolrCore.initIndex", indexDir, getDirectoryFactory(), true, schema, solrConfig.indexConfig, solrDelPolicy, codec, false);
+        SolrIndexWriter writer = SolrIndexWriter.create("SolrCore.initIndex", indexDir, getDirectoryFactory(), true, schema, solrConfig.indexConfig, solrDelPolicy, codec);
         writer.close();
       }
 
@@ -655,7 +655,6 @@ public class SolrCore implements SolrInfoMBean {
     coreDescriptor = cd;
     this.setName( name );
     resourceLoader = config.getResourceLoader();
-
     this.solrConfig = config;
     
     if (updateHandler == null) {
@@ -676,12 +675,12 @@ public class SolrCore implements SolrInfoMBean {
         }
       }
     }
-    dataDir = SolrResourceLoader.normalizeDir(dataDir);
 
+    dataDir = SolrResourceLoader.normalizeDir(dataDir);
     log.info(logid+"Opening new SolrCore at " + resourceLoader.getInstanceDir() + ", dataDir="+dataDir);
 
     if (schema==null) {
-      schema = new IndexSchema(config, IndexSchema.DEFAULT_SCHEMA_FILE, null);
+      schema = IndexSchemaFactory.buildIndexSchema(IndexSchema.DEFAULT_SCHEMA_FILE, config);
     }
 
     if (null != cd && null != cd.getCloudDescriptor()) {
@@ -689,7 +688,7 @@ public class SolrCore implements SolrInfoMBean {
       //
       // In cloud mode, version field is required for correct consistency
       // ideally this check would be more fine grained, and individual features
-      // would assert it when they initialize, but DistribuedUpdateProcessor
+      // would assert it when they initialize, but DistributedUpdateProcessor
       // is currently a big ball of wax that does more then just distributing
       // updates (ie: partial document updates), so it needs to work in no cloud
       // mode as well, and can't assert version field support on init.
@@ -1332,7 +1331,11 @@ public class SolrCore implements SolrInfoMBean {
    *
    * This method acquires openSearcherLock - do not call with searckLock held!
    */
-  public RefCounted<SolrIndexSearcher> openNewSearcher(boolean updateHandlerReopens, boolean realtime) {
+  public RefCounted<SolrIndexSearcher>  openNewSearcher(boolean updateHandlerReopens, boolean realtime) {
+    if (isClosed()) { // catch some errors quicker
+      throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, "openNewSearcher called on closed core");
+    }
+
     SolrIndexSearcher tmp;
     RefCounted<SolrIndexSearcher> newestSearcher = null;
     boolean nrt = solrConfig.reopenReaders && updateHandlerReopens;
@@ -1393,9 +1396,9 @@ public class SolrCore implements SolrInfoMBean {
           newReader = currentReader;
         }
 
-        // for now, turn off caches if this is for a realtime reader (caches take a little while to instantiate)
+       // for now, turn off caches if this is for a realtime reader (caches take a little while to instantiate)
         tmp = new SolrIndexSearcher(this, newIndexDir, schema, getSolrConfig().indexConfig, (realtime ? "realtime":"main"), newReader, true, !realtime, true, directoryFactory);
-        
+
       } else {
         // newestSearcher == null at this point
 
@@ -1902,6 +1905,7 @@ public class SolrCore implements SolrInfoMBean {
     m.put("raw", new RawResponseWriter());
     m.put("javabin", new BinaryResponseWriter());
     m.put("csv", new CSVResponseWriter());
+    m.put("schema.xml", new SchemaXmlResponseWriter());
     DEFAULT_RESPONSE_WRITERS = Collections.unmodifiableMap(m);
   }
   

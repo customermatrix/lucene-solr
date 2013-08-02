@@ -15,8 +15,8 @@ import org.apache.lucene.facet.search.FacetRequest.FacetArraysSource;
 import org.apache.lucene.facet.search.FacetRequest.ResultMode;
 import org.apache.lucene.facet.search.FacetRequest.SortOrder;
 import org.apache.lucene.facet.search.FacetsCollector.MatchingDocs;
+import org.apache.lucene.facet.taxonomy.ParallelTaxonomyArrays;
 import org.apache.lucene.facet.taxonomy.TaxonomyReader;
-import org.apache.lucene.facet.taxonomy.directory.ParallelTaxonomyArrays;
 import org.apache.lucene.index.IndexReader;
 
 /*
@@ -79,6 +79,13 @@ public class FacetsAccumulator {
     }
     
     return new FacetsAccumulator(fsp, indexReader, taxoReader);
+  }
+  
+  /** Returns an empty {@link FacetResult}. */
+  protected static FacetResult emptyResult(int ordinal, FacetRequest fr) {
+    FacetResultNode root = new FacetResultNode(ordinal, 0);
+    root.label = fr.categoryPath;
+    return new FacetResult(fr, root, 0);
   }
   
   /**
@@ -173,19 +180,17 @@ public class FacetsAccumulator {
     for (FacetRequest fr : searchParams.facetRequests) {
       int rootOrd = taxonomyReader.getOrdinal(fr.categoryPath);
       if (rootOrd == TaxonomyReader.INVALID_ORDINAL) { // category does not exist
-        // Add empty FacetResult:
-        FacetResultNode root = new FacetResultNode();
-        root.ordinal = TaxonomyReader.INVALID_ORDINAL;
-        root.label = fr.categoryPath;
-        root.value = 0;
-        res.add(new FacetResult(fr, root, 0));
+        // Add empty FacetResult
+        res.add(emptyResult(rootOrd, fr));
         continue;
       }
       CategoryListParams clp = searchParams.indexingParams.getCategoryListParams(fr.categoryPath);
-      OrdinalPolicy ordinalPolicy = clp .getOrdinalPolicy(fr.categoryPath.components[0]);
-      if (ordinalPolicy == OrdinalPolicy.NO_PARENTS) {
-        // rollup values
-        aggregator.rollupValues(fr, rootOrd, children, siblings, facetArrays);
+      if (fr.categoryPath.length > 0) { // someone might ask to aggregate the ROOT category
+        OrdinalPolicy ordinalPolicy = clp.getOrdinalPolicy(fr.categoryPath.components[0]);
+        if (ordinalPolicy == OrdinalPolicy.NO_PARENTS) {
+          // rollup values
+          aggregator.rollupValues(fr, rootOrd, children, siblings, facetArrays);
+        }
       }
       
       FacetResultsHandler frh = createFacetResultsHandler(fr);

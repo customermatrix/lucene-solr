@@ -19,6 +19,8 @@ package org.apache.solr.core;
 
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
+import org.apache.solr.schema.IndexSchema;
+import org.apache.solr.schema.IndexSchemaFactory;
 import org.apache.solr.util.DOMUtil;
 import org.apache.solr.util.RegexFileFilter;
 import org.apache.solr.handler.component.SearchComponent;
@@ -214,9 +216,9 @@ public class SolrConfig extends Config {
      loadPluginInfo(QueryConverter.class,"queryConverter",true, true);
 
      // this is hackish, since it picks up all SolrEventListeners,
-     // regardless of when/how/why thye are used (or even if they are 
+     // regardless of when/how/why they are used (or even if they are 
      // declared outside of the appropriate context) but there's no nice 
-     // way arround that in the PluginInfo framework
+     // way around that in the PluginInfo framework
      loadPluginInfo(SolrEventListener.class, "//listener",false, true);
 
      loadPluginInfo(DirectoryFactory.class,"directoryFactory",false, true);
@@ -225,6 +227,7 @@ public class SolrConfig extends Config {
      loadPluginInfo(IndexReaderFactory.class,"indexReaderFactory",false, true);
      loadPluginInfo(UpdateRequestProcessorChain.class,"updateRequestProcessorChain",false, false);
      loadPluginInfo(UpdateLog.class,"updateHandler/updateLog",false, false);
+     loadPluginInfo(IndexSchemaFactory.class,"schemaFactory",false, true);
 
      updateHandlerInfo = loadUpdatehandlerInfo();
 
@@ -459,10 +462,10 @@ public class SolrConfig extends Config {
         String baseDir = DOMUtil.getAttr(node, "dir");
         String path = DOMUtil.getAttr(node, "path");
         if (null != baseDir) {
-          // :TODO: add support for a simpler 'glob' mutually eclusive of regex
+          // :TODO: add support for a simpler 'glob' mutually exclusive of regex
           String regex = DOMUtil.getAttr(node, "regex");
           FileFilter filter = (null == regex) ? null : new RegexFileFilter(regex);
-          getResourceLoader().addToClassLoader(baseDir, filter);
+          getResourceLoader().addToClassLoader(baseDir, filter, false);
         } else if (null != path) {
           getResourceLoader().addToClassLoader(path);
         } else {

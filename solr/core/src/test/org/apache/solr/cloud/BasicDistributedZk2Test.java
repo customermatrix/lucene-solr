@@ -60,13 +60,17 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
 
   @BeforeClass
   public static void beforeThisClass2() throws Exception {
-    // TODO: we use an fs based dir because something
-    // like a ram dir will not recover correctly right now
-    // because tran log will still exist on restart and ram
-    // dir will not persist - perhaps translog can empty on
-    // start if using an EphemeralDirectoryFactory 
-    useFactory(null);
+
   }
+  
+  public BasicDistributedZk2Test() {
+    super();
+    fixShardCount = true;
+    
+    sliceCount = 2;
+    shardCount = 4;
+  }
+  
   /*
    * (non-Javadoc)
    * 
@@ -179,6 +183,7 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
       fail(e.getMessage());
     }
     
+    waitForCollection(cloudClient.getZkStateReader(), ONE_NODE_COLLECTION, 1);
     waitForRecoveriesToFinish(ONE_NODE_COLLECTION, cloudClient.getZkStateReader(), false);
     
     cloudClient.getZkStateReader().getLeaderRetry(ONE_NODE_COLLECTION, "shard1", 30000);
@@ -199,6 +204,16 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     qclient = new HttpSolrServer(baseUrl2 + "/onenodecollection");
     results = qclient.query(query);
     assertEquals(1, results.getResults().getNumFound());
+    
+    doc = new SolrInputDocument();
+    doc.addField("id", "2");
+    qclient.add(doc);
+    qclient.commit();
+    
+    query = new SolrQuery("*:*");
+    query.set("rows", 0);
+    results = qclient.query(query);
+    assertEquals(2, results.getResults().getNumFound());
   }
   
   private long testUpdateAndDelete() throws Exception {
@@ -252,14 +267,14 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     assertEquals(5, oldLiveNodes);
     
     // kill a shard
-    CloudJettyRunner deadShard = chaosMonkey.stopShard(SHARD2, 0);
+    CloudJettyRunner deadShard = chaosMonkey.stopShard(SHARD1, 0);
 
 
     // we are careful to make sure the downed node is no longer in the state,
     // because on some systems (especially freebsd w/ blackhole enabled), trying
     // to talk to a downed node causes grief
     Set<CloudJettyRunner> jetties = new HashSet<CloudJettyRunner>();
-    jetties.addAll(shardToJetty.get(SHARD2));
+    jetties.addAll(shardToJetty.get(SHARD1));
     jetties.remove(deadShard);
     
     // ensure shard is dead
@@ -273,8 +288,6 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     
     commit();
     
-    printLayout();
-    
     query("q", "*:*", "sort", "n_tl1 desc");
     
     // long cloudClientDocs = cloudClient.query(new
@@ -286,7 +299,8 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
   
     long numFound1 = cloudClient.query(new SolrQuery("*:*")).getResults().getNumFound();
     
-    index_specific(shardToJetty.get(SHARD2).get(1).client.solrClient, id, 1000, i1, 108, t1,
+    cloudClient.getZkStateReader().getLeaderRetry(DEFAULT_COLLECTION, SHARD1, 60000);
+    index_specific(shardToJetty.get(SHARD1).get(1).client.solrClient, id, 1000, i1, 108, t1,
         "specific doc!");
     
     commit();
@@ -359,7 +373,7 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     
     waitForRecoveriesToFinish(false);
     
-    deadShardCount = shardToJetty.get(SHARD2).get(0).client.solrClient
+    deadShardCount = shardToJetty.get(SHARD1).get(0).client.solrClient
         .query(query).getResults().getNumFound();
     // if we properly recovered, we should now have the couple missing docs that
     // came in while shard was down
@@ -387,7 +401,7 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     // make sure we have published we are recovering
     Thread.sleep(1500);
     
-    waitForThingsToLevelOut(15);
+    waitForThingsToLevelOut(30);
     
     Thread.sleep(500);
     
@@ -397,15 +411,12 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     
     // try a backup command
     final HttpSolrServer client = (HttpSolrServer) shardToJetty.get(SHARD2).get(0).client.solrClient;
-    System.out.println("base url: "+ client.getBaseURL());
     ModifiableSolrParams params = new ModifiableSolrParams();
     params.set("qt", "/replication");
     params.set("command", "backup");
 
     QueryRequest request = new QueryRequest(params);
     NamedList<Object> results = client.request(request );
-    System.out.println("results:" + results);
-    
     
     checkForBackupSuccess(client);
     

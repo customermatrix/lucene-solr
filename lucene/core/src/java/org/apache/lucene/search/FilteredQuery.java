@@ -210,6 +210,11 @@ public class FilteredQuery extends Query {
     public Collection<ChildScorer> getChildren() {
       return Collections.singleton(new ChildScorer(scorer, "FILTERED"));
     }
+
+    @Override
+    public long cost() {
+      return scorer.cost();
+    }
   }
   
   /**
@@ -235,11 +240,11 @@ public class FilteredQuery extends Query {
     // optimization: we are topScorer and collect directly using short-circuited algo
     @Override
     public final void score(Collector collector) throws IOException {
-      int primDoc = primaryNext();
-      int secDoc = secondary.advance(primDoc);
       // the normalization trick already applies the boost of this query,
       // so we can use the wrapped scorer directly:
       collector.setScorer(scorer);
+      int primDoc = primaryNext();
+      int secDoc = secondary.advance(primDoc);
       for (;;) {
         if (primDoc == secDoc) {
           // Check if scorer has exhausted, only before collecting.
@@ -303,6 +308,11 @@ public class FilteredQuery extends Query {
     @Override
     public final Collection<ChildScorer> getChildren() {
       return Collections.singleton(new ChildScorer(scorer, "FILTERED"));
+    }
+
+    @Override
+    public long cost() {
+      return Math.min(primary.cost(), secondary.cost());
     }
   }
   

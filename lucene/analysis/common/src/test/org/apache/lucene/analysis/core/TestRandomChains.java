@@ -54,6 +54,7 @@ import org.apache.lucene.analysis.MockTokenizer;
 import org.apache.lucene.analysis.TokenFilter;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.Tokenizer;
+import org.apache.lucene.analysis.miscellaneous.LimitTokenPositionFilter;
 import org.apache.lucene.analysis.wikipedia.WikipediaTokenizer;
 import org.apache.lucene.analysis.ValidatingTokenFilter;
 import org.apache.lucene.analysis.charfilter.NormalizeCharMap;
@@ -70,8 +71,10 @@ import org.apache.lucene.analysis.miscellaneous.HyphenatedWordsFilter;
 import org.apache.lucene.analysis.miscellaneous.KeepWordFilter;
 import org.apache.lucene.analysis.miscellaneous.LengthFilter;
 import org.apache.lucene.analysis.miscellaneous.LimitTokenCountFilter;
+import org.apache.lucene.analysis.miscellaneous.StemmerOverrideFilter;
 import org.apache.lucene.analysis.miscellaneous.TrimFilter;
 import org.apache.lucene.analysis.miscellaneous.WordDelimiterFilter;
+import org.apache.lucene.analysis.miscellaneous.StemmerOverrideFilter.StemmerOverrideMap;
 import org.apache.lucene.analysis.ngram.EdgeNGramTokenFilter;
 import org.apache.lucene.analysis.ngram.EdgeNGramTokenizer;
 import org.apache.lucene.analysis.ngram.NGramTokenFilter;
@@ -124,6 +127,18 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
           ALWAYS);
       brokenConstructors.put(
           LimitTokenCountFilter.class.getConstructor(TokenStream.class, int.class, boolean.class),
+          new Predicate<Object[]>() {
+            @Override
+            public boolean apply(Object[] args) {
+              assert args.length == 3;
+              return !((Boolean) args[2]); // args are broken if consumeAllTokens is false
+            }
+          });
+      brokenConstructors.put(
+          LimitTokenPositionFilter.class.getConstructor(TokenStream.class, int.class),
+          ALWAYS);
+      brokenConstructors.put(
+          LimitTokenPositionFilter.class.getConstructor(TokenStream.class, int.class, boolean.class),
           new Predicate<Object[]>() {
             @Override
             public boolean apply(Object[] args) {
@@ -252,14 +267,12 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
     tokenfilters = new ArrayList<Constructor<? extends TokenFilter>>();
     charfilters = new ArrayList<Constructor<? extends CharFilter>>();
     for (final Class<?> c : analysisClasses) {
-      // TODO: Fix below code to use c.isAnnotationPresent(). It was changed
-      // to the null check to work around a bug in JDK 8 b78 (see LUCENE-4808).
       final int modifiers = c.getModifiers();
       if (
         // don't waste time with abstract classes or deprecated known-buggy ones
         Modifier.isAbstract(modifiers) || !Modifier.isPublic(modifiers)
         || c.isSynthetic() || c.isAnonymousClass() || c.isMemberClass() || c.isInterface()
-        || c.getAnnotation(Deprecated.class) != null
+        || c.isAnnotationPresent(Deprecated.class)
         || !(Tokenizer.class.isAssignableFrom(c) || TokenFilter.class.isAssignableFrom(c) || CharFilter.class.isAssignableFrom(c))
       ) {
         continue;
@@ -267,7 +280,7 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
       
       for (final Constructor<?> ctor : c.getConstructors()) {
         // don't test synthetic or deprecated ctors, they likely have known bugs:
-        if (ctor.isSynthetic() || ctor.getAnnotation(Deprecated.class) != null || brokenConstructors.get(ctor) == ALWAYS) {
+        if (ctor.isSynthetic() || ctor.isAnnotationPresent(Deprecated.class) || brokenConstructors.get(ctor) == ALWAYS) {
           continue;
         }
         if (Tokenizer.class.isAssignableFrom(c)) {
@@ -565,6 +578,29 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
           map.put(_TestUtil.randomSimpleString(random), _TestUtil.randomSimpleString(random));
         }
         return map;
+      }
+    });
+    put(StemmerOverrideMap.class, new ArgProducer() {
+      @Override public Object create(Random random) {
+        int num = random.nextInt(10);
+        StemmerOverrideFilter.Builder builder = new StemmerOverrideFilter.Builder(random.nextBoolean());
+        for (int i = 0; i < num; i++) {
+          String input = ""; 
+          do {
+            input = _TestUtil.randomRealisticUnicodeString(random);
+          } while(input.isEmpty());
+          String out = ""; _TestUtil.randomSimpleString(random);
+          do {
+            out = _TestUtil.randomRealisticUnicodeString(random);
+          } while(out.isEmpty());
+          builder.add(input, out);
+        }
+        try {
+          return builder.build();
+        } catch (Exception ex) {
+          Rethrow.rethrow(ex);
+          return null; // unreachable code
+        }
       }
     });
     put(SynonymMap.class, new ArgProducer() {

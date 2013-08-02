@@ -70,7 +70,7 @@ public class SchemaField extends FieldProperties {
  /** Create a new SchemaField with the given name and type,
    * and with the specified properties.  Properties are *not*
    * inherited from the type in this case, so users of this
-   * constructor should derive the properties from type.getProperties()
+   * constructor should derive the properties from type.getSolrProperties()
    *  using all the default properties from the type.
    */
   public SchemaField(String name, FieldType type, int properties, String defaultValue ) {
@@ -221,8 +221,8 @@ public class SchemaField extends FieldProperties {
   }
 
   static int calcProps(String name, FieldType ft, Map<String, String> props) {
-    int trueProps = parseProperties(props,true);
-    int falseProps = parseProperties(props,false);
+    int trueProps = parseProperties(props,true,true);
+    int falseProps = parseProperties(props,false,true);
 
     int p = ft.properties;
 

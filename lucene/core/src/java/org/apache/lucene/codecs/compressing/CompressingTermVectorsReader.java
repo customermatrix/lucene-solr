@@ -1030,13 +1030,13 @@ public final class CompressingTermVectorsReader extends TermVectorsReader implem
 
     @Override
     public int advance(int target) throws IOException {
-      if (doc == -1 && target == 0 && (liveDocs == null || liveDocs.get(0))) {
-        return (doc = 0);
-      } else {
-        return (doc = NO_MORE_DOCS);
-      }
+      return slowAdvance(target);
     }
 
+    @Override
+    public long cost() {
+      return 1;
+    }
   }
 
   private static int sum(int[] arr) {

@@ -25,11 +25,15 @@ import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
 import java.text.ParseException;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.Tokenizer;
+import org.apache.lucene.analysis.Analyzer.TokenStreamComponents;
 import org.apache.lucene.analysis.core.LowerCaseFilter;
 import org.apache.lucene.analysis.core.WhitespaceTokenizer;
 import org.apache.lucene.analysis.synonym.SynonymFilter;
@@ -46,10 +50,37 @@ import org.apache.lucene.util.Version;
 // NOTE: rename this to "SynonymFilterFactory" and nuke that delegator in Lucene 5.0!
 @Deprecated
 final class FSTSynonymFilterFactory extends TokenFilterFactory implements ResourceLoaderAware {
+  private final boolean ignoreCase;
+  private final String tokenizerFactory;
+  private final String synonyms;
+  private final String format;
+  private final boolean expand;
+  private final Map<String, String> tokArgs = new HashMap<String, String>();
 
   private SynonymMap map;
-  private boolean ignoreCase;
+  
+  public FSTSynonymFilterFactory(Map<String,String> args) {
+    super(args);
+    ignoreCase = getBoolean(args, "ignoreCase", false);
+    synonyms = require(args, "synonyms");
+    format = get(args, "format");
+    expand = getBoolean(args, "expand", true);
 
+    tokenizerFactory = get(args, "tokenizerFactory");
+    if (tokenizerFactory != null) {
+      assureMatchVersion();
+      tokArgs.put("luceneMatchVersion", getLuceneMatchVersion().toString());
+      for (Iterator<String> itr = args.keySet().iterator(); itr.hasNext();) {
+        String key = itr.next();
+        tokArgs.put(key.replaceAll("^tokenizerFactory\\.",""), args.get(key));
+        itr.remove();
+      }
+    }
+    if (!args.isEmpty()) {
+      throw new IllegalArgumentException("Unknown parameters: " + args);
+    }
+  }
+  
   @Override
   public TokenStream create(TokenStream input) {
     // if the fst is null, it means there's actually no synonyms... just return the original stream
@@ -59,23 +90,17 @@ final class FSTSynonymFilterFactory extends TokenFilterFactory implements Resour
 
   @Override
   public void inform(ResourceLoader loader) throws IOException {
-    final boolean ignoreCase = getBoolean("ignoreCase", false);
-    this.ignoreCase = ignoreCase;
-
-    String tf = args.get("tokenizerFactory");
-
-    final TokenizerFactory factory = tf == null ? null : loadTokenizerFactory(loader, tf);
-
+    final TokenizerFactory factory = tokenizerFactory == null ? null : loadTokenizerFactory(loader, tokenizerFactory);
+    
     Analyzer analyzer = new Analyzer() {
       @Override
       protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
-        Tokenizer tokenizer = factory == null ? new WhitespaceTokenizer(Version.LUCENE_31, reader) : factory.create(reader);
-        TokenStream stream = ignoreCase ? new LowerCaseFilter(Version.LUCENE_31, tokenizer) : tokenizer;
+        Tokenizer tokenizer = factory == null ? new WhitespaceTokenizer(Version.LUCENE_43, reader) : factory.create(reader);
+        TokenStream stream = ignoreCase ? new LowerCaseFilter(Version.LUCENE_43, tokenizer) : tokenizer;
         return new TokenStreamComponents(tokenizer, stream);
       }
     };
 
-    String format = args.get("format");
     try {
       if (format == null || format.equals("solr")) {
         // TODO: expose dedup as a parameter?
@@ -87,23 +112,18 @@ final class FSTSynonymFilterFactory extends TokenFilterFactory implements Resour
         throw new IllegalArgumentException("Unrecognized synonyms format: " + format);
       }
     } catch (ParseException e) {
-      throw new IOException("Exception thrown while loading synonyms", e);
+      throw new IOException("Error parsing synonyms file:", e);
     }
   }
-
+  
   /**
    * Load synonyms from the solr format, "format=solr".
    */
-  private SynonymMap loadSolrSynonyms(ResourceLoader loader, boolean dedup, Analyzer analyzer) throws IOException, ParseException {
-    final boolean expand = getBoolean("expand", true);
-    String synonyms = args.get("synonyms");
-    if (synonyms == null)
-      throw new IllegalArgumentException("Missing required argument 'synonyms'.");
-
+  private SynonymMap loadSolrSynonyms(ResourceLoader loader, boolean dedup, Analyzer analyzer) throws IOException, ParseException {    
     CharsetDecoder decoder = Charset.forName("UTF-8").newDecoder()
-        .onMalformedInput(CodingErrorAction.REPORT)
-        .onUnmappableCharacter(CodingErrorAction.REPORT);
-
+      .onMalformedInput(CodingErrorAction.REPORT)
+      .onUnmappableCharacter(CodingErrorAction.REPORT);
+    
     SolrSynonymParser parser = new SolrSynonymParser(dedup, expand, analyzer);
     File synonymFile = new File(synonyms);
     if (synonymFile.exists()) {
@@ -118,20 +138,15 @@ final class FSTSynonymFilterFactory extends TokenFilterFactory implements Resour
     }
     return parser.build();
   }
-
+  
   /**
    * Load synonyms from the wordnet format, "format=wordnet".
    */
   private SynonymMap loadWordnetSynonyms(ResourceLoader loader, boolean dedup, Analyzer analyzer) throws IOException, ParseException {
-    final boolean expand = getBoolean("expand", true);
-    String synonyms = args.get("synonyms");
-    if (synonyms == null)
-      throw new IllegalArgumentException("Missing required argument 'synonyms'.");
-
     CharsetDecoder decoder = Charset.forName("UTF-8").newDecoder()
-        .onMalformedInput(CodingErrorAction.REPORT)
-        .onUnmappableCharacter(CodingErrorAction.REPORT);
-
+      .onMalformedInput(CodingErrorAction.REPORT)
+      .onUnmappableCharacter(CodingErrorAction.REPORT);
+    
     WordnetSynonymParser parser = new WordnetSynonymParser(dedup, expand, analyzer);
     File synonymFile = new File(synonyms);
     if (synonymFile.exists()) {
@@ -146,14 +161,18 @@ final class FSTSynonymFilterFactory extends TokenFilterFactory implements Resour
     }
     return parser.build();
   }
-
+  
+  // (there are no tests for this functionality)
   private TokenizerFactory loadTokenizerFactory(ResourceLoader loader, String cname) throws IOException {
-    TokenizerFactory tokFactory = loader.newInstance(cname, TokenizerFactory.class);
-    tokFactory.setLuceneMatchVersion(luceneMatchVersion);
-    tokFactory.init(args);
-    if (tokFactory instanceof ResourceLoaderAware) {
-      ((ResourceLoaderAware) tokFactory).inform(loader);
+    Class<? extends TokenizerFactory> clazz = loader.findClass(cname, TokenizerFactory.class);
+    try {
+      TokenizerFactory tokFactory = clazz.getConstructor(Map.class).newInstance(tokArgs);
+      if (tokFactory instanceof ResourceLoaderAware) {
+        ((ResourceLoaderAware) tokFactory).inform(loader);
+      }
+      return tokFactory;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
-    return tokFactory;
   }
 }

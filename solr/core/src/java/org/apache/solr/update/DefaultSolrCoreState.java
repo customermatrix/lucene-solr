@@ -22,7 +22,6 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.solr.cloud.RecoveryStrategy;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
@@ -108,7 +107,7 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
       }
       
       if (indexWriter == null) {
-        indexWriter = createMainIndexWriter(core, "DirectUpdateHandler2", false);
+        indexWriter = createMainIndexWriter(core, "DirectUpdateHandler2");
       }
       initRefCntWriter();
       writerFree = false;
@@ -133,7 +132,7 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
   }
 
   @Override
-  public synchronized void newIndexWriter(SolrCore core, boolean rollback, boolean forceNewDir) throws IOException {
+  public synchronized void newIndexWriter(SolrCore core, boolean rollback) throws IOException {
     log.info("Creating new IndexWriter...");
     String coreName = core.getName();
     synchronized (writerPauseLock) {
@@ -177,7 +176,7 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
             }
           }
         }
-        indexWriter = createMainIndexWriter(core, "DirectUpdateHandler2", forceNewDir);
+        indexWriter = createMainIndexWriter(core, "DirectUpdateHandler2");
         log.info("New IndexWriter is ready to be used.");
         // we need to null this so it picks up the new writer next get call
         refCntWriter = null;
@@ -191,13 +190,13 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
 
   @Override
   public synchronized void rollbackIndexWriter(SolrCore core) throws IOException {
-    newIndexWriter(core, true, false);
+    newIndexWriter(core, true);
   }
   
-  protected SolrIndexWriter createMainIndexWriter(SolrCore core, String name, boolean forceNewDirectory) throws IOException {
+  protected SolrIndexWriter createMainIndexWriter(SolrCore core, String name) throws IOException {
     return SolrIndexWriter.create(name, core.getNewIndexDir(),
         core.getDirectoryFactory(), false, core.getSchema(),
-        core.getSolrConfig().indexConfig, core.getDeletionPolicy(), core.getCodec(), forceNewDirectory);
+        core.getSolrConfig().indexConfig, core.getDeletionPolicy(), core.getCodec());
   }
 
   @Override

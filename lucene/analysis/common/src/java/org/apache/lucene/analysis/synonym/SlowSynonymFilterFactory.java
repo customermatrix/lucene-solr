@@ -26,7 +26,10 @@ import java.io.IOException;
 import java.io.Reader;
 import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Factory for {@link SlowSynonymFilter} (only used with luceneMatchVersion < 3.4)
@@ -42,15 +45,34 @@ import java.util.List;
  */
 @Deprecated
 final class SlowSynonymFilterFactory extends TokenFilterFactory implements ResourceLoaderAware {
+  private final String synonyms;
+  private final boolean ignoreCase;
+  private final boolean expand;
+  private final String tf;
+  private final Map<String, String> tokArgs = new HashMap<String, String>();
+  
+  public SlowSynonymFilterFactory(Map<String,String> args) {
+    super(args);
+    synonyms = require(args, "synonyms");
+    ignoreCase = getBoolean(args, "ignoreCase", false);
+    expand = getBoolean(args, "expand", true);
 
+    tf = get(args, "tokenizerFactory");
+    if (tf != null) {
+      assureMatchVersion();
+      tokArgs.put("luceneMatchVersion", getLuceneMatchVersion().toString());
+      for (Iterator<String> itr = args.keySet().iterator(); itr.hasNext();) {
+        String key = itr.next();
+        tokArgs.put(key.replaceAll("^tokenizerFactory\\.",""), args.get(key));
+        itr.remove();
+      }
+    }
+    if (!args.isEmpty()) {
+      throw new IllegalArgumentException("Unknown parameters: " + args);
+    }
+  }
+  
   public void inform(ResourceLoader loader) throws IOException {
-    String synonyms = args.get("synonyms");
-    if (synonyms == null)
-      throw new IllegalArgumentException("Missing required argument 'synonyms'.");
-    boolean ignoreCase = getBoolean("ignoreCase", false);
-    boolean expand = getBoolean("expand", true);
-
-    String tf = args.get("tokenizerFactory");
     TokenizerFactory tokFactory = null;
     if( tf != null ){
       tokFactory = loadTokenizerFactory(loader, tf);
@@ -158,13 +180,16 @@ final class SlowSynonymFilterFactory extends TokenFilterFactory implements Resou
   }
 
   private TokenizerFactory loadTokenizerFactory(ResourceLoader loader, String cname) throws IOException {
-    TokenizerFactory tokFactory = loader.newInstance(cname, TokenizerFactory.class);
-    tokFactory.setLuceneMatchVersion(luceneMatchVersion);
-    tokFactory.init( args );
-    if (tokFactory instanceof ResourceLoaderAware) {
-      ((ResourceLoaderAware) tokFactory).inform(loader);
+    Class<? extends TokenizerFactory> clazz = loader.findClass(cname, TokenizerFactory.class);
+    try {
+      TokenizerFactory tokFactory = clazz.getConstructor(Map.class).newInstance(tokArgs);
+      if (tokFactory instanceof ResourceLoaderAware) {
+        ((ResourceLoaderAware) tokFactory).inform(loader);
+      }
+      return tokFactory;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
-    return tokFactory;
   }
 
   private static TokenStream loadTokenizer(TokenizerFactory tokFactory, Reader reader){

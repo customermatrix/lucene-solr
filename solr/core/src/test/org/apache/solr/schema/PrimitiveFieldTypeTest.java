@@ -40,6 +40,7 @@ public class PrimitiveFieldTypeTest extends SolrTestCaseJ4 {
   public void setUp()  throws Exception {
     super.setUp();
     // set some system properties for use by tests
+    System.setProperty("enable.update.log", "false"); // schema12 doesn't support _version_
     System.setProperty("solr.test.sys.prop1", "propone");
     System.setProperty("solr.test.sys.prop2", "proptwo");
 
@@ -68,7 +69,7 @@ public class PrimitiveFieldTypeTest extends SolrTestCaseJ4 {
     // ***********************
     // With schema version 1.4:
     // ***********************
-    schema = new IndexSchema(config, testConfHome + "schema12.xml", null);
+    schema = IndexSchemaFactory.buildIndexSchema(testConfHome + "schema12.xml", config);
     
     dt = new DateField();
     dt.init(schema, initMap);
@@ -130,7 +131,7 @@ public class PrimitiveFieldTypeTest extends SolrTestCaseJ4 {
     // ***********************
     // With schema version 1.5
     // ***********************
-    schema = new IndexSchema(config, testConfHome + "schema15.xml", null);
+    schema = IndexSchemaFactory.buildIndexSchema(testConfHome + "schema15.xml", config);
 
     dt = new DateField();
     dt.init(schema, initMap);
