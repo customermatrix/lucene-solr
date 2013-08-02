@@ -403,7 +403,7 @@ public class CoreContainer
       loader.reloadLuceneSPI();
     }
 
-    shardHandlerFactory = cfg.initShardHandler();
+    initShardHandler();
 
     coreMaps.allocateLazyCores(cfg, loader);
 
@@ -655,11 +655,10 @@ public class CoreContainer
   // To make this available to TestHarness.
   protected void initShardHandler() {
     if (cfg != null) {
-      cfg.initShardHandler();
+      shardHandlerFactory = cfg.initShardHandler();
     } else {
       // Cough! Hack! But tests run this way.
-      HttpShardHandlerFactory fac = new HttpShardHandlerFactory();
-      shardHandlerFactory = fac;
+      shardHandlerFactory = new HttpShardHandlerFactory();
     }
   }
 

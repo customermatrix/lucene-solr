@@ -20,6 +20,7 @@ package org.apache.solr.schema;
 import org.apache.commons.io.IOUtils;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.AnalyzerWrapper;
+import org.apache.lucene.analysis.util.ResourceLoaderAware;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.util.Version;
@@ -122,11 +123,11 @@ public class IndexSchema {
   private static final String XPATH_OR = " | ";
 
   final static Logger log = LoggerFactory.getLogger(IndexSchema.class);
-  protected final SolrConfig solrConfig;
+  protected SolrConfig solrConfig;
   protected String resourceName;
   protected String name;
   protected float version;
-  protected final SolrResourceLoader loader;
+  protected SolrResourceLoader loader;
 
   protected final HashMap<String, SchemaField> fields = new HashMap<String,SchemaField>();
 
@@ -157,6 +158,10 @@ public class IndexSchema {
    * directives that target them.
    */
   private Map<SchemaField, Integer> copyFieldTargetCounts = new HashMap<SchemaField, Integer>();
+
+  public IndexSchema() {
+    dynamicFields = new DynamicField[0];
+  }
 
   /**
    * Constructs a schema using the specified resource name and stream.
@@ -210,7 +215,6 @@ public class IndexSchema {
   public float getVersion() {
     return version;
   }
-
 
   /**
    * Provides direct access to the Map containing all explicit
@@ -308,7 +312,7 @@ public class IndexSchema {
     return queryParserDefaultOperator;
   }
 
-  private SchemaField uniqueKeyField;
+  protected SchemaField uniqueKeyField;
 
   /**
    * Unique Key field specified in the schema file
@@ -316,8 +320,8 @@ public class IndexSchema {
    */
   public SchemaField getUniqueKeyField() { return uniqueKeyField; }
 
-  private String uniqueKeyFieldName;
-  private FieldType uniqueKeyFieldType;
+  protected String uniqueKeyFieldName;
+  protected FieldType uniqueKeyFieldType;
 
   /**
    * The raw (field type encoded) value of the Unique Key field for

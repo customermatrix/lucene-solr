@@ -128,7 +128,7 @@ import org.xml.sax.SAXException;
 /**
  *
  */
-public final class SolrCore implements SolrInfoMBean {
+public class SolrCore implements SolrInfoMBean {
   public static final String version="1.0";  
 
   // These should *only* be used for debugging or monitoring purposes

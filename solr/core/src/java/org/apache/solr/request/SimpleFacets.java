@@ -473,6 +473,15 @@ public class SimpleFacets {
     return counts;
   }
 
+  private SchemaField getField(String field) {
+    IndexSchema schema = searcher.getSchema();
+    SchemaField virtualField = schema.getVirtualField(field);
+    if (virtualField != null) {
+      return virtualField;
+    }
+    return schema.getField(field);
+  }
+
   public NamedList<Integer> getGroupedCounts(SolrIndexSearcher searcher,
                                              DocSet base,
                                              String field,
@@ -601,7 +610,7 @@ public class SimpleFacets {
    * Use the Lucene FieldCache to get counts for each unique field value in <code>docs</code>.
    * The field must have at most one indexed token per document.
    */
-  public static NamedList<Integer> getFieldCacheCounts(SolrIndexSearcher searcher, DocSet docs, String fieldName, int offset, int limit, int mincount, boolean missing, String sort, String prefix) throws IOException {
+  public NamedList<Integer> getFieldCacheCounts(SolrIndexSearcher searcher, DocSet docs, String fieldName, int offset, int limit, int mincount, boolean missing, String sort, String prefix) throws IOException {
     // TODO: If the number of terms is high compared to docs.size(), and zeros==false,
     //  we should use an alternate strategy to avoid
     //  1) creating another huge int[] for the counts
@@ -707,9 +716,11 @@ public class SimpleFacets {
           int tnum = Integer.MAX_VALUE - (int)pair;
           si.lookupOrd(startTermIndex+tnum, br);
           ft.indexedToReadable(br, charsRef);
-          res.add(charsRef.toString(), c);
+          if (termValidator.validate(fieldName, charsRef.toString())) {
+            res.add(charsRef.toString(), c);
+          }
         }
-      
+
       } else {
         // add results in index order
         int i=(startTermIndex==-1)?1:0;
@@ -726,7 +737,9 @@ public class SimpleFacets {
           if (--lim<0) break;
           si.lookupOrd(startTermIndex+i, br);
           ft.indexedToReadable(br, charsRef);
-          res.add(charsRef.toString(), c);
+          if (termValidator.validate(fieldName, charsRef.toString())) {
+            res.add(charsRef.toString(), c);
+          }
         }
       }
     }
