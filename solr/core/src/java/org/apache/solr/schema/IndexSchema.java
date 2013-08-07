@@ -110,11 +110,11 @@ public class IndexSchema {
   private static final String XPATH_OR = " | ";
 
   final static Logger log = LoggerFactory.getLogger(IndexSchema.class);
-  protected final SolrConfig solrConfig;
+  protected SolrConfig solrConfig;
   protected String resourceName;
   protected String name;
   protected float version;
-  protected final SolrResourceLoader loader;
+  protected SolrResourceLoader loader;
 
   protected Map<String,SchemaField> fields = new HashMap<String,SchemaField>();
   protected Map<String,FieldType> fieldTypes = new HashMap<String,FieldType>();
@@ -127,18 +127,17 @@ public class IndexSchema {
   protected Analyzer analyzer;
   protected Analyzer queryAnalyzer;
 
-  private String defaultSearchFieldName=null;
-  private String queryParserDefaultOperator = "OR";
-  private boolean isExplicitQueryParserDefaultOperator = false;
+  protected List<SchemaAware> schemaAware = new ArrayList<SchemaAware>();
 
   protected String defaultSearchFieldName=null;
   protected String queryParserDefaultOperator = "OR";
   protected boolean isExplicitQueryParserDefaultOperator = false;
 
-  private final Map<String, List<CopyField>> copyFieldsMap = new HashMap<String, List<CopyField>>();
+
+  protected Map<String, List<CopyField>> copyFieldsMap = new HashMap<String, List<CopyField>>();
   public Map<String,List<CopyField>> getCopyFieldsMap() { return Collections.unmodifiableMap(copyFieldsMap); }
   
-  private DynamicCopy[] dynamicCopyFields;
+  protected DynamicCopy[] dynamicCopyFields;
   public DynamicCopy[] getDynamicCopyFields() { return dynamicCopyFields; }
 
   /**

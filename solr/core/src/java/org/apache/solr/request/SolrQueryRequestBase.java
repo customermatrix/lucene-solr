@@ -17,6 +17,7 @@
 
 package org.apache.solr.request;
 
+import org.apache.solr.schema.VirtualIndexSchema;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.util.RefCounted;
 import org.apache.solr.schema.IndexSchema;
@@ -24,6 +25,10 @@ import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.ContentStream;
 import org.apache.solr.core.SolrCore;
 
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 
@@ -123,14 +128,14 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
 
               for (SolrCore solrCore : cores) {
                 if (collections.contains(solrCore.getCoreDescriptor().getCloudDescriptor().getCollectionName())) {
-                  IndexSchema schema = solrCore.getSchema();
+                  IndexSchema schema = solrCore.getLatestSchema();
                   virtualIndexSchema.putAllFields(schema.getFields());
                   virtualIndexSchema.putAllFieldTypes(schema.getFieldTypes());
                   virtualIndexSchema.setUniqueKeyField(schema.getUniqueKeyField());
                   virtualIndexSchema.setQueryParserDefaultOperator(schema.getQueryParserDefaultOperator());
                   virtualIndexSchema.setDefaultSearchFieldName(schema.getDefaultSearchFieldName());
-                  if (core.getSchema().getDynamicFieldPrototypes() != null) {
-                    virtualIndexSchema.registerDynamicFields(core.getSchema().getDynamicFieldPrototypes());
+                  if (core.getLatestSchema().getDynamicFieldPrototypes() != null) {
+                    virtualIndexSchema.registerDynamicFields(core.getLatestSchema().getDynamicFieldPrototypes());
                   }
                 }
               }

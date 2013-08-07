@@ -37,6 +37,7 @@ import org.carrot2.text.util.MutableCharArray;
 import org.carrot2.util.attribute.Attribute;
 import org.carrot2.util.attribute.Bindable;
 import org.carrot2.util.attribute.Input;
+import org.carrot2.util.attribute.constraint.ImplementingClasses;
 import org.slf4j.Logger;
 
 import com.google.common.collect.HashMultimap;
@@ -60,6 +61,7 @@ public class SolrStopwordsCarrot2LexicalDataFactory implements
   @Init
   @Input
   @Attribute(key = "solrCore")
+  @ImplementingClasses(classes = { SolrCore.class, })
   private SolrCore core;
 
   @Processing

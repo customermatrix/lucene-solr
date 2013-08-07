@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class VirtualIndexSchema extends IndexSchema {
+
   public void putAllFields(Map<String, SchemaField> fields) {
     this.fields.putAll(fields);
   }

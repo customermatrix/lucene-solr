@@ -39,6 +39,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.xml.xpath.XPathExpressionException;
 import java.io.File;
+import java.lang.String;
 import java.text.SimpleDateFormat;
 import java.util.Collection;
 import java.util.Collections;
@@ -104,7 +105,7 @@ public class CoreContainer
 
   protected ZkContainer zkSys = new ZkContainer();
 
-  private ShardHandlerFactory shardHandlerFactory;
+  protected ShardHandlerFactory shardHandlerFactory;
   protected LogWatcher logging = null;
   private String zkHost;
   private int transientCacheSize = Integer.MAX_VALUE;
@@ -115,7 +116,8 @@ public class CoreContainer
   protected final ConfigSolr cfg;
   protected final SolrResourceLoader loader;
   protected final String solrHome;
-  
+  private String hostPort;
+
   {
     log.info("New CoreContainer " + System.identityHashCode(this));
   }
@@ -201,7 +203,7 @@ public class CoreContainer
       loader.reloadLuceneSPI();
     }
 
-    shardHandlerFactory = ShardHandlerFactory.newInstance(cfg.getShardHandlerFactoryPluginInfo(), loader);
+    shardHandlerFactory = initShardHandlerFactory();
 
     solrCores.allocateLazyCores(cfg, loader);
 
@@ -229,7 +231,7 @@ public class CoreContainer
     distribUpdateSoTimeout = cfg.getInt(ConfigSolr.CfgProp.SOLR_DISTRIBUPDATESOTIMEOUT, 0);
 
     // Note: initZooKeeper will apply hardcoded default if cloud mode
-    String hostPort = cfg.get(ConfigSolr.CfgProp.SOLR_HOSTPORT, null);
+    hostPort = cfg.get(ConfigSolr.CfgProp.SOLR_HOSTPORT, System.getProperty("hostPort"));
     // Note: initZooKeeper will apply hardcoded default if cloud mode
     String hostContext = cfg.get(ConfigSolr.CfgProp.SOLR_HOSTCONTEXT, null);
 
@@ -946,7 +948,15 @@ public class CoreContainer
   public String getManagementPath() {
     return managementPath;
   }
-  
+
+  public String getHostPort() {
+    return hostPort;
+  }
+
+  protected ShardHandlerFactory initShardHandlerFactory() {
+    return ShardHandlerFactory.newInstance(cfg.getShardHandlerFactoryPluginInfo(), loader);
+  }
+
   /**
    * Sets the alternate path for multicore handling:
    * This is used in case there is a registered unnamed core (aka name is "") to
