@@ -27,7 +27,7 @@ import org.apache.lucene.analysis.util.TokenFilterFactory;
  * &lt;fieldType name="text_edgngrm" class="solr.TextField" positionIncrementGap="100"&gt;
  *   &lt;analyzer&gt;
  *     &lt;tokenizer class="solr.WhitespaceTokenizerFactory"/&gt;
- *     &lt;filter class="solr.EdgeNGramFilterFactory" side="front" minGramSize="1" maxGramSize="1"/&gt;
+ *     &lt;filter class="solr.EdgeNGramFilterFactory" minGramSize="1" maxGramSize="1"/&gt;
  *   &lt;/analyzer&gt;
  * &lt;/fieldType&gt;</pre>
  */
@@ -49,6 +49,6 @@ public class EdgeNGramFilterFactory extends TokenFilterFactory {
 
   @Override
   public EdgeNGramTokenFilter create(TokenStream input) {
-    return new EdgeNGramTokenFilter(input, side, minGramSize, maxGramSize);
+    return new EdgeNGramTokenFilter(luceneMatchVersion, input, side, minGramSize, maxGramSize);
   }
 }

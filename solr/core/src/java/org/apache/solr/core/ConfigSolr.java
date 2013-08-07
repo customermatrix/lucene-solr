@@ -17,25 +17,95 @@ package org.apache.solr.core;
  * limitations under the License.
  */
 
-import org.apache.solr.cloud.ZkController;
-import org.apache.solr.handler.component.ShardHandlerFactory;
+import com.google.common.base.Charsets;
+import org.apache.commons.io.IOUtils;
+import org.apache.solr.common.SolrException;
+import org.apache.solr.util.DOMUtil;
+import org.apache.solr.util.PropertiesUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
 
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpressionException;
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-/**
- * ConfigSolr is a new interface  to aid us in obsoleting solr.xml and replacing it with solr.properties. The problem here
- * is that the Config class is used for _all_ the xml file, e.g. solrconfig.xml and we can't mess with _that_ as part
- * of this issue. Primarily used in CoreContainer at present.
- * <p/>
- * This is already deprecated, it's only intended to exist for while transitioning to properties-based replacement for
- * solr.xml
- *
- * @since solr 4.3
- */
-public interface ConfigSolr {
+
+public abstract class ConfigSolr {
+  protected static Logger log = LoggerFactory.getLogger(ConfigSolr.class);
+  
+  public final static String SOLR_XML_FILE = "solr.xml";
+
+  public static ConfigSolr fromFile(SolrResourceLoader loader, File configFile) {
+    log.info("Loading container configuration from {}", configFile.getAbsolutePath());
+
+    InputStream inputStream = null;
+
+    try {
+      if (!configFile.exists()) {
+        log.info("{} does not exist, using default configuration", configFile.getAbsolutePath());
+        inputStream = new ByteArrayInputStream(ConfigSolrXmlOld.DEF_SOLR_XML.getBytes(Charsets.UTF_8));
+      }
+      else {
+        inputStream = new FileInputStream(configFile);
+      }
+      return fromInputStream(loader, inputStream);
+    }
+    catch (Exception e) {
+      throw new SolrException(SolrException.ErrorCode.SERVER_ERROR,
+          "Could not load SOLR configuration", e);
+    }
+    finally {
+      IOUtils.closeQuietly(inputStream);
+    }
+  }
+
+  public static ConfigSolr fromString(SolrResourceLoader loader, String xml) {
+    return fromInputStream(loader, new ByteArrayInputStream(xml.getBytes(Charsets.UTF_8)));
+  }
+
+  public static ConfigSolr fromInputStream(SolrResourceLoader loader, InputStream is) {
+    try {
+      Config config = new Config(loader, null, new InputSource(is), null, false);
+      //config.substituteProperties();
+      return fromConfig(config);
+    }
+    catch (Exception e) {
+      throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, e);
+    }
+  }
+
+  public static ConfigSolr fromSolrHome(SolrResourceLoader loader, String solrHome) {
+    return fromFile(loader, new File(solrHome, SOLR_XML_FILE));
+  }
+
+  public static ConfigSolr fromConfig(Config config) {
+    boolean oldStyle = (config.getNode("solr/cores", false) != null);
+    return oldStyle ? new ConfigSolrXmlOld(config)
+                    : new ConfigSolrXml(config, null);
+  }
+
+
+  public PluginInfo getShardHandlerFactoryPluginInfo() {
+    Node node = config.getNode(getShardHandlerFactoryConfigPath(), false);
+    return (node == null) ? null : new PluginInfo(node, "shardHandlerFactory", false, true);
+  }
+
+  public Node getUnsubsititutedShardHandlerFactoryPluginNode() {
+    return config.getUnsubstitutedNode(getShardHandlerFactoryConfigPath(), false);
+  }
+
+  protected abstract String getShardHandlerFactoryConfigPath();
 
   // Ugly for now, but we'll at least be able to centralize all of the differences between 4x and 5x.
   public static enum CfgProp {
@@ -54,12 +124,9 @@ public interface ConfigSolr {
     SOLR_LOGGING_WATCHER_THRESHOLD,
     SOLR_MANAGEMENTPATH,
     SOLR_SHAREDLIB,
-    SOLR_SHARDHANDLERFACTORY_CLASS,
-    SOLR_SHARDHANDLERFACTORY_CONNTIMEOUT,
-    SOLR_SHARDHANDLERFACTORY_NAME,
-    SOLR_SHARDHANDLERFACTORY_SOCKETTIMEOUT,
     SOLR_SHARESCHEMA,
     SOLR_TRANSIENTCACHESIZE,
+    SOLR_GENERICCORENODENAMES,
     SOLR_ZKCLIENTTIMEOUT,
     SOLR_ZKHOST,
 
@@ -67,48 +134,81 @@ public interface ConfigSolr {
     SOLR_PERSISTENT,
     SOLR_CORES_DEFAULT_CORE_NAME,
     SOLR_ADMINPATH
-  };
+  }
 
-  public final static String CORE_PROP_FILE = "core.properties";
-  public final static String SOLR_XML_FILE = "solr.xml";
+  protected Config config;
+  protected Map<CfgProp, String> propMap = new HashMap<CfgProp, String>();
 
-  public int getInt(CfgProp prop, int def);
+  public ConfigSolr(Config config) {
+    this.config = config;
 
-  public boolean getBool(CfgProp prop,boolean defValue);
+  }
 
-  public String get(CfgProp prop, String def);
+  // for extension & testing.
+  protected ConfigSolr() {
 
-  public String getOrigProp(CfgProp prop, String def);
+  }
+  
+  public Config getConfig() {
+    return config;
+  }
 
-  public void substituteProperties();
+  public int getInt(CfgProp prop, int def) {
+    String val = propMap.get(prop);
+    if (val != null) val = PropertiesUtil.substituteProperty(val, null);
+    return (val == null) ? def : Integer.parseInt(val);
+  }
 
-  public ShardHandlerFactory initShardHandler();
+  public boolean getBool(CfgProp prop, boolean defValue) {
+    String val = propMap.get(prop);
+    if (val != null) val = PropertiesUtil.substituteProperty(val, null);
+    return (val == null) ? defValue : Boolean.parseBoolean(val);
+  }
 
-  public Properties getSolrProperties(String context);
+  public String get(CfgProp prop, String def) {
+    String val = propMap.get(prop);
+    if (val != null) val = PropertiesUtil.substituteProperty(val, null);
+    return (val == null) ? def : val;
+  }
 
-  public SolrConfig getSolrConfigFromZk(ZkController zkController, String zkConfigName, String solrConfigFileName,
-                                        SolrResourceLoader resourceLoader);
+  // For saving the original property, ${} syntax and all.
+  public String getOrigProp(CfgProp prop, String def) {
+    String val = propMap.get(prop);
+    return (val == null) ? def : val;
+  }
 
-  public void initPersist();
+  public Properties getSolrProperties(String path) {
+    try {
+      return readProperties(((NodeList) config.evaluate(
+          path, XPathConstants.NODESET)).item(0));
+    } catch (Throwable e) {
+      SolrException.log(log, null, e);
+    }
+    return null;
 
-  public void addPersistCore(String coreName, Properties attribs, Map<String, String> props);
+  }
+  
+  protected Properties readProperties(Node node) throws XPathExpressionException {
+    XPath xpath = config.getXPath();
+    NodeList props = (NodeList) xpath.evaluate("property", node, XPathConstants.NODESET);
+    Properties properties = new Properties();
+    for (int i = 0; i < props.getLength(); i++) {
+      Node prop = props.item(i);
+      properties.setProperty(DOMUtil.getAttr(prop, "name"),
+          PropertiesUtil.substituteProperty(DOMUtil.getAttr(prop, "value"), null));
+    }
+    return properties;
+  }
 
-  public void addPersistAllCores(Properties containerProperties, Map<String, String> rootSolrAttribs, Map<String, String> coresAttribs,
-                                 File file);
+  public abstract void substituteProperties();
 
-  public String getCoreNameFromOrig(String origCoreName, SolrResourceLoader loader, String coreName);
+  public abstract List<String> getAllCoreNames();
 
-  public List<String> getAllCoreNames();
+  public abstract String getProperty(String coreName, String property, String defaultVal);
 
-  public String getProperty(String coreName, String property, String defaultVal);
+  public abstract Properties readCoreProperties(String coreName);
 
-  public Properties readCoreProperties(String coreName);
+  public abstract Map<String, String> readCoreAttributes(String coreName);
 
-  public Map<String, String> readCoreAttributes(String coreName);
-
-  // If the core is not to be loaded (say two cores defined with the same name or with the same data dir), return
-  // the reason. If it's OK to load the core, return null.
-  public String getBadConfigCoreMessage(String name);
-
-  public boolean is50OrLater();
 }
+

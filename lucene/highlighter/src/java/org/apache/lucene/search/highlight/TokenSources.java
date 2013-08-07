@@ -41,6 +41,10 @@ import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.BytesRef;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Comparator;
+
 /**
  * Hides implementation issues associated with obtaining a TokenStream for use
  * with the higlighter - can obtain from TermFreqVectors with offsets and
@@ -252,7 +256,7 @@ public class TokenSources {
     if (unsortedTokens != null) {
       tokensInOriginalOrder = unsortedTokens.toArray(new Token[unsortedTokens
           .size()]);
-      ArrayUtil.mergeSort(tokensInOriginalOrder, new Comparator<Token>() {
+      ArrayUtil.timSort(tokensInOriginalOrder, new Comparator<Token>() {
         @Override
         public int compare(Token t1, Token t2) {
           if (t1.startOffset() == t2.startOffset()) return t1.endOffset()
@@ -315,7 +319,7 @@ public class TokenSources {
   public static TokenStream getTokenStream(String field, String contents,
       Analyzer analyzer) {
     try {
-      return analyzer.tokenStream(field, new StringReader(contents));
+      return analyzer.tokenStream(field, contents);
     } catch (IOException ex) {
       throw new RuntimeException(ex);
     }

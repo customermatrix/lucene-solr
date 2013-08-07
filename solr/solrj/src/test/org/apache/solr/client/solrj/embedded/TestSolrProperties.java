@@ -18,6 +18,7 @@
 package org.apache.solr.client.solrj.embedded;
 
 import com.carrotsearch.randomizedtesting.rules.SystemPropertiesRestoreRule;
+import com.google.common.io.ByteStreams;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.SolrTestCaseJ4;
 import org.apache.solr.client.solrj.SolrQuery;
@@ -49,6 +50,8 @@ import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 
 /**
@@ -77,6 +80,17 @@ public class TestSolrProperties extends AbstractEmbeddedSolrServerTestCase {
   @After
   public void tearDown() throws Exception {
    super.tearDown(); 
+  }
+
+  private static void dumpFile(File fileToDump) throws IOException {
+    System.out.println("Dumping " + fileToDump.getAbsolutePath());
+    InputStream is = new FileInputStream(fileToDump);
+    try {
+      ByteStreams.copy(is, System.out);
+    }
+    finally {
+      IOUtils.closeQuietly(is);
+    }
   }
   
   @Override
@@ -110,6 +124,10 @@ public class TestSolrProperties extends AbstractEmbeddedSolrServerTestCase {
 
   @Test
   public void testProperties() throws Exception {
+
+    String persistedSolrXml = new File(tempDir, SOLR_PERSIST_XML).getAbsolutePath();
+    log.info("persistedSolrXml: {}", persistedSolrXml);
+
     UpdateRequest up = new UpdateRequest();
     up.setAction(ACTION.COMMIT, true, true);
     up.deleteByQuery("*:*");
@@ -179,41 +197,42 @@ public class TestSolrProperties extends AbstractEmbeddedSolrServerTestCase {
     long after = mcr.getStartTime(name).getTime();
     assertTrue("should have more recent time: " + after + "," + before, after > before);
 
-    mcr = CoreAdminRequest.persist(SOLR_PERSIST_XML, coreadmin);
+    mcr = CoreAdminRequest.persist(persistedSolrXml, coreadmin);
 
     DocumentBuilder builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
-    FileInputStream fis = new FileInputStream(new File(tempDir, SOLR_PERSIST_XML));
+    FileInputStream fis = new FileInputStream(new File(persistedSolrXml));
     try {
       Document document = builder.parse(fis);
       fis.close();
-      fis = new FileInputStream(new File(tempDir, SOLR_PERSIST_XML));
+      fis = new FileInputStream(new File(persistedSolrXml));
       String solrPersistXml = IOUtils.toString(new InputStreamReader(fis, "UTF-8"));
       //System.out.println("xml:" + solrPersistXml);
       assertTrue("\"/solr/cores[@defaultCoreName='core0']\" doesn't match in:\n" + solrPersistXml,
                  exists("/solr/cores[@defaultCoreName='core0']", document));
       assertTrue("\"/solr/cores[@host='127.0.0.1']\" doesn't match in:\n" + solrPersistXml,
                  exists("/solr/cores[@host='127.0.0.1']", document));
-//      assertTrue("\"/solr/cores[@hostPort='${hostPort:8983}']\" doesn't match in:\n" + solrPersistXml,
-//                 exists("/solr/cores[@hostPort='${hostPort:8983}']", document));
+      assertTrue("\"/solr/cores[@hostPort='${hostPort:8983}']\" doesn't match in:\n" + solrPersistXml,
+                 exists("/solr/cores[@hostPort='${hostPort:8983}']", document));
       assertTrue("\"/solr/cores[@zkClientTimeout='8000']\" doesn't match in:\n" + solrPersistXml,
                  exists("/solr/cores[@zkClientTimeout='8000']", document));
       assertTrue("\"/solr/cores[@hostContext='${hostContext:solr}']\" doesn't match in:\n" + solrPersistXml,
                  exists("/solr/cores[@hostContext='${hostContext:solr}']", document));
-      
+      assertTrue("\"/solr/cores[@genericCoreNodeNames='${genericCoreNodeNames:true}']\" doesn't match in:\n" + solrPersistXml,
+          exists("/solr/cores[@genericCoreNodeNames='${genericCoreNodeNames:true}']", document));
     } finally {
       fis.close();
     }
     
     CoreAdminRequest.renameCore(name, "renamed_core", coreadmin);
     
-    mcr = CoreAdminRequest.persist(SOLR_PERSIST_XML, getRenamedSolrAdmin());
+    mcr = CoreAdminRequest.persist(persistedSolrXml, getRenamedSolrAdmin());
     
 //    fis = new FileInputStream(new File(tempDir, SOLR_PERSIST_XML));
 //    String solrPersistXml = IOUtils.toString(fis);
 //    System.out.println("xml:" + solrPersistXml);
 //    fis.close();
     
-    fis = new FileInputStream(new File(tempDir, SOLR_PERSIST_XML));
+    fis = new FileInputStream(new File(persistedSolrXml));
     try {
       Document document = builder.parse(fis);
       assertTrue(exists("/solr/cores/core[@name='renamed_core']", document));
@@ -237,17 +256,17 @@ public class TestSolrProperties extends AbstractEmbeddedSolrServerTestCase {
 //    System.out.println("xml:" + solrPersistXml);
 //    fis.close();
     
-    mcr = CoreAdminRequest.persist(SOLR_PERSIST_XML, getRenamedSolrAdmin());
+    mcr = CoreAdminRequest.persist(persistedSolrXml, getRenamedSolrAdmin());
     
 //    fis = new FileInputStream(new File(solrXml.getParent(), SOLR_PERSIST_XML));
 //    solrPersistXml = IOUtils.toString(fis);
 //    System.out.println("xml:" + solrPersistXml);
 //    fis.close();
     
-    fis = new FileInputStream(new File(tempDir, SOLR_PERSIST_XML));
+    fis = new FileInputStream(new File(persistedSolrXml));
     try {
       Document document = builder.parse(fis);
-      assertTrue(exists("/solr/cores/core[@name='collection1' and (@instanceDir='./' or @instanceDir='.\\')]", document));
+      assertTrue(exists("/solr/cores/core[@name='collection1' and @instanceDir='.']", document));
     } finally {
       fis.close();
     }
@@ -261,9 +280,9 @@ public class TestSolrProperties extends AbstractEmbeddedSolrServerTestCase {
 //   System.out.println("xml:" + solrPersistXml);
 //   fis.close();
     
-    cores = new CoreContainer(SOLR_HOME.getAbsolutePath(), new File(tempDir, SOLR_PERSIST_XML));
+    cores = CoreContainer.createAndLoad(SOLR_HOME.getAbsolutePath(), new File(persistedSolrXml));
  
-    mcr = CoreAdminRequest.persist(SOLR_PERSIST_XML, getRenamedSolrAdmin());
+    //mcr = CoreAdminRequest.persist(SOLR_PERSIST_XML, getRenamedSolrAdmin());
     
 //     fis = new FileInputStream(new File(solrXml.getParent(),
 //     SOLR_PERSIST_XML));

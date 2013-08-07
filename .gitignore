@@ -1,5 +1,5 @@
-*.iml
-maven-build
+# hdfs
+/solr/example/hdfs
 *.jar
 
 # .
@@ -22,7 +22,6 @@ maven-build
 /bin
 /bin.*
 /pom.xml
-idea-build
 
 
 # ./lucene

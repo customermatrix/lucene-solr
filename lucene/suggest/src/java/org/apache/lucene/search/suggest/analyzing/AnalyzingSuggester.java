@@ -21,7 +21,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -75,9 +74,9 @@ import org.apache.lucene.util.fst.Util;
  * example, if you use an analyzer removing stop words, 
  * then the partial text "ghost chr..." could see the
  * suggestion "The Ghost of Christmas Past". Note that
- * your {@code StopFilter} instance must NOT preserve
- * position increments for this example to work, so you should call
- * {@code setEnablePositionIncrements(false)} on it.
+ * position increments MUST NOT be preserved for this example
+ * to work, so you should call
+ * {@link #setPreservePositionIncrements(boolean) setPreservePositionIncrements(false)}.
  *
  * <p>
  * If SynonymFilter is used to map wifi and wireless network to
@@ -185,6 +184,9 @@ public class AnalyzingSuggester extends Lookup {
 
   private static final int PAYLOAD_SEP = '\u001f';
 
+  /** Whether position holes should appear in the automaton. */
+  private boolean preservePositionIncrements;
+
   /**
    * Calls {@link #AnalyzingSuggester(Analyzer,Analyzer,int,int,int)
    * AnalyzingSuggester(analyzer, analyzer, EXACT_FIRST |
@@ -241,6 +243,13 @@ public class AnalyzingSuggester extends Lookup {
       throw new IllegalArgumentException("maxGraphExpansions must -1 (no limit) or > 0 (got: " + maxGraphExpansions + ")");
     }
     this.maxGraphExpansions = maxGraphExpansions;
+    preservePositionIncrements = true;
+  }
+
+  /** Whether to take position holes (position increment > 1) into account when
+   *  building the automaton, <code>true</code> by default. */
+  public void setPreservePositionIncrements(boolean preservePositionIncrements) {
+    this.preservePositionIncrements = preservePositionIncrements;
   }
 
   /** Returns byte size of the underlying FST. */
@@ -327,13 +336,16 @@ public class AnalyzingSuggester extends Lookup {
   }
 
   TokenStreamToAutomaton getTokenStreamToAutomaton() {
+    final TokenStreamToAutomaton tsta;
     if (preserveSep) {
-      return new EscapingTokenStreamToAutomaton();
+      tsta = new EscapingTokenStreamToAutomaton();
     } else {
       // When we're not preserving sep, we don't steal 0xff
       // byte, so we don't need to do any escaping:
-      return new TokenStreamToAutomaton();
+      tsta = new TokenStreamToAutomaton();
     }
+    tsta.setPreservePositionIncrements(preservePositionIncrements);
+    return tsta;
   }
   
   private static class AnalyzingComparator implements Comparator<BytesRef> {
@@ -499,7 +511,7 @@ public class AnalyzingSuggester extends Lookup {
 
       reader = new Sort.ByteSequencesReader(tempSorted);
      
-      PairOutputs<Long,BytesRef> outputs = new PairOutputs<Long,BytesRef>(PositiveIntOutputs.getSingleton(true), ByteSequenceOutputs.getSingleton());
+      PairOutputs<Long,BytesRef> outputs = new PairOutputs<Long,BytesRef>(PositiveIntOutputs.getSingleton(), ByteSequenceOutputs.getSingleton());
       Builder<Pair<Long,BytesRef>> builder = new Builder<Pair<Long,BytesRef>>(FST.INPUT_TYPE.BYTE1, outputs);
 
       // Build FST:
@@ -621,7 +633,7 @@ public class AnalyzingSuggester extends Lookup {
   public boolean load(InputStream input) throws IOException {
     DataInput dataIn = new InputStreamDataInput(input);
     try {
-      this.fst = new FST<Pair<Long,BytesRef>>(dataIn, new PairOutputs<Long,BytesRef>(PositiveIntOutputs.getSingleton(true), ByteSequenceOutputs.getSingleton()));
+      this.fst = new FST<Pair<Long,BytesRef>>(dataIn, new PairOutputs<Long,BytesRef>(PositiveIntOutputs.getSingleton(), ByteSequenceOutputs.getSingleton()));
       maxAnalyzedPathsForOneInput = dataIn.readVInt();
       hasPayloads = dataIn.readByte() == 1;
     } finally {
@@ -642,9 +654,8 @@ public class AnalyzingSuggester extends Lookup {
       }
       assert sepIndex != -1;
       spare.grow(sepIndex);
-      int payloadLen = output2.length - sepIndex - 1;
-      output2.length = sepIndex;
-      UnicodeUtil.UTF8toUTF16(output2, spare);
+      final int payloadLen = output2.length - sepIndex - 1;
+      UnicodeUtil.UTF8toUTF16(output2.bytes, output2.offset, sepIndex, spare);
       BytesRef payload = new BytesRef(payloadLen);
       System.arraycopy(output2.bytes, sepIndex+1, payload.bytes, 0, payloadLen);
       payload.length = payloadLen;
@@ -843,7 +854,7 @@ public class AnalyzingSuggester extends Lookup {
   
   final Set<IntsRef> toFiniteStrings(final BytesRef surfaceForm, final TokenStreamToAutomaton ts2a) throws IOException {
  // Analyze surface form:
-    TokenStream ts = indexAnalyzer.tokenStream("", new StringReader(surfaceForm.utf8ToString()));
+    TokenStream ts = indexAnalyzer.tokenStream("", surfaceForm.utf8ToString());
 
     // Create corresponding automaton: labels are bytes
     // from each analyzed token, with byte 0 used as
@@ -868,7 +879,7 @@ public class AnalyzingSuggester extends Lookup {
   final Automaton toLookupAutomaton(final CharSequence key) throws IOException {
     // TODO: is there a Reader from a CharSequence?
     // Turn tokenstream into automaton:
-    TokenStream ts = queryAnalyzer.tokenStream("", new StringReader(key.toString()));
+    TokenStream ts = queryAnalyzer.tokenStream("", key.toString());
     Automaton automaton = (getTokenStreamToAutomaton()).toAutomaton(ts);
     ts.close();
 

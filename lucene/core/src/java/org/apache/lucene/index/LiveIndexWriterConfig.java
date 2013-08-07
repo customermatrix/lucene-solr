@@ -101,6 +101,9 @@ public class LiveIndexWriterConfig {
   /** {@link Version} that {@link IndexWriter} should emulate. */
   protected final Version matchVersion;
 
+  /** True if segment flushes should use compound file format */
+  protected volatile boolean useCompoundFile = IndexWriterConfig.DEFAULT_USE_COMPOUND_FILE_SYSTEM;
+
   protected volatile String documentsWriterPerThreadImpl;
 
   // used by IndexWriterConfig
@@ -116,6 +119,7 @@ public class LiveIndexWriterConfig {
     termIndexInterval = IndexWriterConfig.DEFAULT_TERM_INDEX_INTERVAL; // TODO: this should be private to the codec, not settable here
     delPolicy = new KeepOnlyLastCommitDeletionPolicy();
     commit = null;
+    useCompoundFile = IndexWriterConfig.DEFAULT_USE_COMPOUND_FILE_SYSTEM;
     openMode = OpenMode.CREATE_OR_APPEND;
     similarity = IndexSearcher.getDefaultSimilarity();
     mergeScheduler = new ConcurrentMergeScheduler();
@@ -161,6 +165,7 @@ public class LiveIndexWriterConfig {
     flushPolicy = config.getFlushPolicy();
     perThreadHardLimitMB = config.getRAMPerThreadHardLimitMB();
     documentsWriterPerThreadImpl = config.getDocumentsWriterPerThreadImpl();
+    useCompoundFile = config.getUseCompoundFile();
   }
 
   /** Returns the default analyzer to use for indexing documents. */
@@ -563,6 +568,33 @@ public class LiveIndexWriterConfig {
     return this;
   }
   
+  /**
+   * Sets if the {@link IndexWriter} should pack newly written segments in a
+   * compound file. Default is <code>true</code>.
+   * <p>
+   * Use <code>false</code> for batch indexing with very large ram buffer
+   * settings.
+   * </p>
+   * <p>
+   * <b>Note: To control compound file usage during segment merges see
+   * {@link MergePolicy#setNoCFSRatio(double)} and
+   * {@link MergePolicy#setMaxCFSSegmentSizeMB(double)}. This setting only
+   * applies to newly created segments.</b>
+   * </p>
+   */
+  public LiveIndexWriterConfig setUseCompoundFile(boolean useCompoundFile) {
+    this.useCompoundFile = useCompoundFile;
+    return this;
+  }
+  
+  /**
+   * Returns <code>true</code> iff the {@link IndexWriter} packs
+   * newly written segments in a compound file. Default is <code>true</code>.
+   */
+  public boolean getUseCompoundFile() {
+    return useCompoundFile ;
+  }
+  
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
@@ -589,8 +621,11 @@ public class LiveIndexWriterConfig {
     sb.append("readerPooling=").append(getReaderPooling()).append("\n");
     sb.append("perThreadHardLimitMB=").append(getRAMPerThreadHardLimitMB()).append("\n");
     sb.append("documentsWriterPerThreadImpl=").append(getDocumentsWriterPerThreadImpl()).append("\n");
+    sb.append("useCompoundFile=").append(getUseCompoundFile()).append("\n");
     return sb.toString();
   }
+
+
 
   public DocumentsWriterPerThread newDocumentsWriterPerThread(Directory directory, DocumentsWriter documentsWriter, FieldInfos.Builder infos, IndexingChain chain) {
     try {

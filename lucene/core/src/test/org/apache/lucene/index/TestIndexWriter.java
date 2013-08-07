@@ -704,7 +704,7 @@ public class TestIndexWriter extends LuceneTestCase {
       IndexWriter writer = new IndexWriter(dir, newIndexWriterConfig( TEST_VERSION_CURRENT, new MockAnalyzer(random())).setMaxBufferedDocs(2).setMergePolicy(newLogMergePolicy()));
       //LogMergePolicy lmp = (LogMergePolicy) writer.getConfig().getMergePolicy();
       //lmp.setMergeFactor(2);
-      //lmp.setUseCompoundFile(false);
+      //lmp.setNoCFSRatio(0.0);
       Document doc = new Document();
       String contents = "aa bb cc dd ee ff gg hh ii jj kk";
 
@@ -732,7 +732,7 @@ public class TestIndexWriter extends LuceneTestCase {
       if (0 == i % 4) {
         writer = new IndexWriter(dir, newIndexWriterConfig( TEST_VERSION_CURRENT, new MockAnalyzer(random())));
         //LogMergePolicy lmp2 = (LogMergePolicy) writer.getConfig().getMergePolicy();
-        //lmp2.setUseCompoundFile(false);
+        //lmp2.setNoCFSRatio(0.0);
         writer.forceMerge(1);
         writer.close();
       }
@@ -1194,6 +1194,46 @@ public class TestIndexWriter extends LuceneTestCase {
     t.join();
     assertFalse(t.failed);
   }
+  
+  /** testThreadInterruptDeadlock but with 2 indexer threads */
+  public void testTwoThreadsInterruptDeadlock() throws Exception {
+    IndexerThreadInterrupt t1 = new IndexerThreadInterrupt();
+    t1.setDaemon(true);
+    t1.start();
+    
+    IndexerThreadInterrupt t2 = new IndexerThreadInterrupt();
+    t2.setDaemon(true);
+    t2.start();
+
+    // Force class loader to load ThreadInterruptedException
+    // up front... else we can see a false failure if 2nd
+    // interrupt arrives while class loader is trying to
+    // init this class (in servicing a first interrupt):
+    assertTrue(new ThreadInterruptedException(new InterruptedException()).getCause() instanceof InterruptedException);
+
+    // issue 300 interrupts to child thread
+    final int numInterrupts = atLeast(300);
+    int i = 0;
+    while(i < numInterrupts) {
+      // TODO: would be nice to also sometimes interrupt the
+      // CMS merge threads too ...
+      Thread.sleep(10);
+      IndexerThreadInterrupt t = random().nextBoolean() ? t1 : t2;
+      if (t.allowInterrupt) {
+        i++;
+        t.interrupt();
+      }
+      if (!t1.isAlive() && !t2.isAlive()) {
+        break;
+      }
+    }
+    t1.finish = true;
+    t2.finish = true;
+    t1.join();
+    t2.join();
+    assertFalse(t1.failed);
+    assertFalse(t2.failed);
+  }
 
 
   public void testIndexStoreCombos() throws Exception {
@@ -1310,7 +1350,7 @@ public class TestIndexWriter extends LuceneTestCase {
     for(int iter=0;iter<2;iter++) {
       Directory dir = newMockDirectory(); // relies on windows semantics
 
-      LogMergePolicy mergePolicy = newLogMergePolicy(true);
+      MergePolicy mergePolicy = newLogMergePolicy(true);
       
       // This test expects all of its segments to be in CFS
       mergePolicy.setNoCFSRatio(1.0);
@@ -1319,7 +1359,7 @@ public class TestIndexWriter extends LuceneTestCase {
       IndexWriter w = new IndexWriter(
           dir,
           newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random())).
-              setMergePolicy(mergePolicy)
+              setMergePolicy(mergePolicy).setUseCompoundFile(true)
       );
       Document doc = new Document();
       doc.add(newTextField("field", "go", Field.Store.NO));
@@ -1403,7 +1443,7 @@ public class TestIndexWriter extends LuceneTestCase {
     assertEquals(1, DirectoryReader.listCommits(dir).size());
 
     // Keep that commit
-    sdp.snapshot("id");
+    IndexCommit id = sdp.snapshot();
 
     // Second commit - now KeepOnlyLastCommit cannot delete the prev commit.
     doc = new Document();
@@ -1413,7 +1453,7 @@ public class TestIndexWriter extends LuceneTestCase {
     assertEquals(2, DirectoryReader.listCommits(dir).size());
 
     // Should delete the unreferenced commit
-    sdp.release("id");
+    sdp.release(id);
     writer.deleteUnusedFiles();
     assertEquals(1, DirectoryReader.listCommits(dir).size());
 
@@ -1439,7 +1479,7 @@ public class TestIndexWriter extends LuceneTestCase {
     Directory dir = newDirectory();
     IndexWriter writer = new IndexWriter(dir, newIndexWriterConfig(
         TEST_VERSION_CURRENT, new MockAnalyzer(random()))
-                                         .setMaxBufferedDocs(2).setMergePolicy(newLogMergePolicy()));
+                                         .setMaxBufferedDocs(2).setMergePolicy(newLogMergePolicy()).setUseCompoundFile(false));
     String[] files = dir.listAll();
 
     // Creating over empty dir should not create any files,
@@ -1521,7 +1561,7 @@ public class TestIndexWriter extends LuceneTestCase {
 
     Directory dir = newDirectory();
     IndexWriter indexWriter = new IndexWriter(dir, newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random())).setRAMBufferSizeMB(0.01).setMergePolicy(newLogMergePolicy()));
-    ((LogMergePolicy) indexWriter.getConfig().getMergePolicy()).setUseCompoundFile(false);
+    indexWriter.getConfig().getMergePolicy().setNoCFSRatio(0.0);
 
     String BIG="alskjhlaksjghlaksjfhalksvjepgjioefgjnsdfjgefgjhelkgjhqewlrkhgwlekgrhwelkgjhwelkgrhwlkejg";
     BIG=BIG+BIG+BIG+BIG;
@@ -2179,5 +2219,28 @@ public class TestIndexWriter extends LuceneTestCase {
       }
       dir.close();
     }
+  }
+
+  public void testHasUncommittedChanges() throws IOException {
+    Directory dir = newDirectory();
+    IndexWriter writer = new IndexWriter(dir, newIndexWriterConfig( TEST_VERSION_CURRENT, new MockAnalyzer(random())));
+    assertTrue(writer.hasUncommittedChanges());  // this will be true because a commit will create an empty index
+    Document doc = new Document();
+    doc.add(newTextField("myfield", "a b c", Field.Store.NO));
+    writer.addDocument(doc);
+    assertTrue(writer.hasUncommittedChanges());
+    writer.commit();
+    assertFalse(writer.hasUncommittedChanges());
+    writer.addDocument(doc);
+    assertTrue(writer.hasUncommittedChanges());
+    writer.close();
+
+    writer = new IndexWriter(dir, newIndexWriterConfig( TEST_VERSION_CURRENT, new MockAnalyzer(random())));
+    assertFalse(writer.hasUncommittedChanges());
+    writer.addDocument(doc);
+    assertTrue(writer.hasUncommittedChanges());
+
+    writer.close();
+    dir.close();
   }
 }

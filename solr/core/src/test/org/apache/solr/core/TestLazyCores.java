@@ -66,7 +66,7 @@ public class TestLazyCores extends SolrTestCaseJ4 {
     File solrXml = new File(solrHomeDirectory, "solr.xml");
     FileUtils.write(solrXml, LOTS_SOLR_XML, IOUtils.CHARSET_UTF_8.toString());
     final CoreContainer cores = new CoreContainer(solrHomeDirectory.getAbsolutePath());
-    cores.load(solrHomeDirectory.getAbsolutePath(), solrXml);
+    cores.load();
     //  h.getCoreContainer().load(solrHomeDirectory.getAbsolutePath(), new File(solrHomeDirectory, "solr.xml"));
 
     cores.setPersistent(false);
@@ -285,8 +285,8 @@ public class TestLazyCores extends SolrTestCaseJ4 {
           CoreAdminParams.CoreAdminAction.CREATE.toString(),
           CoreAdminParams.DATA_DIR, dataDir,
           CoreAdminParams.NAME, name,
-          "schema", "schema-tiny.xml",
-          "config", "solrconfig-minimal.xml");
+          "schema", "schema.xml",
+          "config", "solrconfig.xml");
 
       admin.handleRequestBody(request, resp);
       fail("Should have thrown an error");
@@ -315,29 +315,13 @@ public class TestLazyCores extends SolrTestCaseJ4 {
       copyMinConf(new File(solrHomeDirectory, "t5"));
       copyMinConf(new File(solrHomeDirectory, "t6"));
 
-      tryCreateFail(admin, "t2", lc2.getDataDir(), "Core with same data dir", "collectionLazy2", "already exists");
-      tryCreateFail(admin, "t4", lc4.getDataDir(), "Core with same data dir", "collectionLazy4", "already exists");
-      tryCreateFail(admin, "t5", lc5.getDataDir(), "Core with same data dir", "collectionLazy5", "already exists");
-      tryCreateFail(admin, "t6", lc6.getDataDir(), "Core with same data dir", "collectionLazy6", "already exists");
-
-      // Insure a newly-created core fails too
-      CoreDescriptor d1 = new CoreDescriptor(cc, "core1", "./core1");
-      d1.setSchemaName("schema-tiny.xml");
-      d1.setConfigName("solrconfig-minimal.xml");
-      copyMinConf(new File(solrHomeDirectory, "core1"));
-      SolrCore core1 = cc.create(d1);
-      cc.register(core1, false);
-      copyMinConf(new File(solrHomeDirectory, "core77"));
-      tryCreateFail(admin, "core77", core1.getDataDir(), "Core with same data dir", "core1", "already exists");
 
       // Should also fail with the same name
       tryCreateFail(admin, "collectionLazy2", "t12", "Core with name", "collectionLazy2", "already exists");
       tryCreateFail(admin, "collectionLazy4", "t14", "Core with name", "collectionLazy4", "already exists");
       tryCreateFail(admin, "collectionLazy5", "t15", "Core with name", "collectionLazy5", "already exists");
       tryCreateFail(admin, "collectionLazy6", "t16", "Core with name", "collectionLazy6", "already exists");
-      tryCreateFail(admin, "core1", "t10", "Core with name", "core1", "already exists");
 
-      core1.close();
       lc2.close();
       lc4.close();
       lc5.close();
@@ -363,29 +347,29 @@ public class TestLazyCores extends SolrTestCaseJ4 {
       CoreDescriptor d1 = new CoreDescriptor(cc, "core1", "./core1");
       d1.setTransient(true);
       d1.setLoadOnStartup(true);
-      d1.setSchemaName("schema-tiny.xml");
-      d1.setConfigName("solrconfig-minimal.xml");
+      d1.setSchemaName("schema.xml");
+      d1.setConfigName("solrconfig.xml");
       SolrCore core1 = cc.create(d1);
 
       CoreDescriptor d2 = new CoreDescriptor(cc, "core2", "./core2");
       d2.setTransient(true);
       d2.setLoadOnStartup(false);
-      d2.setSchemaName("schema-tiny.xml");
-      d2.setConfigName("solrconfig-minimal.xml");
+      d2.setSchemaName("schema.xml");
+      d2.setConfigName("solrconfig.xml");
       SolrCore core2 = cc.create(d2);
 
       CoreDescriptor d3 = new CoreDescriptor(cc, "core3", "./core3");
       d3.setTransient(false);
       d3.setLoadOnStartup(true);
-      d3.setSchemaName("schema-tiny.xml");
-      d3.setConfigName("solrconfig-minimal.xml");
+      d3.setSchemaName("schema.xml");
+      d3.setConfigName("solrconfig.xml");
       SolrCore core3 = cc.create(d3);
 
       CoreDescriptor d4 = new CoreDescriptor(cc, "core4", "./core4");
       d4.setTransient(false);
       d4.setLoadOnStartup(false);
-      d4.setSchemaName("schema-tiny.xml");
-      d4.setConfigName("solrconfig-minimal.xml");
+      d4.setSchemaName("schema.xml");
+      d4.setConfigName("solrconfig.xml");
       SolrCore core4 = cc.create(d4);
 
       final File oneXml = new File(solrHomeDirectory, "lazy1.solr.xml");
@@ -406,10 +390,6 @@ public class TestLazyCores extends SolrTestCaseJ4 {
           "/solr/cores/core[@name='core3']",
           "/solr/cores/core[@name='core4']");
       assertXmlFile(oneXml, "13=count(/solr/cores/core)");
-      core1.close();
-      core2.close();
-      core3.close();
-      core4.close();
 
       removeOne(cc, "collectionLazy2");
       removeOne(cc, "collectionLazy3");
@@ -475,31 +455,23 @@ public class TestLazyCores extends SolrTestCaseJ4 {
 
   private final static String LOTS_SOLR_XML = " <solr persistent=\"false\"> " +
       "<cores adminPath=\"/admin/cores\" defaultCoreName=\"collectionLazy2\" transientCacheSize=\"4\">  " +
-      "<core name=\"collection1\" instanceDir=\"collection1\" config=\"solrconfig-minimal.xml\" schema=\"schema-tiny.xml\" /> " +
+      "<core name=\"collection1\" instanceDir=\"collection1\"  /> " +
 
-      "<core name=\"collectionLazy2\" instanceDir=\"collection2\" transient=\"true\" loadOnStartup=\"true\"  " +
-      " config=\"solrconfig-minimal.xml\" schema=\"schema-tiny.xml\" /> " +
+      "<core name=\"collectionLazy2\" instanceDir=\"collection2\" transient=\"true\" loadOnStartup=\"true\"   /> " +
 
-      "<core name=\"collectionLazy3\" instanceDir=\"collection3\" transient=\"on\" loadOnStartup=\"false\" " +
-      "config=\"solrconfig-minimal.xml\" schema=\"schema-tiny.xml\"  /> " +
+      "<core name=\"collectionLazy3\" instanceDir=\"collection3\" transient=\"on\" loadOnStartup=\"false\"    /> " +
 
-      "<core name=\"collectionLazy4\" instanceDir=\"collection4\" transient=\"false\" loadOnStartup=\"false\" " +
-      "config=\"solrconfig-minimal.xml\" schema=\"schema-tiny.xml\"  /> " +
+      "<core name=\"collectionLazy4\" instanceDir=\"collection4\" transient=\"false\" loadOnStartup=\"false\" /> " +
 
-      "<core name=\"collectionLazy5\" instanceDir=\"collection5\" transient=\"false\" loadOnStartup=\"true\" " +
-      "config=\"solrconfig-minimal.xml\" schema=\"schema-tiny.xml\"  /> " +
+      "<core name=\"collectionLazy5\" instanceDir=\"collection5\" transient=\"false\" loadOnStartup=\"true\" /> " +
 
-      "<core name=\"collectionLazy6\" instanceDir=\"collection6\" transient=\"true\" loadOnStartup=\"false\" " +
-      "config=\"solrconfig-minimal.xml\" schema=\"schema-tiny.xml\"  /> " +
+      "<core name=\"collectionLazy6\" instanceDir=\"collection6\" transient=\"true\" loadOnStartup=\"false\" /> " +
 
-      "<core name=\"collectionLazy7\" instanceDir=\"collection7\" transient=\"true\" loadOnStartup=\"false\" " +
-      "config=\"solrconfig-minimal.xml\" schema=\"schema-tiny.xml\"  /> " +
+      "<core name=\"collectionLazy7\" instanceDir=\"collection7\" transient=\"true\" loadOnStartup=\"false\" /> " +
 
-      "<core name=\"collectionLazy8\" instanceDir=\"collection8\" transient=\"true\" loadOnStartup=\"false\" " +
-      "config=\"solrconfig-minimal.xml\" schema=\"schema-tiny.xml\"  /> " +
+      "<core name=\"collectionLazy8\" instanceDir=\"collection8\" transient=\"true\" loadOnStartup=\"false\" /> " +
 
-      "<core name=\"collectionLazy9\" instanceDir=\"collection9\" transient=\"true\" loadOnStartup=\"false\" " +
-      "config=\"solrconfig-minimal.xml\" schema=\"schema-tiny.xml\"  /> " +
+      "<core name=\"collectionLazy9\" instanceDir=\"collection9\" transient=\"true\" loadOnStartup=\"false\" /> " +
 
       "</cores> " +
       "</solr>";

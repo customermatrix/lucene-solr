@@ -115,44 +115,45 @@ public class AnalyzingSuggesterTest extends LuceneTestCase {
     
     AnalyzingSuggester suggester = new AnalyzingSuggester(new MockAnalyzer(random(), MockTokenizer.KEYWORD, false));
     suggester.build(new TermFreqPayloadArrayIterator(keys));
-    
-    // top N of 2, but only foo is available
-    List<LookupResult> results = suggester.lookup(_TestUtil.stringToCharSequence("f", random()), false, 2);
-    assertEquals(1, results.size());
-    assertEquals("foo", results.get(0).key.toString());
-    assertEquals(50, results.get(0).value, 0.01F);
-    assertEquals(new BytesRef("hello"), results.get(0).payload);
-    
-    // top N of 1 for 'bar': we return this even though
-    // barbar is higher because exactFirst is enabled:
-    results = suggester.lookup(_TestUtil.stringToCharSequence("bar", random()), false, 1);
-    assertEquals(1, results.size());
-    assertEquals("bar", results.get(0).key.toString());
-    assertEquals(10, results.get(0).value, 0.01F);
-    assertEquals(new BytesRef("goodbye"), results.get(0).payload);
-    
-    // top N Of 2 for 'b'
-    results = suggester.lookup(_TestUtil.stringToCharSequence("b", random()), false, 2);
-    assertEquals(2, results.size());
-    assertEquals("barbar", results.get(0).key.toString());
-    assertEquals(12, results.get(0).value, 0.01F);
-    assertEquals(new BytesRef("thank you"), results.get(0).payload);
-    assertEquals("bar", results.get(1).key.toString());
-    assertEquals(10, results.get(1).value, 0.01F);
-    assertEquals(new BytesRef("goodbye"), results.get(1).payload);
-    
-    // top N of 3 for 'ba'
-    results = suggester.lookup(_TestUtil.stringToCharSequence("ba", random()), false, 3);
-    assertEquals(3, results.size());
-    assertEquals("barbar", results.get(0).key.toString());
-    assertEquals(12, results.get(0).value, 0.01F);
-    assertEquals(new BytesRef("thank you"), results.get(0).payload);
-    assertEquals("bar", results.get(1).key.toString());
-    assertEquals(10, results.get(1).value, 0.01F);
-    assertEquals(new BytesRef("goodbye"), results.get(1).payload);
-    assertEquals("barbara", results.get(2).key.toString());
-    assertEquals(6, results.get(2).value, 0.01F);
-    assertEquals(new BytesRef("for all the fish"), results.get(2).payload);
+    for (int i = 0; i < 2; i++) {
+      // top N of 2, but only foo is available
+      List<LookupResult> results = suggester.lookup(_TestUtil.stringToCharSequence("f", random()), false, 2);
+      assertEquals(1, results.size());
+      assertEquals("foo", results.get(0).key.toString());
+      assertEquals(50, results.get(0).value, 0.01F);
+      assertEquals(new BytesRef("hello"), results.get(0).payload);
+      
+      // top N of 1 for 'bar': we return this even though
+      // barbar is higher because exactFirst is enabled:
+      results = suggester.lookup(_TestUtil.stringToCharSequence("bar", random()), false, 1);
+      assertEquals(1, results.size());
+      assertEquals("bar", results.get(0).key.toString());
+      assertEquals(10, results.get(0).value, 0.01F);
+      assertEquals(new BytesRef("goodbye"), results.get(0).payload);
+      
+      // top N Of 2 for 'b'
+      results = suggester.lookup(_TestUtil.stringToCharSequence("b", random()), false, 2);
+      assertEquals(2, results.size());
+      assertEquals("barbar", results.get(0).key.toString());
+      assertEquals(12, results.get(0).value, 0.01F);
+      assertEquals(new BytesRef("thank you"), results.get(0).payload);
+      assertEquals("bar", results.get(1).key.toString());
+      assertEquals(10, results.get(1).value, 0.01F);
+      assertEquals(new BytesRef("goodbye"), results.get(1).payload);
+      
+      // top N of 3 for 'ba'
+      results = suggester.lookup(_TestUtil.stringToCharSequence("ba", random()), false, 3);
+      assertEquals(3, results.size());
+      assertEquals("barbar", results.get(0).key.toString());
+      assertEquals(12, results.get(0).value, 0.01F);
+      assertEquals(new BytesRef("thank you"), results.get(0).payload);
+      assertEquals("bar", results.get(1).key.toString());
+      assertEquals(10, results.get(1).value, 0.01F);
+      assertEquals(new BytesRef("goodbye"), results.get(1).payload);
+      assertEquals("barbara", results.get(2).key.toString());
+      assertEquals(6, results.get(2).value, 0.01F);
+      assertEquals(new BytesRef("for all the fish"), results.get(2).payload);
+    }
   }
   
   // TODO: more tests
@@ -164,8 +165,9 @@ public class AnalyzingSuggesterTest extends LuceneTestCase {
         new TermFreq("the ghost of christmas past", 50),
     };
     
-    Analyzer standard = new MockAnalyzer(random(), MockTokenizer.WHITESPACE, true, MockTokenFilter.ENGLISH_STOPSET, false);
+    Analyzer standard = new MockAnalyzer(random(), MockTokenizer.WHITESPACE, true, MockTokenFilter.ENGLISH_STOPSET);
     AnalyzingSuggester suggester = new AnalyzingSuggester(standard);
+    suggester.setPreservePositionIncrements(false);
     suggester.build(new TermFreqArrayIterator(keys));
     
     List<LookupResult> results = suggester.lookup(_TestUtil.stringToCharSequence("the ghost of chris", random()), false, 1);
@@ -187,7 +189,7 @@ public class AnalyzingSuggesterTest extends LuceneTestCase {
   }
 
   public void testEmpty() throws Exception {
-    Analyzer standard = new MockAnalyzer(random(), MockTokenizer.WHITESPACE, true, MockTokenFilter.ENGLISH_STOPSET, false);
+    Analyzer standard = new MockAnalyzer(random(), MockTokenizer.WHITESPACE, true, MockTokenFilter.ENGLISH_STOPSET);
     AnalyzingSuggester suggester = new AnalyzingSuggester(standard);
     suggester.build(new TermFreqArrayIterator(new TermFreq[0]));
 
@@ -1162,5 +1164,34 @@ public class AnalyzingSuggesterTest extends LuceneTestCase {
         }));
     assertEquals("[isla de muerta/8, i love lucy/7]", suggester.lookup("i", false, 3).toString());
     assertEquals("[i love lucy/7]", suggester.lookup("i ", false, 3).toString());
+  }
+
+  public void testTooManyExpansions() throws Exception {
+
+    final Analyzer a = new Analyzer() {
+        @Override
+        protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
+          Tokenizer tokenizer = new MockTokenizer(reader, MockTokenizer.SIMPLE, true);
+        
+          return new TokenStreamComponents(tokenizer) {
+            @Override
+            public TokenStream getTokenStream() {
+              Token a = new Token("a", 0, 1);
+              a.setPositionIncrement(1);
+              Token b = new Token("b", 0, 1);
+              b.setPositionIncrement(0);
+              return new CannedTokenStream(new Token[] {a, b});
+            }
+         
+            @Override
+            protected void setReader(final Reader reader) throws IOException {
+            }
+          };
+        }
+      };
+
+    AnalyzingSuggester suggester = new AnalyzingSuggester(a, a, 0, 256, 1);
+    suggester.build(new TermFreqArrayIterator(new TermFreq[] {new TermFreq("a", 1)}));
+    assertEquals("[a/1]", suggester.lookup("a", false, 1).toString());
   }
 }

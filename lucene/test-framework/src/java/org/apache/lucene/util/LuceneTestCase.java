@@ -23,6 +23,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 
 import org.apache.lucene.analysis.Analyzer;
@@ -149,10 +150,10 @@ public abstract class LuceneTestCase extends Assert {
   public static final String SYSPROP_BADAPPLES = "tests.badapples";
 
   /** @see #ignoreAfterMaxFailures*/
-  private static final String SYSPROP_MAXFAILURES = "tests.maxfailures";
+  public static final String SYSPROP_MAXFAILURES = "tests.maxfailures";
 
   /** @see #ignoreAfterMaxFailures*/
-  private static final String SYSPROP_FAILFAST = "tests.failfast";
+  public static final String SYSPROP_FAILFAST = "tests.failfast";
 
   /**
    * Annotation for tests that should only be run during nightly builds.
@@ -231,7 +232,7 @@ public abstract class LuceneTestCase extends Assert {
    * Use this constant when creating Analyzers and any other version-dependent stuff.
    * <p><b>NOTE:</b> Change this when development starts for new Lucene version:
    */
-  public static final Version TEST_VERSION_CURRENT = Version.LUCENE_43;
+  public static final Version TEST_VERSION_CURRENT = Version.LUCENE_44;
 
   /**
    * True if and only if tests are run in verbose mode. If this flag is false
@@ -357,9 +358,17 @@ public abstract class LuceneTestCase extends Assert {
       new TestRuleMarkFailure();
 
   /**
-   * Ignore tests after hitting a designated number of initial failures.
+   * Ignore tests after hitting a designated number of initial failures. This
+   * is truly a "static" global singleton since it needs to span the lifetime of all
+   * test classes running inside this JVM (it cannot be part of a class rule).
+   * 
+   * <p>This poses some problems for the test framework's tests because these sometimes
+   * trigger intentional failures which add up to the global count. This field contains
+   * a (possibly) changing reference to {@link TestRuleIgnoreAfterMaxFailures} and we
+   * dispatch to its current value from the {@link #classRules} chain using {@link TestRuleDelegate}.  
    */
-  final static TestRuleIgnoreAfterMaxFailures ignoreAfterMaxFailures; 
+  private static final AtomicReference<TestRuleIgnoreAfterMaxFailures> ignoreAfterMaxFailuresDelegate;
+  private static final TestRule ignoreAfterMaxFailures;
   static {
     int maxFailures = systemPropertyAsInt(SYSPROP_MAXFAILURES, Integer.MAX_VALUE);
     boolean failFast = systemPropertyAsBoolean(SYSPROP_FAILFAST, false);
@@ -374,7 +383,19 @@ public abstract class LuceneTestCase extends Assert {
       }
     }
 
-    ignoreAfterMaxFailures = new TestRuleIgnoreAfterMaxFailures(maxFailures);
+    ignoreAfterMaxFailuresDelegate = 
+        new AtomicReference<TestRuleIgnoreAfterMaxFailures>(
+            new TestRuleIgnoreAfterMaxFailures(maxFailures));
+    ignoreAfterMaxFailures = TestRuleDelegate.of(ignoreAfterMaxFailuresDelegate);
+  }
+
+  /**
+   * Temporarily substitute the global {@link TestRuleIgnoreAfterMaxFailures}. See
+   * {@link #ignoreAfterMaxFailuresDelegate} for some explanation why this method 
+   * is needed.
+   */
+  public static TestRuleIgnoreAfterMaxFailures replaceMaxFailureRule(TestRuleIgnoreAfterMaxFailures newValue) {
+    return ignoreAfterMaxFailuresDelegate.getAndSet(newValue);
   }
 
   /**
@@ -705,8 +726,24 @@ public abstract class LuceneTestCase extends Assert {
     IndexWriterConfig c = new IndexWriterConfig(v, a);
     c.setDocumentsWriterPerThreadImpl(DocumentsWriterPerThread.class.getName());
     c.setSimilarity(classEnvRule.similarity);
+    if (VERBOSE) {
+      // Even though TestRuleSetupAndRestoreClassEnv calls
+      // InfoStream.setDefault, we do it again here so that
+      // the PrintStreamInfoStream.messageID increments so
+      // that when there are separate instances of
+      // IndexWriter created we see "IW 0", "IW 1", "IW 2",
+      // ... instead of just always "IW 0":
+      c.setInfoStream(new TestRuleSetupAndRestoreClassEnv.ThreadNameFixingPrintStreamInfoStream(System.out));
+    }
+
     if (r.nextBoolean()) {
       c.setMergeScheduler(new SerialMergeScheduler());
+    } else if (rarely(r)) {
+      int maxThreadCount = _TestUtil.nextInt(random(), 1, 4);
+      int maxMergeCount = _TestUtil.nextInt(random(), maxThreadCount, maxThreadCount+4);
+      ConcurrentMergeScheduler cms = new ConcurrentMergeScheduler();
+      cms.setMaxMergesAndThreads(maxMergeCount, maxThreadCount);
+      c.setMergeScheduler(cms);
     }
     if (r.nextBoolean()) {
       if (rarely(r)) {
@@ -775,6 +812,10 @@ public abstract class LuceneTestCase extends Assert {
     } else {
       c.setMergePolicy(newLogMergePolicy());
     }
+    if (rarely(r)) {
+      c.setMergedSegmentWarmer(new SimpleMergedSegmentWarmer(c.getInfoStream()));
+    }
+    c.setUseCompoundFile(r.nextBoolean());
     c.setReaderPooling(r.nextBoolean());
     c.setReaderTermsIndexDivisor(_TestUtil.nextInt(r, 1, 4));
     return c;
@@ -798,19 +839,28 @@ public abstract class LuceneTestCase extends Assert {
 
   public static LogMergePolicy newLogMergePolicy(Random r) {
     LogMergePolicy logmp = r.nextBoolean() ? new LogDocMergePolicy() : new LogByteSizeMergePolicy();
-    logmp.setUseCompoundFile(r.nextBoolean());
     logmp.setCalibrateSizeByDeletes(r.nextBoolean());
     if (rarely(r)) {
       logmp.setMergeFactor(_TestUtil.nextInt(r, 2, 9));
     } else {
       logmp.setMergeFactor(_TestUtil.nextInt(r, 10, 50));
     }
-    logmp.setUseCompoundFile(r.nextBoolean());
-    logmp.setNoCFSRatio(0.1 + r.nextDouble()*0.8);
-    if (rarely()) {
-      logmp.setMaxCFSSegmentSizeMB(0.2 + r.nextDouble() * 2.0);
-    }
+    configureRandom(r, logmp);
     return logmp;
+  }
+  
+  private static void configureRandom(Random r, MergePolicy mergePolicy) {
+    if (r.nextBoolean()) {
+      mergePolicy.setNoCFSRatio(0.1 + r.nextDouble()*0.8);
+    } else {
+      mergePolicy.setNoCFSRatio(r.nextBoolean() ? 1.0 : 0.0);
+    }
+    
+    if (rarely()) {
+      mergePolicy.setMaxCFSSegmentSizeMB(0.2 + r.nextDouble() * 2.0);
+    } else {
+      mergePolicy.setMaxCFSSegmentSizeMB(Double.POSITIVE_INFINITY);
+    }
   }
 
   public static TieredMergePolicy newTieredMergePolicy(Random r) {
@@ -834,29 +884,25 @@ public abstract class LuceneTestCase extends Assert {
     } else {
       tmp.setSegmentsPerTier(_TestUtil.nextInt(r, 10, 50));
     }
-    tmp.setUseCompoundFile(r.nextBoolean());
-    tmp.setNoCFSRatio(0.1 + r.nextDouble()*0.8);
-    if (rarely()) {
-      tmp.setMaxCFSSegmentSizeMB(0.2 + r.nextDouble() * 2.0);
-    }
+    configureRandom(r, tmp);
     tmp.setReclaimDeletesWeight(r.nextDouble()*4);
     return tmp;
   }
 
-  public static LogMergePolicy newLogMergePolicy(boolean useCFS) {
-    LogMergePolicy logmp = newLogMergePolicy();
-    logmp.setUseCompoundFile(useCFS);
+  public static MergePolicy newLogMergePolicy(boolean useCFS) {
+    MergePolicy logmp = newLogMergePolicy();
+    logmp.setNoCFSRatio(useCFS ? 1.0 : 0.0);
     return logmp;
   }
 
-  public static LogMergePolicy newLogMergePolicy(boolean useCFS, int mergeFactor) {
+  public static MergePolicy newLogMergePolicy(boolean useCFS, int mergeFactor) {
     LogMergePolicy logmp = newLogMergePolicy();
-    logmp.setUseCompoundFile(useCFS);
+    logmp.setNoCFSRatio(useCFS ? 1.0 : 0.0);
     logmp.setMergeFactor(mergeFactor);
     return logmp;
   }
 
-  public static LogMergePolicy newLogMergePolicy(int mergeFactor) {
+  public static MergePolicy newLogMergePolicy(int mergeFactor) {
     LogMergePolicy logmp = newLogMergePolicy();
     logmp.setMergeFactor(mergeFactor);
     return logmp;

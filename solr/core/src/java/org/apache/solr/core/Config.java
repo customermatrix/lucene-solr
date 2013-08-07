@@ -37,11 +37,16 @@ import javax.xml.namespace.QName;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMResult;
+import javax.xml.transform.dom.DOMSource;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
+
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -63,6 +68,7 @@ public class Config {
   static final XPathFactory xpathFactory = XPathFactory.newInstance();
 
   private final Document doc;
+  private final Document origDoc; // with unsubstituted properties
   private final String prefix;
   private final String name;
   private final SolrResourceLoader loader;
@@ -73,18 +79,6 @@ public class Config {
   public Config(SolrResourceLoader loader, String name) throws ParserConfigurationException, IOException, SAXException 
   {
     this( loader, name, null, null );
-  }
-
-  /**
-   * For the transition from using solr.xml to solr.properties, see SOLR-4196. Remove
-   * for 5.0, thus it's already deprecated
-   * @param loader - Solr resource loader
-   * @param cfg    - SolrConfig, for backwards compatability with solr.xml layer.
-   * @throws TransformerException if the XML file is mal-formed
-   */
-  @Deprecated
-  public Config(SolrResourceLoader loader, Config cfg) throws TransformerException {
-    this(loader, null, ConfigSolrXml.copyDoc(cfg.getDocument()));
   }
 
   public Config(SolrResourceLoader loader, String name, InputSource is, String prefix) throws ParserConfigurationException, IOException, SAXException 
@@ -138,6 +132,7 @@ public class Config {
       db.setErrorHandler(xmllog);
       try {
         doc = db.parse(is);
+        origDoc = copyDoc(doc);
       } finally {
         // some XML parsers are broken and don't close the byte stream (but they should according to spec)
         IOUtils.closeQuietly(is.getByteStream());
@@ -147,23 +142,38 @@ public class Config {
       }
     } catch (ParserConfigurationException e)  {
       SolrException.log(log, "Exception during parsing file: " + name, e);
-      throw e;
+      throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, e);
     } catch (SAXException e)  {
       SolrException.log(log, "Exception during parsing file: " + name, e);
-      throw e;
-    } catch( SolrException e ){
-      SolrException.log(log,"Error in "+name,e);
-      throw e;
+      throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, e);
+    } catch (TransformerException e) {
+      SolrException.log(log, "Exception during parsing file: " + name, e);
+      throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, e);
     }
   }
   
   public Config(SolrResourceLoader loader, String name, Document doc) {
     this.prefix = null;
     this.doc = doc;
+    try {
+      this.origDoc = copyDoc(doc);
+    } catch (TransformerException e) {
+      throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, e);
+    }
     this.name = name;
     this.loader = loader;
   }
 
+  
+  private static Document copyDoc(Document doc) throws TransformerException {
+    TransformerFactory tfactory = TransformerFactory.newInstance();
+    Transformer tx = tfactory.newTransformer();
+    DOMSource source = new DOMSource(doc);
+    DOMResult result = new DOMResult();
+    tx.transform(source, result);
+    return (Document) result.getNode();
+  }
+  
   /**
    * @since solr 1.3
    */
@@ -214,7 +224,15 @@ public class Config {
     }
   }
 
-  public Node getNode(String path, boolean errIfMissing) {
+  public Node getNode(String path, boolean errifMissing) {
+    return getNode(path, doc, errifMissing);
+  }
+
+  public Node getUnsubstitutedNode(String path, boolean errIfMissing) {
+    return getNode(path, origDoc, errIfMissing);
+  }
+
+  public Node getNode(String path, Document doc, boolean errIfMissing) {
    XPath xpath = xpathFactory.newXPath();
    Node nd = null;
    String xstr = normalize(path);
@@ -438,4 +456,9 @@ public class Config {
     
     return version;
   }
+
+  public Config getOriginalConfig() {
+    return new Config(loader, null, origDoc);
+  }
+
 }

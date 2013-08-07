@@ -19,9 +19,13 @@ package org.apache.lucene.analysis.ngram;
 
 import org.apache.lucene.analysis.TokenFilter;
 import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.reverse.ReverseStringFilter;
 import org.apache.lucene.analysis.tokenattributes.OffsetAttribute;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
+import org.apache.lucene.analysis.tokenattributes.PositionLengthAttribute;
+import org.apache.lucene.analysis.util.CharacterUtils;
+import org.apache.lucene.util.Version;
 
 import java.io.IOException;
 
@@ -29,7 +33,10 @@ import java.io.IOException;
  * Tokenizes the given token into n-grams of given size(s).
  * <p>
  * This {@link TokenFilter} create n-grams from the beginning edge or ending edge of a input token.
- * </p>
+ * <p><a name="version"/>As of Lucene 4.4, this filter does not support
+ * {@link Side#BACK} (you can use {@link ReverseStringFilter} up-front and
+ * afterward to get the same behavior), handles supplementary characters
+ * correctly and does not update offsets anymore.
  */
 public final class EdgeNGramTokenFilter extends TokenFilter {
   public static final Side DEFAULT_SIDE = Side.FRONT;
@@ -46,6 +53,7 @@ public final class EdgeNGramTokenFilter extends TokenFilter {
     },
 
     /** Get the n-gram from the end of the input */
+    @Deprecated
     BACK  {
       @Override
       public String getLabel() { return "back"; }
@@ -65,32 +73,46 @@ public final class EdgeNGramTokenFilter extends TokenFilter {
     }
   }
 
+  private final Version version;
+  private final CharacterUtils charUtils;
   private final int minGram;
   private final int maxGram;
   private Side side;
   private char[] curTermBuffer;
   private int curTermLength;
+  private int curCodePointCount;
   private int curGramSize;
   private int tokStart;
   private int tokEnd; // only used if the length changed before this filter
-  private boolean hasIllegalOffsets; // only if the length changed before this filter
+  private boolean updateOffsets; // never if the length changed before this filter
   private int savePosIncr;
-  private boolean isFirstToken = true;
+  private int savePosLen;
   
   private final CharTermAttribute termAtt = addAttribute(CharTermAttribute.class);
   private final OffsetAttribute offsetAtt = addAttribute(OffsetAttribute.class);
   private final PositionIncrementAttribute posIncrAtt = addAttribute(PositionIncrementAttribute.class);
+  private final PositionLengthAttribute posLenAtt = addAttribute(PositionLengthAttribute.class);
 
   /**
    * Creates EdgeNGramTokenFilter that can generate n-grams in the sizes of the given range
    *
+   * @param version the <a href="#version">Lucene match version</a>
    * @param input {@link TokenStream} holding the input to be tokenized
    * @param side the {@link Side} from which to chop off an n-gram
    * @param minGram the smallest n-gram to generate
    * @param maxGram the largest n-gram to generate
    */
-  public EdgeNGramTokenFilter(TokenStream input, Side side, int minGram, int maxGram) {
+  @Deprecated
+  public EdgeNGramTokenFilter(Version version, TokenStream input, Side side, int minGram, int maxGram) {
     super(input);
+
+    if (version == null) {
+      throw new IllegalArgumentException("version must not be null");
+    }
+
+    if (version.onOrAfter(Version.LUCENE_44) && side == Side.BACK) {
+      throw new IllegalArgumentException("Side.BACK is not supported anymore as of Lucene 4.4, use ReverseStringFilter up-front and afterward");
+    }
 
     if (side == null) {
       throw new IllegalArgumentException("sideLabel must be either front or back");
@@ -104,6 +126,10 @@ public final class EdgeNGramTokenFilter extends TokenFilter {
       throw new IllegalArgumentException("minGram must not be greater than maxGram");
     }
 
+    this.version = version;
+    this.charUtils = version.onOrAfter(Version.LUCENE_44)
+        ? CharacterUtils.getInstance(version)
+        : CharacterUtils.getJava4Instance();
     this.minGram = minGram;
     this.maxGram = maxGram;
     this.side = side;
@@ -112,13 +138,27 @@ public final class EdgeNGramTokenFilter extends TokenFilter {
   /**
    * Creates EdgeNGramTokenFilter that can generate n-grams in the sizes of the given range
    *
+   * @param version the <a href="#version">Lucene match version</a>
    * @param input {@link TokenStream} holding the input to be tokenized
    * @param sideLabel the name of the {@link Side} from which to chop off an n-gram
    * @param minGram the smallest n-gram to generate
    * @param maxGram the largest n-gram to generate
    */
-  public EdgeNGramTokenFilter(TokenStream input, String sideLabel, int minGram, int maxGram) {
-    this(input, Side.getSide(sideLabel), minGram, maxGram);
+  @Deprecated
+  public EdgeNGramTokenFilter(Version version, TokenStream input, String sideLabel, int minGram, int maxGram) {
+    this(version, input, Side.getSide(sideLabel), minGram, maxGram);
+  }
+
+  /**
+   * Creates EdgeNGramTokenFilter that can generate n-grams in the sizes of the given range
+   *
+   * @param version the <a href="#version">Lucene match version</a>
+   * @param input {@link TokenStream} holding the input to be tokenized
+   * @param minGram the smallest n-gram to generate
+   * @param maxGram the largest n-gram to generate
+   */
+  public EdgeNGramTokenFilter(Version version, TokenStream input, int minGram, int maxGram) {
+    this(version, input, Side.FRONT, minGram, maxGram);
   }
 
   @Override
@@ -130,38 +170,43 @@ public final class EdgeNGramTokenFilter extends TokenFilter {
         } else {
           curTermBuffer = termAtt.buffer().clone();
           curTermLength = termAtt.length();
+          curCodePointCount = charUtils.codePointCount(termAtt);
           curGramSize = minGram;
           tokStart = offsetAtt.startOffset();
           tokEnd = offsetAtt.endOffset();
-          // if length by start + end offsets doesn't match the term text then assume
-          // this is a synonym and don't adjust the offsets.
-          hasIllegalOffsets = (tokStart + curTermLength) != tokEnd;
-          savePosIncr = posIncrAtt.getPositionIncrement();
+          if (version.onOrAfter(Version.LUCENE_44)) {
+            // Never update offsets
+            updateOffsets = false;
+          } else {
+            // if length by start + end offsets doesn't match the term text then assume
+            // this is a synonym and don't adjust the offsets.
+            updateOffsets = (tokStart + curTermLength) == tokEnd;
+          }
+          savePosIncr += posIncrAtt.getPositionIncrement();
+          savePosLen = posLenAtt.getPositionLength();
         }
       }
       if (curGramSize <= maxGram) {         // if we have hit the end of our n-gram size range, quit
-        if (curGramSize <= curTermLength) { // if the remaining input is too short, we can't generate any n-grams
+        if (curGramSize <= curCodePointCount) { // if the remaining input is too short, we can't generate any n-grams
           // grab gramSize chars from front or back
-          int start = side == Side.FRONT ? 0 : curTermLength - curGramSize;
-          int end = start + curGramSize;
+          final int start = side == Side.FRONT ? 0 : charUtils.offsetByCodePoints(curTermBuffer, 0, curTermLength, curTermLength, -curGramSize);
+          final int end = charUtils.offsetByCodePoints(curTermBuffer, 0, curTermLength, start, curGramSize);
           clearAttributes();
-          if (hasIllegalOffsets) {
-            offsetAtt.setOffset(tokStart, tokEnd);
-          } else {
+          if (updateOffsets) {
             offsetAtt.setOffset(tokStart + start, tokStart + end);
+          } else {
+            offsetAtt.setOffset(tokStart, tokEnd);
           }
           // first ngram gets increment, others don't
           if (curGramSize == minGram) {
-            //  Leave the first token position increment at the cleared-attribute value of 1
-            if ( ! isFirstToken) {
-              posIncrAtt.setPositionIncrement(savePosIncr);
-            }
+            posIncrAtt.setPositionIncrement(savePosIncr);
+            savePosIncr = 0;
           } else {
             posIncrAtt.setPositionIncrement(0);
           }
-          termAtt.copyBuffer(curTermBuffer, start, curGramSize);
+          posLenAtt.setPositionLength(savePosLen);
+          termAtt.copyBuffer(curTermBuffer, start, end - start);
           curGramSize++;
-          isFirstToken = false;
           return true;
         }
       }
@@ -173,6 +218,6 @@ public final class EdgeNGramTokenFilter extends TokenFilter {
   public void reset() throws IOException {
     super.reset();
     curTermBuffer = null;
-    isFirstToken = true;
+    savePosIncr = 0;
   }
 }

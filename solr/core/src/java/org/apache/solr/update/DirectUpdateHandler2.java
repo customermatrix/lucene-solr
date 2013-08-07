@@ -51,6 +51,7 @@ import org.apache.solr.request.LocalSolrQueryRequest;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.response.SolrQueryResponse;
+import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.SchemaField;
 import org.apache.solr.search.FunctionRangeQuery;
 import org.apache.solr.search.QParser;
@@ -166,6 +167,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
       }
       
       try {
+        IndexSchema schema = cmd.getReq().getSchema();
         
         if (cmd.overwrite) {
           
@@ -405,7 +407,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
       RefCounted<IndexWriter> iw = solrCoreState.getIndexWriter(core);
       try {
         IndexWriter writer = iw.get();
-        writer.updateDocument(idTerm, luceneDocument, core.getSchema()
+        writer.updateDocument(idTerm, luceneDocument, cmd.getReq().getSchema()
             .getAnalyzer());
         
         for (Query q : dbqList) {
@@ -538,11 +540,17 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
           }
           
           // SolrCore.verbose("writer.commit() start writer=",writer);
-          final Map<String,String> commitData = new HashMap<String,String>();
-          commitData.put(SolrIndexWriter.COMMIT_TIME_MSEC_KEY,
-              String.valueOf(System.currentTimeMillis()));
-          writer.setCommitData(commitData);
-          writer.commit();
+
+          if (writer.hasUncommittedChanges()) {
+            final Map<String,String> commitData = new HashMap<String,String>();
+            commitData.put(SolrIndexWriter.COMMIT_TIME_MSEC_KEY,
+                String.valueOf(System.currentTimeMillis()));
+            writer.setCommitData(commitData);
+            writer.commit();
+          } else {
+            log.info("No uncommitted changes. Skipping IW.commit.");
+          }
+
           // SolrCore.verbose("writer.commit() end");
           numDocsPending.set(0);
           callPostCommitCallbacks();

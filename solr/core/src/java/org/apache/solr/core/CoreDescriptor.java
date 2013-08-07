@@ -46,7 +46,7 @@ public class CoreDescriptor {
   public static final String CORE_TRANSIENT = "transient";
   public static final String CORE_NODE_NAME = "coreNodeName";
 
-  static final String[] standardPropNames = {
+  public static final String[] standardPropNames = {
       CORE_NAME,
       CORE_CONFIG,
       CORE_INSTDIR,
@@ -65,6 +65,9 @@ public class CoreDescriptor {
   // them individually.
   private Properties coreProperties = new Properties();
 
+  //TODO: 5.0 remove this, this is solely a hack for persistence. And perhaps creating cores in discovery mode?
+  private Properties createdProperties = new Properties();
+
   private boolean loadedImplicit = false;
 
   private final CoreContainer coreContainer;
@@ -78,6 +81,7 @@ public class CoreDescriptor {
     coreProperties.put(CORE_TRANSIENT, "false");
 
   }
+  
   public CoreDescriptor(CoreContainer container, String name, String instanceDir) {
     this(container);
     doInit(name, instanceDir);
@@ -202,7 +206,7 @@ public class CoreDescriptor {
    */
   public String getInstanceDir() {
     String instDir = coreProperties.getProperty(CORE_INSTDIR);
-    if (instDir == null) return null; // No worse than before.
+    if (instDir == null) return null;
 
     if (new File(instDir).isAbsolute()) {
       return SolrResourceLoader.normalizeDir(
@@ -279,6 +283,14 @@ public class CoreDescriptor {
     }
   }
 
+  public void addCreatedProperty(String key, String value) {
+    createdProperties.put(key, value);
+  }
+
+  public final Properties getCreatedProperties() {
+    return createdProperties;
+  }
+
   public CloudDescriptor getCloudDescriptor() {
     return cloudDesc;
   }
@@ -341,23 +353,5 @@ public class CoreDescriptor {
    */
   public void putProperty(String prop, String val) {
     coreProperties.put(prop, val);
-  }
-
-  // This is particularly useful for checking if any two cores have the same
-  // data dir.
-  public String getAbsoluteDataDir() {
-    String dataDir = getDataDir();
-    if (dataDir == null) return null; // No worse than before.
-
-    if (new File(dataDir).isAbsolute()) {
-      return SolrResourceLoader.normalizeDir(
-          SolrResourceLoader.normalizeDir(dataDir));
-    }
-
-    if (coreContainer == null) return null;
-
-    return SolrResourceLoader.normalizeDir(coreContainer.getSolrHome() +
-        SolrResourceLoader.normalizeDir(dataDir));
-
   }
 }

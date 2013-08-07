@@ -17,56 +17,62 @@
 
 package org.apache.solr.core;
 
-import java.io.File;
-import java.io.FileFilter;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 import org.apache.lucene.analysis.util.CharFilterFactory;
 import org.apache.lucene.analysis.util.ResourceLoaderAware;
 import org.apache.lucene.analysis.util.TokenFilterFactory;
 import org.apache.lucene.analysis.util.TokenizerFactory;
-import org.apache.lucene.codecs.Codec;
-import org.apache.lucene.codecs.PostingsFormat;
-import org.apache.lucene.codecs.DocValuesFormat;
 import org.apache.lucene.analysis.util.WordlistLoader;
+import org.apache.lucene.codecs.Codec;
+import org.apache.lucene.codecs.DocValuesFormat;
+import org.apache.lucene.codecs.PostingsFormat;
+import org.apache.lucene.util.IOUtils;
 import org.apache.solr.common.ResourceLoader;
+import org.apache.solr.common.SolrException;
 import org.apache.solr.handler.admin.CoreAdminHandler;
+import org.apache.solr.handler.component.SearchComponent;
 import org.apache.solr.handler.component.ShardHandlerFactory;
+import org.apache.solr.request.SolrRequestHandler;
+import org.apache.solr.response.QueryResponseWriter;
+import org.apache.solr.schema.FieldType;
+import org.apache.solr.schema.ManagedIndexSchemaFactory;
+import org.apache.solr.schema.SimilarityFactory;
+import org.apache.solr.search.QParserPlugin;
+import org.apache.solr.update.processor.UpdateRequestProcessorFactory;
+import org.apache.solr.util.FileUtils;
+import org.apache.solr.util.plugin.SolrCoreAware;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.nio.charset.CharacterCodingException;
-import java.nio.charset.Charset;
-import java.lang.reflect.Constructor;
 
 import javax.naming.Context;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.naming.NoInitialContextException;
-
-import org.apache.solr.util.FileUtils;
-import org.apache.solr.common.SolrException;
-import org.apache.solr.handler.component.SearchComponent;
-import org.apache.solr.request.SolrRequestHandler;
-import org.apache.solr.response.QueryResponseWriter;
-import org.apache.solr.schema.FieldType;
-import org.apache.solr.update.processor.UpdateRequestProcessorFactory;
-import org.apache.solr.util.plugin.SolrCoreAware;
-import org.apache.solr.search.QParserPlugin;
+import java.io.Closeable;
+import java.io.File;
+import java.io.FileFilter;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.Constructor;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * @since solr 1.3
  */ 
-public class SolrResourceLoader implements ResourceLoader
+public class SolrResourceLoader implements ResourceLoader,Closeable
 {
   public static final Logger log = LoggerFactory.getLogger(SolrResourceLoader.class);
 
@@ -150,9 +156,11 @@ public class SolrResourceLoader implements ResourceLoader
     File base = FileUtils.resolvePath(new File(getInstanceDir()), baseDir);
     if (base != null && base.exists() && base.isDirectory()) {
       File[] files = base.listFiles(filter);
-      if (!quiet && (files == null || files.length == 0)) {
-        log.warn("No files added to classloader from lib: "
-            + baseDir + " (resolved as: " + base.getAbsolutePath() + ").");
+      if (files == null || files.length == 0) {
+        if (!quiet) {
+          log.warn("No files added to classloader from lib: "
+                   + baseDir + " (resolved as: " + base.getAbsolutePath() + ").");
+        }
       } else {
         this.classLoader = replaceClassLoader(classLoader, base, filter);
       }
@@ -163,35 +171,10 @@ public class SolrResourceLoader implements ResourceLoader
       }
     }
   }
-
-  /**
-   * Adds the specific file/dir specified to the ClassLoader used by this
-   * ResourceLoader.  This method <b>MUST</b>
-   * only be called prior to using this ResourceLoader to get any resources, otherwise
-   * it's behavior will be non-deterministic. You also have to {link #reloadLuceneSPI()}
-   * before using this ResourceLoader.
-   *
-   * @param path A jar file (or directory of classes) to be added to the classpath,
-   *             will be resolved relative the instance dir.
-   */
-  void addToClassLoader(final String path) {
-    final File file = FileUtils.resolvePath(new File(getInstanceDir()), path);
-    if (file.canRead()) {
-      this.classLoader = replaceClassLoader(classLoader, file.getParentFile(),
-                                            new FileFilter() {
-                                              @Override
-                                              public boolean accept(File pathname) {
-                                                return pathname.equals(file);
-                                              }
-                                            });
-    } else {
-      log.error("Can't find (or read) file to add to classloader: " + file);
-    }
-  }
   
   /**
    * Reloads all Lucene SPI implementations using the new classloader.
-   * This method must be called after {@link #addToClassLoader(String)}
+   * This method must be called after {@link #addToClassLoader(String, FileFilter, boolean)}
    * and {@link #addToClassLoader(String,FileFilter,boolean)} before using
    * this ResourceLoader.
    */
@@ -227,7 +210,9 @@ public class SolrResourceLoader implements ResourceLoader
           SolrException.log(log, "Can't add element to classloader: " + files[j], e);
         }
       }
-      return URLClassLoader.newInstance(elements, oldLoader.getParent());
+      ClassLoader oldParent = oldLoader.getParent();
+      closeHack(oldLoader); // best effort
+      return URLClassLoader.newInstance(elements, oldParent);
     }
     // are we still here?
     return oldLoader;
@@ -734,11 +719,14 @@ public class SolrResourceLoader implements ResourceLoader
     awareCompatibility = new HashMap<Class, Class[]>();
     awareCompatibility.put( 
       SolrCoreAware.class, new Class[] {
-        SolrRequestHandler.class,
+        CodecFactory.class,
+        ManagedIndexSchemaFactory.class,
         QueryResponseWriter.class,
         SearchComponent.class,
-        UpdateRequestProcessorFactory.class,
-        ShardHandlerFactory.class
+        ShardHandlerFactory.class,
+        SimilarityFactory.class,
+        SolrRequestHandler.class,
+        UpdateRequestProcessorFactory.class
       }
     );
 
@@ -776,5 +764,20 @@ public class SolrResourceLoader implements ResourceLoader
       builder.append( "[" ).append( v.getName() ).append( "] ") ;
     }
     throw new SolrException( SolrException.ErrorCode.SERVER_ERROR, builder.toString() );
+  }
+  
+  /** 
+   * We don't have URLClassLoader.close() until java7, but
+   * we still try to release resources with a Schindler-häck
+   */
+  private static void closeHack(URLClassLoader loader) {
+    if (loader instanceof Closeable) {
+      IOUtils.closeWhileHandlingException((Closeable)loader);
+    }
+  }
+
+  @Override
+  public void close() throws IOException {
+    closeHack(classLoader);
   }
 }

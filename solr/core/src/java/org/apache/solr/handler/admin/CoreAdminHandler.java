@@ -17,19 +17,6 @@
 
 package org.apache.solr.handler.admin;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.concurrent.Future;
-
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.lucene.index.DirectoryReader;
@@ -57,8 +44,8 @@ import org.apache.solr.core.CloseHook;
 import org.apache.solr.core.CoreContainer;
 import org.apache.solr.core.CoreDescriptor;
 import org.apache.solr.core.DirectoryFactory;
-import org.apache.solr.core.SolrCore;
 import org.apache.solr.core.DirectoryFactory.DirContext;
+import org.apache.solr.core.SolrCore;
 import org.apache.solr.handler.RequestHandlerBase;
 import org.apache.solr.request.LocalSolrQueryRequest;
 import org.apache.solr.request.SolrQueryRequest;
@@ -70,10 +57,24 @@ import org.apache.solr.update.UpdateLog;
 import org.apache.solr.update.processor.UpdateRequestProcessor;
 import org.apache.solr.update.processor.UpdateRequestProcessorChain;
 import org.apache.solr.util.NumberUtils;
+import org.apache.solr.util.PropertiesUtil;
 import org.apache.solr.util.RefCounted;
 import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.Future;
 
 /**
  *
@@ -414,13 +415,12 @@ public class CoreAdminHandler extends RequestHandlerBase {
       throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,
                               "Core name is mandatory to CREATE a SolrCore");
     }
+
+    CoreDescriptor dcore = null;
     try {
       
-      //for now, do not allow creating new core with same name when in cloud mode
-      //XXX perhaps it should just be unregistered from cloud before reading it?,
-      //XXX perhaps we should also check that cores are of same type before adding new core to collection?
       if (coreContainer.getAllCoreNames().contains(name)) {
-        log.warn("Re-creating a core with existing name is not allowed");
+        log.warn("Creating a core with existing name is not allowed");
         throw new SolrException(ErrorCode.SERVER_ERROR,
             "Core with name '" + name + "' already exists.");
       }
@@ -429,22 +429,30 @@ public class CoreAdminHandler extends RequestHandlerBase {
       if (instanceDir == null) {
         // instanceDir = coreContainer.getSolrHome() + "/" + name;
         instanceDir = name; // bare name is already relative to solr home
+      } else {
+        instanceDir = PropertiesUtil.substituteProperty(instanceDir, null);
       }
 
-      CoreDescriptor dcore = new CoreDescriptor(coreContainer, name, instanceDir);
+      dcore = new CoreDescriptor(coreContainer, name, instanceDir);
 
       //  fillup optional parameters
       String opts = params.get(CoreAdminParams.CONFIG);
-      if (opts != null)
+      if (opts != null) {
+        opts = PropertiesUtil.substituteProperty(opts, null);
         dcore.setConfigName(opts);
+      }
 
       opts = params.get(CoreAdminParams.SCHEMA);
-      if (opts != null)
+      if (opts != null) {
+        opts = PropertiesUtil.substituteProperty(opts, null);
         dcore.setSchemaName(opts);
+      }
 
       opts = params.get(CoreAdminParams.DATA_DIR);
-      if (opts != null)
+      if (opts != null) {
+        opts = PropertiesUtil.substituteProperty(opts, null);
         dcore.setDataDir(opts);
+      }
 
       opts = params.get(CoreAdminParams.ULOG_DIR);
       if (opts != null)
@@ -500,31 +508,52 @@ public class CoreAdminHandler extends RequestHandlerBase {
       Iterator<String> parameterNamesIterator = params.getParameterNamesIterator();
       while (parameterNamesIterator.hasNext()) {
           String parameterName = parameterNamesIterator.next();
+          String parameterValue = params.get(parameterName);
+          dcore.addCreatedProperty(parameterName, parameterValue); // Need this junk for silly persistence
+
           if(parameterName.startsWith(CoreAdminParams.PROPERTY_PREFIX)) {
-              String parameterValue = params.get(parameterName);
-              String propertyName = parameterName.substring(CoreAdminParams.PROPERTY_PREFIX.length()); // skip prefix
-              coreProperties.put(propertyName, parameterValue);
+            String propertyName = parameterName.substring(CoreAdminParams.PROPERTY_PREFIX.length()); // skip prefix
+            coreProperties.put(propertyName, parameterValue);
           }
       }
       dcore.setCoreProperties(coreProperties);
-      
-      SolrCore core = coreContainer.create(dcore);
-
-      String sameDirCore = coreContainer.checkUniqueDataDir(core.getDataDir());
-      if (sameDirCore != null) {
-        if (core != null) core.close();
-        log.warn("Creating a core that points to the same data dir as core {} is not allowed", sameDirCore);
-        throw new SolrException(ErrorCode.SERVER_ERROR,
-            "Core with same data dir '" + sameDirCore + "' already exists.");
+      if (coreContainer.getZkController() != null) {
+        coreContainer.preRegisterInZk(dcore);
       }
+      SolrCore core = coreContainer.create(dcore);
 
       coreContainer.register(name, core, false);
       rsp.add("core", core.getName());
       return coreContainer.isPersistent();
     } catch (Exception ex) {
+      if (coreContainer.isZooKeeperAware() && dcore != null) {
+        try {
+          coreContainer.getZkController().unregister(name, dcore);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          SolrException.log(log, null, e);
+        } catch (KeeperException e) {
+          SolrException.log(log, null, e);
+        }
+      }
+      
+      Throwable tc = ex;
+      Throwable c = null;
+      do {
+        tc = tc.getCause();
+        if (tc != null) {
+          c = tc;
+        }
+      } while (tc != null);
+      
+      String rootMsg = "";
+      if (c != null) {
+        rootMsg = " Caused by: " + c.getMessage();
+      }
+      
       throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,
                               "Error CREATEing SolrCore '" + name + "': " +
-                              ex.getMessage(), ex);
+                              ex.getMessage() + rootMsg, ex);
     }
   }
 
@@ -713,7 +742,9 @@ public class CoreAdminHandler extends RequestHandlerBase {
     boolean doPersist = false;
     String fileName = params.get(CoreAdminParams.FILE);
     if (fileName != null) {
-      File file = new File(coreContainer.getConfigFile().getParentFile(), fileName);
+      File file = new File(fileName);
+      if (!file.isAbsolute())
+        file = new File(coreContainer.getConfigFile().getParentFile(), fileName);
       coreContainer.persistFile(file);
       rsp.add("saved", file.getAbsolutePath());
       doPersist = false;

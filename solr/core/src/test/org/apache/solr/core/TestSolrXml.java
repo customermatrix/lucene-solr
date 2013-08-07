@@ -20,9 +20,11 @@ package org.apache.solr.core;
 import org.apache.commons.io.FileUtils;
 import org.apache.solr.SolrTestCaseJ4;
 import org.junit.Test;
+import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 import javax.xml.parsers.ParserConfigurationException;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -38,7 +40,14 @@ public class TestSolrXml extends SolrTestCaseJ4 {
     FileUtils.copyFile(new File(testSrcRoot, "solr-50-all.xml"), new File(solrHome, "solr.xml"));
     try {
       InputStream is = new FileInputStream(new File(solrHome, "solr.xml"));
-      ConfigSolr cfg = new ConfigSolrXml(new SolrResourceLoader("solr/collection1"), null, is, null, false, null);
+      Config config = new Config(new SolrResourceLoader("solr/collection1"), null, new InputSource(is), null, false);
+      boolean oldStyle = (config.getNode("solr/cores", false) != null);
+      ConfigSolr cfg;
+      if (oldStyle) {
+        cfg = new ConfigSolrXmlOld(config);
+      } else {
+        cfg = new ConfigSolrXml(config, cc);
+      }
 
       assertEquals("Did not find expected value", cfg.get(ConfigSolr.CfgProp.SOLR_ADMINHANDLER, null), "testAdminHandler");
       assertEquals("Did not find expected value", cfg.getInt(ConfigSolr.CfgProp.SOLR_CORELOADTHREADS, 0), 11);
@@ -55,10 +64,6 @@ public class TestSolrXml extends SolrTestCaseJ4 {
       assertEquals("Did not find expected value", cfg.getInt(ConfigSolr.CfgProp.SOLR_LOGGING_WATCHER_THRESHOLD, 0), 99);
       assertEquals("Did not find expected value", cfg.get(ConfigSolr.CfgProp.SOLR_MANAGEMENTPATH, null), "testManagementPath");
       assertEquals("Did not find expected value", cfg.get(ConfigSolr.CfgProp.SOLR_SHAREDLIB, null), "testSharedLib");
-      assertEquals("Did not find expected value", cfg.get(ConfigSolr.CfgProp.SOLR_SHARDHANDLERFACTORY_CLASS, null), "testHttpShardHandlerFactory");
-      assertEquals("Did not find expected value", cfg.getInt(ConfigSolr.CfgProp.SOLR_SHARDHANDLERFACTORY_CONNTIMEOUT, 0), 110);
-      assertEquals("Did not find expected value", cfg.get(ConfigSolr.CfgProp.SOLR_SHARDHANDLERFACTORY_NAME, null), "testShardHandlerFactory");
-      assertEquals("Did not find expected value", cfg.getInt(ConfigSolr.CfgProp.SOLR_SHARDHANDLERFACTORY_SOCKETTIMEOUT, 0), 100);
       assertEquals("Did not find expected value", cfg.get(ConfigSolr.CfgProp.SOLR_SHARESCHEMA, null), "testShareSchema");
       assertEquals("Did not find expected value", cfg.getInt(ConfigSolr.CfgProp.SOLR_TRANSIENTCACHESIZE, 0), 66);
       assertEquals("Did not find expected value", cfg.getInt(ConfigSolr.CfgProp.SOLR_ZKCLIENTTIMEOUT, 0), 77);
@@ -90,11 +95,16 @@ public class TestSolrXml extends SolrTestCaseJ4 {
     FileUtils.copyFile(new File(testSrcRoot, "solr-50-all.xml"), new File(solrHome, "solr.xml"));
     try {
       InputStream is = new FileInputStream(new File(solrHome, "solr.xml"));
-      ConfigSolr cfg = new ConfigSolrXml(new SolrResourceLoader("solr/collection1"), null, is, null, false, null);
+      Config config = new Config(new SolrResourceLoader("solr/collection1"), null, new InputSource(is), null, false);
+      boolean oldStyle = (config.getNode("solr/cores", false) != null);
+      ConfigSolr cfg;
+      if (oldStyle) {
+        cfg = new ConfigSolrXmlOld(config);
+      } else {
+        cfg = new ConfigSolrXml(config, cc);
+      }
       assertEquals("Did not find expected value", cfg.get(ConfigSolr.CfgProp.SOLR_COREROOTDIRECTORY, null), "myCoreRoot");
       assertEquals("Did not find expected value", cfg.getInt(ConfigSolr.CfgProp.SOLR_HOSTPORT, 0), 8888);
-      assertEquals("Did not find expected value", cfg.getInt(ConfigSolr.CfgProp.SOLR_SHARDHANDLERFACTORY_CONNTIMEOUT, 0), 200);
-      assertEquals("Did not find expected value", cfg.getInt(ConfigSolr.CfgProp.SOLR_SHARDHANDLERFACTORY_SOCKETTIMEOUT, 0), 220);
       assertEquals("Did not find expected value", cfg.get(ConfigSolr.CfgProp.SOLR_SHARESCHEMA, null), "newShareSchema");
 
     } finally {

@@ -25,7 +25,6 @@ import org.apache.lucene.document.Field.Store;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
 import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.NRTManager;
 import org.apache.lucene.search.ReferenceManager;
 import org.apache.lucene.search.SearcherFactory;
 import org.apache.lucene.search.SearcherManager;
@@ -41,7 +40,7 @@ public class TestTryDelete extends LuceneTestCase
   private static IndexWriter getWriter (Directory directory)
     throws IOException
   {
-    LogMergePolicy policy = new LogByteSizeMergePolicy();
+    MergePolicy policy = new LogByteSizeMergePolicy();
     IndexWriterConfig conf = new IndexWriterConfig(TEST_VERSION_CURRENT,
                                                    new MockAnalyzer(random()));
     conf.setMergePolicy(policy);
@@ -82,7 +81,7 @@ public class TestTryDelete extends LuceneTestCase
                                                               true,
                                                               new SearcherFactory());
 
-    NRTManager.TrackingIndexWriter mgrWriter = new NRTManager.TrackingIndexWriter(writer);
+    TrackingIndexWriter mgrWriter = new TrackingIndexWriter(writer);
 
     IndexSearcher searcher = mgr.acquire();
 
@@ -136,7 +135,7 @@ public class TestTryDelete extends LuceneTestCase
                                       100);
     assertEquals(1, topDocs.totalHits);
 
-    NRTManager.TrackingIndexWriter mgrWriter = new NRTManager.TrackingIndexWriter(writer);
+    TrackingIndexWriter mgrWriter = new TrackingIndexWriter(writer);
     long result = mgrWriter.tryDeleteDocument(DirectoryReader.open(writer,
                                                                    true), 0);
 
@@ -181,7 +180,7 @@ public class TestTryDelete extends LuceneTestCase
                                       100);
     assertEquals(1, topDocs.totalHits);
 
-    NRTManager.TrackingIndexWriter mgrWriter = new NRTManager.TrackingIndexWriter(writer);
+    TrackingIndexWriter mgrWriter = new TrackingIndexWriter(writer);
     long result = mgrWriter.deleteDocuments(new TermQuery(new Term("foo",
                                                                    "0")));
 

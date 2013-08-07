@@ -26,7 +26,14 @@ import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
 /** Set the positionIncrement of all tokens to the "positionIncrement",
  * except the first return token which retains its original positionIncrement value.
  * The default positionIncrement value is zero.
+ * @deprecated (4.4) PositionFilter makes {@link TokenStream} graphs inconsistent
+ *             which can cause highlighting bugs. Its main use-case being to make
+ *             <a href="{@docRoot}/../queryparser/overview-summary.html">QueryParser</a>
+ *             generate boolean queries instead of phrase queries, it is now advised to use
+ *             {@code QueryParser.setAutoGeneratePhraseQueries(boolean)}
+ *             (for simple cases) or to override {@code QueryParser.newFieldQuery}.
  */
+@Deprecated
 public final class PositionFilter extends TokenFilter {
 
   /** Position increment to assign to all but the first token - default = 0 */

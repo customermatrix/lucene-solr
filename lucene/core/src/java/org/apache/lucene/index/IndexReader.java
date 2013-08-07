@@ -506,7 +506,7 @@ public abstract class IndexReader implements Closeable {
    * it again.
    * This key must not have equals()/hashCode() methods, so &quot;equals&quot; means &quot;identical&quot;. */
   public Object getCoreCacheKey() {
-    // Don't can ensureOpen since FC calls this (to evict)
+    // Don't call ensureOpen since FC calls this (to evict)
     // on close
     return this;
   }
@@ -515,7 +515,7 @@ public abstract class IndexReader implements Closeable {
    * so FieldCache/CachingWrapperFilter can find it again.
    * This key must not have equals()/hashCode() methods, so &quot;equals&quot; means &quot;identical&quot;. */
   public Object getCombinedCoreAndDeletesKey() {
-    // Don't can ensureOpen since FC calls this (to evict)
+    // Don't call ensureOpen since FC calls this (to evict)
     // on close
     return this;
   }
@@ -529,12 +529,11 @@ public abstract class IndexReader implements Closeable {
    */
   public abstract int docFreq(Term term) throws IOException;
   
-  /** Returns the number of documents containing the term
-   * <code>term</code>.  This method returns 0 if the term or
-   * field does not exists, or -1 if the Codec does not support
-   * the measure.  This method does not take into account deleted 
-   * documents that have not yet been merged away.
-   * @see TermsEnum#totalTermFreq() 
+  /**
+   * Returns the total number of occurrences of {@code term} across all
+   * documents (the sum of the freq() for each doc that has this term). This
+   * will be -1 if the codec doesn't support this measure. Note that, like other
+   * term measures, this measure does not take deleted documents into account.
    */
   public abstract long totalTermFreq(Term term) throws IOException;
   

@@ -17,18 +17,20 @@ package org.apache.lucene.analysis.ngram;
  * limitations under the License.
  */
 
-import org.apache.lucene.analysis.util.TokenizerFactory;
-import org.apache.lucene.util.AttributeSource.AttributeFactory;
-
 import java.io.Reader;
 import java.util.Map;
+
+import org.apache.lucene.analysis.Tokenizer;
+import org.apache.lucene.analysis.util.TokenizerFactory;
+import org.apache.lucene.util.AttributeSource.AttributeFactory;
+import org.apache.lucene.util.Version;
 
 /**
  * Creates new instances of {@link EdgeNGramTokenizer}.
  * <pre class="prettyprint">
  * &lt;fieldType name="text_edgngrm" class="solr.TextField" positionIncrementGap="100"&gt;
  *   &lt;analyzer&gt;
- *     &lt;tokenizer class="solr.EdgeNGramTokenizerFactory" side="front" minGramSize="1" maxGramSize="1"/&gt;
+ *     &lt;tokenizer class="solr.EdgeNGramTokenizerFactory" minGramSize="1" maxGramSize="1"/&gt;
  *   &lt;/analyzer&gt;
  * &lt;/fieldType&gt;</pre>
  */
@@ -47,9 +49,16 @@ public class EdgeNGramTokenizerFactory extends TokenizerFactory {
       throw new IllegalArgumentException("Unknown parameters: " + args);
     }
   }
-  
+
   @Override
-  public EdgeNGramTokenizer create(AttributeFactory factory, Reader input) {
-    return new EdgeNGramTokenizer(factory, input, side, minGramSize, maxGramSize);
+  public Tokenizer create(AttributeFactory factory, Reader input) {
+    if (luceneMatchVersion.onOrAfter(Version.LUCENE_44)) {
+      if (!EdgeNGramTokenFilter.Side.FRONT.getLabel().equals(side)) {
+        throw new IllegalArgumentException(EdgeNGramTokenizer.class.getSimpleName() + " does not support backward n-grams as of Lucene 4.4");
+      }
+      return new EdgeNGramTokenizer(luceneMatchVersion, input, minGramSize, maxGramSize);
+    } else {
+      return new Lucene43EdgeNGramTokenizer(luceneMatchVersion, input, side, minGramSize, maxGramSize);
+    }
   }
 }

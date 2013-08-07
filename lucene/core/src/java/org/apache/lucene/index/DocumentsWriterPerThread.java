@@ -112,7 +112,7 @@ public class DocumentsWriterPerThread {
 
     // Only called by asserts
     public boolean testPoint(String name) {
-      return docWriter.writer.testPoint(name);
+      return docWriter.testPoint(name);
     }
 
     public void clear() {
@@ -194,6 +194,7 @@ public class DocumentsWriterPerThread {
   private final NumberFormat nf = NumberFormat.getInstance(Locale.ROOT);
   final Allocator byteBlockAllocator;
   final IntBlockPool.Allocator intBlockAllocator;
+  private final LiveIndexWriterConfig indexWriterConfig;
 
   
   public DocumentsWriterPerThread(Directory directory, DocumentsWriter parent,
@@ -203,6 +204,7 @@ public class DocumentsWriterPerThread {
     this.parent = parent;
     this.fieldInfos = fieldInfos;
     this.writer = parent.indexWriter;
+    this.indexWriterConfig = parent.indexWriterConfig;
     this.infoStream = parent.infoStream;
     this.codec = parent.codec;
     this.docState = new DocState(this, infoStream);
@@ -232,6 +234,13 @@ public class DocumentsWriterPerThread {
     aborting = true;
   }
   
+  final boolean testPoint(String message) {
+    if (infoStream.isEnabled("TP")) {
+      infoStream.message("TP", message);
+    }
+    return true;
+  }
+  
   boolean checkAndResetHasAborted() {
     final boolean retval = hasAborted;
     hasAborted = false;
@@ -239,7 +248,7 @@ public class DocumentsWriterPerThread {
   }
 
   public void updateDocument(Iterable<? extends IndexableField> doc, Analyzer analyzer, Term delTerm) throws IOException {
-    assert writer.testPoint("DocumentsWriterPerThread addDocument start");
+    assert testPoint("DocumentsWriterPerThread addDocument start");
     assert deleteQueue != null;
     docState.doc = doc;
     docState.analyzer = analyzer;
@@ -292,7 +301,7 @@ public class DocumentsWriterPerThread {
   }
   
   public int updateDocuments(Iterable<? extends Iterable<? extends IndexableField>> docs, Analyzer analyzer, Term delTerm) throws IOException {
-    assert writer.testPoint("DocumentsWriterPerThread addDocuments start");
+    assert testPoint("DocumentsWriterPerThread addDocuments start");
     assert deleteQueue != null;
     docState.analyzer = analyzer;
     if (segmentInfo == null) {
@@ -427,7 +436,6 @@ public class DocumentsWriterPerThread {
   /** Reset after a flush */
   private void doAfterFlush() {
     segmentInfo = null;
-    consumer.doAfterFlush();
     directory.getCreatedFiles().clear();
     fieldInfos = new FieldInfos.Builder(fieldInfos.globalFieldNumbers);
     parent.subtractFlushedNumDocs(numDocsInRAM);
@@ -560,7 +568,7 @@ public class DocumentsWriterPerThread {
 
     boolean success = false;
     try {
-      if (writer.useCompoundFile(newSegment)) {
+      if (indexWriterConfig.getUseCompoundFile()) {
 
         // Now build compound file
         Collection<String> oldFiles = IndexWriter.createCompoundFile(infoStream, directory, MergeState.CheckAbort.NONE, newSegment.info, context);

@@ -17,6 +17,16 @@
 
 package org.apache.solr.core;
 
+import org.apache.commons.io.FileUtils;
+import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.util._TestUtil;
+import org.apache.solr.SolrTestCaseJ4;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.xml.sax.SAXException;
+
+import javax.xml.parsers.ParserConfigurationException;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -24,17 +34,10 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
 
-import javax.xml.parsers.ParserConfigurationException;
-
-import org.apache.commons.io.FileUtils;
-import org.apache.lucene.util.IOUtils;
-import org.apache.solr.SolrTestCaseJ4;
-import org.apache.solr.common.SolrException;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.xml.sax.SAXException;
+import org.apache.lucene.util.Constants;
 
 public class TestCoreContainer extends SolrTestCaseJ4 {
 
@@ -68,9 +71,10 @@ public class TestCoreContainer extends SolrTestCaseJ4 {
     assertTrue("Failed to mkdirs workDir", solrHomeDirectory.mkdirs());
 
     FileUtils.copyDirectory(new File(SolrTestCaseJ4.TEST_HOME()), solrHomeDirectory);
+    System.out.println("Using solrconfig from " + new File(SolrTestCaseJ4.TEST_HOME()).getAbsolutePath());
 
     CoreContainer ret = new CoreContainer(solrHomeDirectory.getAbsolutePath());
-    ret.load(solrHomeDirectory.getAbsolutePath(), new File(solrHomeDirectory, "solr.xml"));
+    ret.load();
     return ret;
   }
 
@@ -88,7 +92,7 @@ public class TestCoreContainer extends SolrTestCaseJ4 {
       CoreDescriptor descriptor2 = new CoreDescriptor(cores, "core2", "./collection1");
       SolrCore core2 = cores.create(descriptor2);
       
-      assertSame(core1.getSchema(), core2.getSchema());
+      assertSame(core1.getLatestSchema(), core2.getLatestSchema());
       
       core1.close();
       core2.close();
@@ -159,13 +163,13 @@ public class TestCoreContainer extends SolrTestCaseJ4 {
       SolrCore template = null;
       try {
         template = cores.getCore("collection1");
-        instDir = template.getCoreDescriptor().getInstanceDir();
+        instDir = template.getCoreDescriptor().getRawInstanceDir();
       } finally {
         if (null != template) template.close();
       }
     }
     
-    final File instDirFile = new File(instDir);
+    final File instDirFile = new File(cores.getSolrHome(), instDir);
     assertTrue("instDir doesn't exist: " + instDir, instDirFile.exists());
     
     // sanity check the basic persistence of the default init
@@ -260,14 +264,8 @@ public class TestCoreContainer extends SolrTestCaseJ4 {
     File solrHomeDirectory = new File(TEMP_DIR, this.getClass().getName()
         + "_noCores");
     SetUpHome(solrHomeDirectory, EMPTY_SOLR_XML);
-    CoreContainer.Initializer init = new CoreContainer.Initializer();
-    CoreContainer cores = null;
-    try {
-      cores = init.initialize();
-    }
-    catch(Exception e) {
-      fail("CoreContainer not created" + e.getMessage());
-    }
+    CoreContainer cores = new CoreContainer(solrHomeDirectory.getAbsolutePath());
+    cores.load();
     try {
       //assert zero cores
       assertEquals("There should not be cores", 0, cores.getCores().size());
@@ -335,28 +333,57 @@ public class TestCoreContainer extends SolrTestCaseJ4 {
       cc.shutdown();
     }
   }
+
+  @Test
+  public void testSharedLib() throws Exception {
+    assumeTrue("needs URLClassLoader.close() support", Constants.WINDOWS == false || Constants.JRE_IS_MINIMUM_JAVA7);
+    File tmpRoot = _TestUtil.getTempDir("testSharedLib");
+
+    File lib = new File(tmpRoot, "lib");
+    lib.mkdirs();
+
+    JarOutputStream jar1 = new JarOutputStream(new FileOutputStream(new File(lib, "jar1.jar")));
+    jar1.putNextEntry(new JarEntry("defaultSharedLibFile"));
+    jar1.closeEntry();
+    jar1.close();
+
+    File customLib = new File(tmpRoot, "customLib");
+    customLib.mkdirs();
+
+    JarOutputStream jar2 = new JarOutputStream(new FileOutputStream(new File(customLib, "jar2.jar")));
+    jar2.putNextEntry(new JarEntry("customSharedLibFile"));
+    jar2.closeEntry();
+    jar2.close();
+
+    FileUtils.writeStringToFile(new File(tmpRoot, "default-lib-solr.xml"), "<solr><cores/></solr>", "UTF-8");
+    FileUtils.writeStringToFile(new File(tmpRoot, "explicit-lib-solr.xml"), "<solr sharedLib=\"lib\"><cores/></solr>", "UTF-8");
+    FileUtils.writeStringToFile(new File(tmpRoot, "custom-lib-solr.xml"), "<solr sharedLib=\"customLib\"><cores/></solr>", "UTF-8");
+
+    final CoreContainer cc1 = CoreContainer.createAndLoad(tmpRoot.getAbsolutePath(), new File(tmpRoot, "default-lib-solr.xml"));
+    try {
+      cc1.loader.openResource("defaultSharedLibFile").close();
+    } finally {
+      cc1.shutdown();
+    }
+
+    final CoreContainer cc2 = CoreContainer.createAndLoad(tmpRoot.getAbsolutePath(), new File(tmpRoot, "explicit-lib-solr.xml"));
+    try {
+      cc2.loader.openResource("defaultSharedLibFile").close();
+    } finally {
+      cc2.shutdown();
+    }
+
+    final CoreContainer cc3 = CoreContainer.createAndLoad(tmpRoot.getAbsolutePath(), new File(tmpRoot, "custom-lib-solr.xml"));
+    try {
+      cc3.loader.openResource("customSharedLibFile").close();
+    } finally {
+      cc3.shutdown();
+    }
+  }
   
   private static final String EMPTY_SOLR_XML ="<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n" +
       "<solr persistent=\"false\">\n" +
       "  <cores adminPath=\"/admin/cores\" transientCacheSize=\"32\" >\n" +
       "  </cores>\n" +
       "</solr>";
-
-  private static final String SOLR_XML_SAME_NAME ="<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n" +
-      "<solr persistent=\"false\">\n" +
-      "  <cores adminPath=\"/admin/cores\" transientCacheSize=\"32\" >\n" +
-      "    <core name=\"core1\" instanceDir=\"core1\" dataDir=\"core1\"/> \n" +
-      "    <core name=\"core1\" instanceDir=\"core2\" dataDir=\"core2\"/> \n " +
-      "  </cores>\n" +
-      "</solr>";
-
-  private static final String SOLR_XML_SAME_DATADIR ="<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n" +
-      "<solr persistent=\"false\">\n" +
-      "  <cores adminPath=\"/admin/cores\" transientCacheSize=\"32\" >\n" +
-      "    <core name=\"core2\" instanceDir=\"core2\" dataDir=\"../samedatadir\" schema=\"schema-tiny.xml\" config=\"solrconfig-minimal.xml\" /> \n" +
-      "    <core name=\"core1\" instanceDir=\"core2\" dataDir=\"../samedatadir\" schema=\"schema-tiny.xml\" config=\"solrconfig-minimal.xml\"  /> \n " +
-      "  </cores>\n" +
-      "</solr>";
-
-
 }

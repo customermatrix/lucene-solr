@@ -28,11 +28,15 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.lucene.analysis.MockAnalyzer;
+import org.apache.lucene.codecs.Codec;
+import org.apache.lucene.codecs.DocValuesFormat;
+import org.apache.lucene.codecs.perfield.PerFieldDocValuesFormat;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.facet.FacetTestCase;
 import org.apache.lucene.facet.FacetTestUtils;
+import org.apache.lucene.facet.codecs.facet42.Facet42DocValuesFormat;
 import org.apache.lucene.facet.index.FacetFields;
 import org.apache.lucene.facet.params.FacetIndexingParams;
 import org.apache.lucene.facet.params.FacetSearchParams;
@@ -58,6 +62,7 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.SortField.Type;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
@@ -65,9 +70,11 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.FixedBitSet;
+import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.util.InPlaceMergeSorter;
 import org.apache.lucene.util.InfoStream;
-import org.apache.lucene.util.SorterTemplate;
 import org.apache.lucene.util._TestUtil;
+import org.junit.Test;
 
 public class TestDrillSideways extends FacetTestCase {
 
@@ -120,12 +127,14 @@ public class TestDrillSideways extends FacetTestCase {
         new CountFacetRequest(new CategoryPath("Publish Date"), 10), 
         new CountFacetRequest(new CategoryPath("Author"), 10));
 
+    DrillSideways ds = new DrillSideways(searcher, taxoReader);
+
     // Simple case: drill-down on a single field; in this
     // case the drill-sideways + drill-down counts ==
     // drill-down of just the query: 
     DrillDownQuery ddq = new DrillDownQuery(fsp.indexingParams, new MatchAllDocsQuery());
     ddq.add(new CategoryPath("Author", "Lisa"));
-    DrillSidewaysResult r = new DrillSideways(searcher, taxoReader).search(null, ddq, 10, fsp);
+    DrillSidewaysResult r = ds.search(null, ddq, 10, fsp);
 
     assertEquals(2, r.hits.totalHits);
     assertEquals(2, r.facetResults.size());
@@ -143,7 +152,7 @@ public class TestDrillSideways extends FacetTestCase {
     // just the query:
     ddq = new DrillDownQuery(fsp.indexingParams);
     ddq.add(new CategoryPath("Author", "Lisa"));
-    r = new DrillSideways(searcher, taxoReader).search(null, ddq, 10, fsp);
+    r = ds.search(null, ddq, 10, fsp);
 
     assertEquals(2, r.hits.totalHits);
     assertEquals(2, r.facetResults.size());
@@ -162,7 +171,7 @@ public class TestDrillSideways extends FacetTestCase {
     // but OR of two values
     ddq = new DrillDownQuery(fsp.indexingParams, new MatchAllDocsQuery());
     ddq.add(new CategoryPath("Author", "Lisa"), new CategoryPath("Author", "Bob"));
-    r = new DrillSideways(searcher, taxoReader).search(null, ddq, 10, fsp);
+    r = ds.search(null, ddq, 10, fsp);
     assertEquals(3, r.hits.totalHits);
     assertEquals(2, r.facetResults.size());
     // Publish Date is only drill-down: Lisa and Bob
@@ -177,7 +186,7 @@ public class TestDrillSideways extends FacetTestCase {
     ddq = new DrillDownQuery(fsp.indexingParams, new MatchAllDocsQuery());
     ddq.add(new CategoryPath("Author", "Lisa"));
     ddq.add(new CategoryPath("Publish Date", "2010"));
-    r = new DrillSideways(searcher, taxoReader).search(null, ddq, 10, fsp);
+    r = ds.search(null, ddq, 10, fsp);
     assertEquals(1, r.hits.totalHits);
     assertEquals(2, r.facetResults.size());
     // Publish Date is drill-sideways + drill-down: Lisa
@@ -195,7 +204,7 @@ public class TestDrillSideways extends FacetTestCase {
     ddq.add(new CategoryPath("Author", "Lisa"),
             new CategoryPath("Author", "Bob"));
     ddq.add(new CategoryPath("Publish Date", "2010"));
-    r = new DrillSideways(searcher, taxoReader).search(null, ddq, 10, fsp);
+    r = ds.search(null, ddq, 10, fsp);
     assertEquals(2, r.hits.totalHits);
     assertEquals(2, r.facetResults.size());
     // Publish Date is both drill-sideways + drill-down:
@@ -211,7 +220,7 @@ public class TestDrillSideways extends FacetTestCase {
     fsp = new FacetSearchParams(
         new CountFacetRequest(new CategoryPath("Publish Date"), 10), 
         new CountFacetRequest(new CategoryPath("Foobar"), 10));
-    r = new DrillSideways(searcher, taxoReader).search(null, ddq, 10, fsp);
+    r = ds.search(null, ddq, 10, fsp);
     assertEquals(0, r.hits.totalHits);
     assertEquals(2, r.facetResults.size());
     assertEquals("Publish Date:", toString(r.facetResults.get(0)));
@@ -224,7 +233,7 @@ public class TestDrillSideways extends FacetTestCase {
     fsp = new FacetSearchParams(
         new CountFacetRequest(new CategoryPath("Publish Date"), 10), 
         new CountFacetRequest(new CategoryPath("Author"), 10));
-    r = new DrillSideways(searcher, taxoReader).search(null, ddq, 10, fsp);
+    r = ds.search(null, ddq, 10, fsp);
     assertEquals(2, r.hits.totalHits);
     assertEquals(2, r.facetResults.size());
     // Publish Date is only drill-down, and Lisa published
@@ -242,7 +251,7 @@ public class TestDrillSideways extends FacetTestCase {
             new CategoryPath("Author", "Tom"));
     fsp = new FacetSearchParams(
               new CountFacetRequest(new CategoryPath("Publish Date"), 10));
-    r = new DrillSideways(searcher, taxoReader).search(null, ddq, 10, fsp);
+    r = ds.search(null, ddq, 10, fsp);
     assertEquals(2, r.hits.totalHits);
     assertEquals(1, r.facetResults.size());
     // Publish Date is only drill-down, and Lisa published
@@ -255,7 +264,7 @@ public class TestDrillSideways extends FacetTestCase {
         new CountFacetRequest(new CategoryPath("Author"), 10));
     ddq = new DrillDownQuery(fsp.indexingParams, new TermQuery(new Term("foobar", "baz")));
     ddq.add(new CategoryPath("Author", "Lisa"));
-    r = new DrillSideways(searcher, taxoReader).search(null, ddq, 10, fsp);
+    r = ds.search(null, ddq, 10, fsp);
 
     assertEquals(0, r.hits.totalHits);
     assertEquals(2, r.facetResults.size());
@@ -423,6 +432,16 @@ public class TestDrillSideways extends FacetTestCase {
   public void testRandom() throws Exception {
 
     boolean canUseDV = defaultCodecSupportsSortedSet();
+
+    // TestRuleSetupAndRestoreClassEnv can sometimes
+    // randomly pick the non-general Facet42DocValuesFormat:
+    DocValuesFormat dvf = Codec.getDefault().docValuesFormat();
+    if (dvf instanceof PerFieldDocValuesFormat) {
+      dvf = ((PerFieldDocValuesFormat) dvf).getDocValuesFormatForField("$facets");
+    }
+    if (dvf instanceof Facet42DocValuesFormat) {
+      canUseDV = false;
+    }
 
     while (aChance == 0.0) {
       aChance = random().nextDouble();
@@ -592,8 +611,9 @@ public class TestDrillSideways extends FacetTestCase {
     w.close();
 
     final SortedSetDocValuesReaderState sortedSetDVState;
+    IndexSearcher s = newSearcher(r);
     if (doUseDV) {
-      sortedSetDVState = new SortedSetDocValuesReaderState(r);
+      sortedSetDVState = new SortedSetDocValuesReaderState(s.getIndexReader());
     } else {
       sortedSetDVState = null;
     }
@@ -605,8 +625,6 @@ public class TestDrillSideways extends FacetTestCase {
     // NRT open
     TaxonomyReader tr = new DirectoryTaxonomyReader(tw);
     tw.close();
-
-    IndexSearcher s = newSearcher(r);
 
     int numIters = atLeast(10);
 
@@ -642,6 +660,7 @@ public class TestDrillSideways extends FacetTestCase {
       String[][] drillDowns = new String[numDims][];
 
       int count = 0;
+      boolean anyMultiValuedDrillDowns = false;
       while (count < numDrillDown) {
         int dim = random().nextInt(numDims);
         if (drillDowns[dim] == null) {
@@ -651,6 +670,7 @@ public class TestDrillSideways extends FacetTestCase {
           } else {
             int orCount = _TestUtil.nextInt(random(), 1, Math.min(5, dimValues[dim].length));
             drillDowns[dim] = new String[orCount];
+            anyMultiValuedDrillDowns |= orCount > 1;
             for(int i=0;i<orCount;i++) {
               while (true) {
                 String value = dimValues[dim][random().nextInt(dimValues[dim].length)];
@@ -748,6 +768,22 @@ public class TestDrillSideways extends FacetTestCase {
                                return false;
                              }
                            }, fsp);
+
+      // Also separately verify that DS respects the
+      // scoreSubDocsAtOnce method, to ensure that all
+      // subScorers are on the same docID:
+      if (!anyMultiValuedDrillDowns) {
+        // Can only do this test when there are no OR'd
+        // drill-down values, beacuse in that case it's
+        // easily possible for one of the DD terms to be on
+        // a future docID:
+        new DrillSideways(s, tr) {
+          @Override
+          protected boolean scoreSubDocsAtOnce() {
+            return true;
+          }
+        }.search(ddq, new AssertingSubDocsAtOnceCollector(), fsp);
+      }
 
       SimpleFacetResult expected = slowDrillSidewaysSearch(s, requests, docs, contentToken, drillDowns, dimValues, filter);
 
@@ -855,9 +891,7 @@ public class TestDrillSideways extends FacetTestCase {
 
     // Naive (on purpose, to reduce bug in tester/gold):
     // sort all ids, then return top N slice:
-    new SorterTemplate() {
-
-      private int pivot;
+    new InPlaceMergeSorter() {
 
       @Override
       protected void swap(int i, int j) {
@@ -881,26 +915,7 @@ public class TestDrillSideways extends FacetTestCase {
         }
       }
 
-      @Override
-      protected void setPivot(int i) {
-        pivot = ids[i];
-      }
-
-      @Override
-      protected int comparePivot(int j) {
-        int counti = counts[pivot];
-        int countj = counts[ids[j]];
-        // Sort by count descending...
-        if (counti > countj) {
-          return -1;
-        } else if (counti < countj) {
-          return 1;
-        } else {
-          // ... then by ord ascending:
-          return new BytesRef(values[pivot]).compareTo(new BytesRef(values[ids[j]]));
-        }
-      }
-    }.mergeSort(0, ids.length-1);
+    }.sort(0, ids.length);
 
     if (topN > ids.length) {
       topN = ids.length;
@@ -1144,6 +1159,34 @@ public class TestDrillSideways extends FacetTestCase {
       b.append((int) childNode.value);
     }
     return b.toString();
+  }
+  
+  @Test
+  public void testEmptyIndex() throws Exception {
+    // LUCENE-5045: make sure DrillSideways works with an empty index
+    Directory dir = newDirectory();
+    Directory taxoDir = newDirectory();
+    writer = new RandomIndexWriter(random(), dir);
+    taxoWriter = new DirectoryTaxonomyWriter(taxoDir, IndexWriterConfig.OpenMode.CREATE);
+    IndexSearcher searcher = newSearcher(writer.getReader());
+    writer.close();
+    TaxonomyReader taxoReader = new DirectoryTaxonomyReader(taxoWriter);
+    taxoWriter.close();
+
+    // Count "Author"
+    FacetSearchParams fsp = new FacetSearchParams(new CountFacetRequest(new CategoryPath("Author"), 10));
+
+    DrillSideways ds = new DrillSideways(searcher, taxoReader);
+    DrillDownQuery ddq = new DrillDownQuery(fsp.indexingParams, new MatchAllDocsQuery());
+    ddq.add(new CategoryPath("Author", "Lisa"));
+    
+    DrillSidewaysResult r = ds.search(null, ddq, 10, fsp); // this used to fail on IllegalArgEx
+    assertEquals(0, r.hits.totalHits);
+
+    r = ds.search(ddq, null, null, 10, new Sort(new SortField("foo", Type.INT)), false, false, fsp); // this used to fail on IllegalArgEx
+    assertEquals(0, r.hits.totalHits);
+    
+    IOUtils.close(searcher.getIndexReader(), taxoReader, dir, taxoDir);
   }
 }
 

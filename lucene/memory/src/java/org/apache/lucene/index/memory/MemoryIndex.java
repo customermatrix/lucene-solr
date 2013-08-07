@@ -18,7 +18,6 @@ package org.apache.lucene.index.memory;
  */
 
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
@@ -291,7 +290,7 @@ public class MemoryIndex {
     
     TokenStream stream;
     try {
-      stream = analyzer.tokenStream(fieldName, new StringReader(text));
+      stream = analyzer.tokenStream(fieldName, text);
     } catch (IOException ex) {
       throw new RuntimeException(ex);
     }
@@ -572,7 +571,7 @@ public class MemoryIndex {
       entries[i] = iter.next();
     }
     
-    if (size > 1) ArrayUtil.quickSort(entries, termComparator);
+    if (size > 1) ArrayUtil.introSort(entries, termComparator);
     return entries;
   }
   

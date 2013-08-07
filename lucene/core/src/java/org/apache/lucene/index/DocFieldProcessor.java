@@ -144,15 +144,6 @@ final class DocFieldProcessor extends DocConsumer {
     return fields;
   }
 
-  /** In flush we reset the fieldHash to not maintain per-field state
-   *  across segments */
-  @Override
-  void doAfterFlush() {
-    fieldHash = new DocFieldProcessorPerField[2];
-    hashMask = 1;
-    totalFieldCount = 0;
-  }
-
   private void rehash() {
     final int newHashSize = (fieldHash.length*2);
     assert newHashSize > fieldHash.length;
@@ -248,7 +239,7 @@ final class DocFieldProcessor extends DocConsumer {
     // sort the subset of fields that have vectors
     // enabled; we could save [small amount of] CPU
     // here.
-    ArrayUtil.quickSort(fields, 0, fieldCount, fieldsComp);
+    ArrayUtil.introSort(fields, 0, fieldCount, fieldsComp);
     for(int i=0;i<fieldCount;i++) {
       final DocFieldProcessorPerField perField = fields[i];
       perField.consumer.processFields(perField.fields, perField.fieldCount);

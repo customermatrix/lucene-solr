@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
-import java.io.StringReader;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -259,7 +258,7 @@ public class MemoryIndexTest extends BaseTokenStreamTestCase {
   private Analyzer randomAnalyzer() {
     switch(random().nextInt(4)) {
       case 0: return new MockAnalyzer(random(), MockTokenizer.SIMPLE, true);
-      case 1: return new MockAnalyzer(random(), MockTokenizer.SIMPLE, true, MockTokenFilter.ENGLISH_STOPSET, true);
+      case 1: return new MockAnalyzer(random(), MockTokenizer.SIMPLE, true, MockTokenFilter.ENGLISH_STOPSET);
       case 2: return new Analyzer() {
         @Override
         protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
@@ -378,7 +377,7 @@ public class MemoryIndexTest extends BaseTokenStreamTestCase {
     SpanQuery wrappedquery = new SpanMultiTermQueryWrapper<RegexpQuery>(regex);
         
     MemoryIndex mindex = new MemoryIndex(random().nextBoolean(),  random().nextInt(50) * 1024 * 1024);
-    mindex.addField("field", new MockAnalyzer(random()).tokenStream("field", new StringReader("hello there")));
+    mindex.addField("field", new MockAnalyzer(random()).tokenStream("field", "hello there"));
 
     // This throws an NPE
     assertEquals(0, mindex.search(wrappedquery), 0.00001f);
@@ -390,7 +389,7 @@ public class MemoryIndexTest extends BaseTokenStreamTestCase {
     SpanQuery wrappedquery = new SpanOrQuery(new SpanMultiTermQueryWrapper<RegexpQuery>(regex));
 
     MemoryIndex mindex = new MemoryIndex(random().nextBoolean(),  random().nextInt(50) * 1024 * 1024);
-    mindex.addField("field", new MockAnalyzer(random()).tokenStream("field", new StringReader("hello there")));
+    mindex.addField("field", new MockAnalyzer(random()).tokenStream("field", "hello there"));
 
     // This passes though
     assertEquals(0, mindex.search(wrappedquery), 0.00001f);

@@ -22,15 +22,24 @@ import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.rest.GETable;
+import org.apache.solr.rest.POSTable;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.SchemaField;
+import org.noggit.ObjectBuilder;
+import org.restlet.data.MediaType;
 import org.restlet.representation.Representation;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
@@ -39,22 +48,22 @@ import java.util.TreeSet;
  * <p/>
  * Two query parameters are supported:
  * <ul>
- *   <li>
- *     "fl": a comma- and/or space-separated list of fields to send properties
- *     for in the response, rather than the default: all of them.
- *   </li>
- *   <li>
- *     "includeDynamic": if the "fl" parameter is specified, matching dynamic
- *     fields are included in the response and identified with the "dynamicBase"
- *     property.  If the "fl" parameter is not specified, the "includeDynamic"
- *     query parameter is ignored.
- *   </li>
+ * <li>
+ * "fl": a comma- and/or space-separated list of fields to send properties
+ * for in the response, rather than the default: all of them.
+ * </li>
+ * <li>
+ * "includeDynamic": if the "fl" parameter is specified, matching dynamic
+ * fields are included in the response and identified with the "dynamicBase"
+ * property.  If the "fl" parameter is not specified, the "includeDynamic"
+ * query parameter is ignored.
+ * </li>
  * </ul>
  */
-public class FieldCollectionResource extends BaseFieldResource implements GETable {
+public class FieldCollectionResource extends BaseFieldResource implements GETable, POSTable {
   private static final Logger log = LoggerFactory.getLogger(FieldCollectionResource.class);
   private boolean includeDynamic;
-  
+
   public FieldCollectionResource() {
     super();
   }
@@ -97,6 +106,81 @@ public class FieldCollectionResource extends BaseFieldResource implements GETabl
         }
       }
       getSolrResponse().add(IndexSchema.FIELDS, props);
+    } catch (Exception e) {
+      getSolrResponse().setException(e);
+    }
+    handlePostExecution(log);
+
+    return new SolrOutputRepresentation();
+  }
+
+  @Override
+  public Representation post(Representation entity) {
+    try {
+      if (!getSchema().isMutable()) {
+        final String message = "This IndexSchema is not mutable.";
+        throw new SolrException(ErrorCode.BAD_REQUEST, message);
+      } else {
+        if (null == entity.getMediaType()) {
+          entity.setMediaType(MediaType.APPLICATION_JSON);
+        }
+        if (!entity.getMediaType().equals(MediaType.APPLICATION_JSON, true)) {
+          String message = "Only media type " + MediaType.APPLICATION_JSON.toString() + " is accepted."
+              + "  Request has media type " + entity.getMediaType().toString() + ".";
+          log.error(message);
+          throw new SolrException(ErrorCode.BAD_REQUEST, message);
+        } else {
+          Object object = ObjectBuilder.fromJSON(entity.getText());
+          if ( ! (object instanceof List)) {
+            String message = "Invalid JSON type " + object.getClass().getName() + ", expected List of the form"
+                + " (ignore the backslashes): [{\"name\":\"foo\",\"type\":\"text_general\", ...}, {...}, ...]";
+            log.error(message);
+            throw new SolrException(ErrorCode.BAD_REQUEST, message);
+          } else {
+            List<Map<String, Object>> list = (List<Map<String, Object>>) object;
+            List<SchemaField> newFields = new ArrayList<SchemaField>();
+            IndexSchema oldSchema = getSchema();
+            Map<String, Collection<String>> copyFields = new HashMap<String, Collection<String>>();
+            Set<String> malformed = new HashSet<String>();
+            for (Map<String, Object> map : list) {
+              String fieldName = (String) map.remove(IndexSchema.NAME);
+              if (null == fieldName) {
+                String message = "Missing '" + IndexSchema.NAME + "' mapping.";
+                log.error(message);
+                throw new SolrException(ErrorCode.BAD_REQUEST, message);
+              }
+              String fieldType = (String) map.remove(IndexSchema.TYPE);
+              if (null == fieldType) {
+                String message = "Missing '" + IndexSchema.TYPE + "' mapping.";
+                log.error(message);
+                throw new SolrException(ErrorCode.BAD_REQUEST, message);
+              }
+              // copyFields:"comma separated list of destination fields"
+              Object copies = map.get(IndexSchema.COPY_FIELDS);
+              List<String> copyTo = null;
+              if (copies != null) {
+                if (copies instanceof List){
+                  copyTo = (List<String>) copies;
+                } else if (copies instanceof String){
+                  copyTo = Collections.singletonList(copies.toString());
+                } else {
+                  String message = "Invalid '" + IndexSchema.COPY_FIELDS + "' type.";
+                  log.error(message);
+                  throw new SolrException(ErrorCode.BAD_REQUEST, message);
+                }
+              }
+              if (copyTo != null) {
+                map.remove(IndexSchema.COPY_FIELDS);
+                copyFields.put(fieldName, copyTo);
+              }
+              newFields.add(oldSchema.newField(fieldName, fieldType, map));
+            }
+            IndexSchema newSchema = oldSchema.addFields(newFields, copyFields);
+
+            getSolrCore().setLatestSchema(newSchema);
+          }
+        }
+      }
     } catch (Exception e) {
       getSolrResponse().setException(e);
     }

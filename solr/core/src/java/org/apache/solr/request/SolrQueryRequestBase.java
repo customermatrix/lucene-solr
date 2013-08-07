@@ -17,50 +17,50 @@
 
 package org.apache.solr.request;
 
+import org.apache.solr.search.SolrIndexSearcher;
+import org.apache.solr.util.RefCounted;
+import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.ContentStream;
 import org.apache.solr.core.SolrCore;
-import org.apache.solr.schema.IndexSchema;
-import org.apache.solr.schema.VirtualIndexSchema;
-import org.apache.solr.search.SolrIndexSearcher;
-import org.apache.solr.util.RefCounted;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 
 /**
  * Base implementation of <code>SolrQueryRequest</code> that provides some
  * convenience methods for accessing parameters, and manages an IndexSearcher
  * reference.
- * <p/>
+ *
  * <p>
  * The <code>close()</code> method must be called on any instance of this
  * class once it is no longer in use.
  * </p>
+ *
+ *
+ *
  */
 public abstract class SolrQueryRequestBase implements SolrQueryRequest {
   public static final String COLLECTION_PARAM = "collection";
   public static final String API_CORE_NAME = "api";
   protected final SolrCore core;
   protected final SolrParams origParams;
+  protected volatile IndexSchema schema;
   protected SolrParams params;
-  protected Map<Object, Object> context;
+  protected Map<Object,Object> context;
   protected Iterable<ContentStream> streams;
   protected VirtualIndexSchema virtualSchema;
 
   public SolrQueryRequestBase(SolrCore core, SolrParams params) {
     this.core = core;
+    this.schema = null == core ? null : core.getLatestSchema();
     this.params = this.origParams = params;
   }
 
   @Override
-  public Map<Object, Object> getContext() {
+  public Map<Object,Object> getContext() {
     // SolrQueryRequest as a whole isn't thread safe, and this isn't either.
-    if (context == null) context = new HashMap<Object, Object>();
+    if (context==null) context = new HashMap<Object,Object>();
     return context;
   }
 
@@ -79,8 +79,7 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
     this.params = params;
   }
 
-  protected final long startTime = System.currentTimeMillis();
-
+  protected final long startTime=System.currentTimeMillis();
   // Get the start time of this request in milliseconds
   @Override
   public long getStartTime() {
@@ -89,15 +88,14 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
 
   // The index searcher associated with this request
   protected RefCounted<SolrIndexSearcher> searcherHolder;
-
   @Override
   public SolrIndexSearcher getSearcher() {
-    if (core == null) return null;//a request for a core admin will no have a core
+    if(core == null) return null;//a request for a core admin will not have a core
     // should this reach out and get a searcher from the core singleton, or
     // should the core populate one in a factory method to create requests?
     // or there could be a setSearcher() method that Solr calls
 
-    if (searcherHolder == null) {
+    if (searcherHolder==null) {
       searcherHolder = core.getSearcher();
     }
 
@@ -146,7 +144,12 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
     }
 
     //a request for a core admin will no have a core
-    return core == null ? null : core.getSchema();
+    return schema;
+  }
+
+  @Override
+  public void updateSchemaToLatest() {
+    schema = core.getLatestSchema();
   }
 
   private List<String> getCollections() {
@@ -166,22 +169,21 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
    */
   @Override
   public void close() {
-    if (searcherHolder != null) {
+    if (searcherHolder!=null) {
       searcherHolder.decref();
       searcherHolder = null;
     }
   }
 
-  /**
-   * A Collection of ContentStreams passed to the request
+  /** A Collection of ContentStreams passed to the request
    */
   @Override
   public Iterable<ContentStream> getContentStreams() {
-    return streams;
+    return streams; 
   }
-
-  public void setContentStreams(Iterable<ContentStream> s) {
-    streams = s;
+  
+  public void setContentStreams( Iterable<ContentStream> s ) {
+    streams = s; 
   }
 
   @Override

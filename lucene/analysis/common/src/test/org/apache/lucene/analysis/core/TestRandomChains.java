@@ -54,44 +54,37 @@ import org.apache.lucene.analysis.MockTokenizer;
 import org.apache.lucene.analysis.TokenFilter;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.Tokenizer;
-import org.apache.lucene.analysis.miscellaneous.LimitTokenPositionFilter;
-import org.apache.lucene.analysis.wikipedia.WikipediaTokenizer;
 import org.apache.lucene.analysis.ValidatingTokenFilter;
 import org.apache.lucene.analysis.charfilter.NormalizeCharMap;
 import org.apache.lucene.analysis.cjk.CJKBigramFilter;
 import org.apache.lucene.analysis.commongrams.CommonGramsFilter;
 import org.apache.lucene.analysis.commongrams.CommonGramsQueryFilter;
-import org.apache.lucene.analysis.compound.DictionaryCompoundWordTokenFilter;
 import org.apache.lucene.analysis.compound.HyphenationCompoundWordTokenFilter;
 import org.apache.lucene.analysis.compound.TestCompoundWordTokenFilter;
 import org.apache.lucene.analysis.compound.hyphenation.HyphenationTree;
 import org.apache.lucene.analysis.hunspell.HunspellDictionary;
 import org.apache.lucene.analysis.hunspell.HunspellDictionaryTest;
 import org.apache.lucene.analysis.miscellaneous.HyphenatedWordsFilter;
-import org.apache.lucene.analysis.miscellaneous.KeepWordFilter;
-import org.apache.lucene.analysis.miscellaneous.LengthFilter;
 import org.apache.lucene.analysis.miscellaneous.LimitTokenCountFilter;
+import org.apache.lucene.analysis.miscellaneous.LimitTokenPositionFilter;
 import org.apache.lucene.analysis.miscellaneous.StemmerOverrideFilter;
-import org.apache.lucene.analysis.miscellaneous.TrimFilter;
-import org.apache.lucene.analysis.miscellaneous.WordDelimiterFilter;
 import org.apache.lucene.analysis.miscellaneous.StemmerOverrideFilter.StemmerOverrideMap;
+import org.apache.lucene.analysis.miscellaneous.WordDelimiterFilter;
 import org.apache.lucene.analysis.ngram.EdgeNGramTokenFilter;
-import org.apache.lucene.analysis.ngram.EdgeNGramTokenizer;
-import org.apache.lucene.analysis.ngram.NGramTokenFilter;
-import org.apache.lucene.analysis.ngram.NGramTokenizer;
+import org.apache.lucene.analysis.ngram.Lucene43EdgeNGramTokenizer;
 import org.apache.lucene.analysis.path.PathHierarchyTokenizer;
 import org.apache.lucene.analysis.path.ReversePathHierarchyTokenizer;
 import org.apache.lucene.analysis.payloads.IdentityEncoder;
 import org.apache.lucene.analysis.payloads.PayloadEncoder;
-import org.apache.lucene.analysis.position.PositionFilter;
 import org.apache.lucene.analysis.snowball.TestSnowball;
 import org.apache.lucene.analysis.standard.StandardTokenizer;
 import org.apache.lucene.analysis.synonym.SynonymMap;
 import org.apache.lucene.analysis.th.ThaiWordFilter;
 import org.apache.lucene.analysis.util.CharArrayMap;
 import org.apache.lucene.analysis.util.CharArraySet;
-import org.apache.lucene.util.AttributeSource.AttributeFactory;
+import org.apache.lucene.analysis.wikipedia.WikipediaTokenizer;
 import org.apache.lucene.util.AttributeSource;
+import org.apache.lucene.util.AttributeSource.AttributeFactory;
 import org.apache.lucene.util.CharsRef;
 import org.apache.lucene.util.Rethrow;
 import org.apache.lucene.util.Version;
@@ -154,21 +147,6 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
           // Not broken: we forcefully add this, so we shouldn't
           // also randomly pick it:
           ValidatingTokenFilter.class,
-          // NOTE: these by themselves won't cause any 'basic assertions' to fail.
-          // but see https://issues.apache.org/jira/browse/LUCENE-3920, if any 
-          // tokenfilter that combines words (e.g. shingles) comes after them,
-          // this will create bogus offsets because their 'offsets go backwards',
-          // causing shingle or whatever to make a single token with a 
-          // startOffset thats > its endOffset
-          // (see LUCENE-3738 for a list of other offenders here)
-          // broken!
-          NGramTokenizer.class,
-          // broken!
-          NGramTokenFilter.class,
-          // broken!
-          EdgeNGramTokenizer.class,
-          // broken!
-          EdgeNGramTokenFilter.class,
           // broken!
           WordDelimiterFilter.class)) {
         for (Constructor<?> ctor : c.getConstructors()) {
@@ -185,62 +163,9 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
   private static final Map<Constructor<?>,Predicate<Object[]>> brokenOffsetsConstructors = new HashMap<Constructor<?>, Predicate<Object[]>>();
   static {
     try {
-      brokenOffsetsConstructors.put(
-          TrimFilter.class.getConstructor(TokenStream.class, boolean.class),
-          new Predicate<Object[]>() {
-            @Override
-            public boolean apply(Object[] args) {
-              assert args.length == 2;
-              return (Boolean) args[1]; // args are broken if updateOffsets is true
-            }
-          });
-      brokenOffsetsConstructors.put(
-          TypeTokenFilter.class.getConstructor(boolean.class, TokenStream.class, Set.class, boolean.class),
-          new Predicate<Object[]>() {
-            @Override
-            public boolean apply(Object[] args) {
-              assert args.length == 4;
-              // LUCENE-4065: only if you pass 'false' to enablePositionIncrements!
-              return !(Boolean) args[0];
-            }
-          });
-      brokenOffsetsConstructors.put(
-          TypeTokenFilter.class.getConstructor(boolean.class, TokenStream.class, Set.class),
-          new Predicate<Object[]>() {
-            @Override
-            public boolean apply(Object[] args) {
-              assert args.length == 3;
-              // LUCENE-4065: only if you pass 'false' to enablePositionIncrements!
-              return !(Boolean) args[0];
-            }
-          });
-      brokenOffsetsConstructors.put(
-          LengthFilter.class.getConstructor(boolean.class, TokenStream.class, int.class, int.class),
-          new Predicate<Object[]>() {
-            @Override
-            public boolean apply(Object[] args) {
-              assert args.length == 4;
-              // LUCENE-4065: only if you pass 'false' to enablePositionIncrements!
-              return !(Boolean) args[0];
-            }
-          });
-      brokenOffsetsConstructors.put(
-          KeepWordFilter.class.getConstructor(boolean.class, TokenStream.class, CharArraySet.class),
-          new Predicate<Object[]>() {
-            @Override
-            public boolean apply(Object[] args) {
-              assert args.length == 3;
-              // LUCENE-4065: only if you pass 'false' to enablePositionIncrements!
-              return !(Boolean) args[0];
-            }
-          });
       for (Class<?> c : Arrays.<Class<?>>asList(
           ReversePathHierarchyTokenizer.class,
           PathHierarchyTokenizer.class,
-          HyphenationCompoundWordTokenFilter.class,
-          DictionaryCompoundWordTokenFilter.class,
-          // TODO: corrumpts graphs (offset consistency check):
-          PositionFilter.class,
           // TODO: it seems to mess up offsets!?
           WikipediaTokenizer.class,
           // TODO: doesn't handle graph inputs
@@ -249,6 +174,8 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
           CJKBigramFilter.class,
           // TODO: doesn't handle graph inputs (or even look at positionIncrement)
           HyphenatedWordsFilter.class,
+          // TODO: LUCENE-4983
+          CommonGramsFilter.class,
           // TODO: doesn't handle graph inputs
           CommonGramsQueryFilter.class)) {
         for (Constructor<?> ctor : c.getConstructors()) {
@@ -470,6 +397,12 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
         return Pattern.compile("a");
       }
     });
+    
+    put(Pattern[].class, new ArgProducer() {
+      @Override public Object create(Random random) {
+        return new Pattern[] {Pattern.compile("([a-z]+)"), Pattern.compile("([0-9]+)")};
+      }
+    });
     put(PayloadEncoder.class, new ArgProducer() {
       @Override public Object create(Random random) {
         return new IdentityEncoder(); // the other encoders will throw exceptions if tokens arent numbers?
@@ -488,11 +421,11 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
         }
       }
     });
-    put(EdgeNGramTokenizer.Side.class, new ArgProducer() {
+    put(Lucene43EdgeNGramTokenizer.Side.class, new ArgProducer() {
       @Override public Object create(Random random) {
         return random.nextBoolean() 
-            ? EdgeNGramTokenizer.Side.FRONT 
-            : EdgeNGramTokenizer.Side.BACK;
+            ? Lucene43EdgeNGramTokenizer.Side.FRONT 
+            : Lucene43EdgeNGramTokenizer.Side.BACK;
       }
     });
     put(EdgeNGramTokenFilter.Side.class, new ArgProducer() {
