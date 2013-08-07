@@ -35,7 +35,6 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
-import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +47,30 @@ public abstract class ConfigSolr {
   public final static String SOLR_XML_FILE = "solr.xml";
 
   public static ConfigSolr fromFile(SolrResourceLoader loader, File configFile) {
+    log.info("Loading container configuration from {}", configFile.getAbsolutePath());
+
+    InputStream inputStream = null;
+
+    try {
+      if (!configFile.exists()) {
+        log.info("{} does not exist, using default configuration", configFile.getAbsolutePath());
+        inputStream = new ByteArrayInputStream(ConfigSolrXmlOld.DEF_SOLR_XML.getBytes(Charsets.UTF_8));
+      }
+      else {
+        inputStream = new FileInputStream(configFile);
+      }
+      return fromInputStream(loader, inputStream);
+    }
+    catch (Exception e) {
+      throw new SolrException(SolrException.ErrorCode.SERVER_ERROR,
+          "Could not load SOLR configuration", e);
+    }
+    finally {
+      IOUtils.closeQuietly(inputStream);
+    }
+  }
+
+  public static ConfigSolr fromFile2(SolrResourceLoader loader, File configFile) {
     log.info("Loading container configuration from {}", configFile.getAbsolutePath());
 
     InputStream inputStream = null;
@@ -88,6 +111,10 @@ public abstract class ConfigSolr {
 
   public static ConfigSolr fromSolrHome(SolrResourceLoader loader, String solrHome) {
     return fromFile(loader, new File(solrHome, SOLR_XML_FILE));
+  }
+
+  public static ConfigSolr fromSolrHome2(SolrResourceLoader loader, String solrHome) {
+    return fromFile2(loader, new File(solrHome, SOLR_XML_FILE));
   }
 
   public static ConfigSolr fromConfig(Config config) {
