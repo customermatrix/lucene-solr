@@ -239,7 +239,7 @@ public class CoreContainer
     
     String leaderVoteWait = cfg.get(ConfigSolr.CfgProp.SOLR_LEADERVOTEWAIT, LEADER_VOTE_WAIT);
 
-    adminHandler = cfg.get(ConfigSolr.CfgProp.SOLR_ADMINHANDLER, null);
+    adminHandler = initAdminHandler();
     managementPath = cfg.get(ConfigSolr.CfgProp.SOLR_MANAGEMENTPATH, null);
 
     transientCacheSize = cfg.getInt(ConfigSolr.CfgProp.SOLR_TRANSIENTCACHESIZE, Integer.MAX_VALUE);
@@ -955,6 +955,10 @@ public class CoreContainer
 
   protected ShardHandlerFactory initShardHandlerFactory() {
     return ShardHandlerFactory.newInstance(cfg.getShardHandlerFactoryPluginInfo(), loader);
+  }
+
+  protected String initAdminHandler() {
+    return cfg.get(ConfigSolr.CfgProp.SOLR_ADMINHANDLER, null);
   }
 
   /**

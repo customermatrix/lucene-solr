@@ -35,6 +35,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,7 +55,7 @@ public abstract class ConfigSolr {
     try {
       if (!configFile.exists()) {
         log.info("{} does not exist, using default configuration", configFile.getAbsolutePath());
-        inputStream = new ByteArrayInputStream(ConfigSolrXmlOld.DEF_SOLR_XML.getBytes(Charsets.UTF_8));
+        inputStream = new ByteArrayInputStream("<solr/>".getBytes(Charsets.UTF_8));
       }
       else {
         inputStream = new FileInputStream(configFile);
