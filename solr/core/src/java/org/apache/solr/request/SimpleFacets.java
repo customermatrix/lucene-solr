@@ -328,32 +328,41 @@ public class SimpleFacets {
     searcher.search(facetQuery, mainQueryFilter, collector);
     return collector.getGroupCount();
   }
-
+  
   enum FacetMethod {
     ENUM, FC, FCS;
   }
-
+  
   public NamedList<Integer> getTermCounts(String field) throws IOException {
+    return getTermCountsWithSpecifiedMincount(field,params.getFieldInt(field, FacetParams.FACET_MINCOUNT));
+  }
+  
+  public NamedList<Integer> getTermCountsForPivots(String field) throws IOException {
+    Integer count = (params.getFieldInt(field, FacetParams.FACET_PIVOT_MINCOUNT)!=null) ? params.getFieldInt(field, FacetParams.FACET_PIVOT_MINCOUNT) : 1;
+    return getTermCountsWithSpecifiedMincount(field,count);
+  }
+  
+  public NamedList<Integer> getTermCountsWithSpecifiedMincount(String field, Integer incomingMinCount) throws IOException{
+    return getTermCountsWithMincountAndLimit(field,incomingMinCount,params.getFieldInt(field, FacetParams.FACET_LIMIT, 100));
+  }
+  
+  public NamedList<Integer> getTermCountsWithMincountAndLimit(String field, Integer incomingMinCount, int limit) throws IOException{  
     int offset = params.getFieldInt(field, FacetParams.FACET_OFFSET, 0);
-    int limit = params.getFieldInt(field, FacetParams.FACET_LIMIT, 100);
     if (limit == 0) return new NamedList<Integer>();
-    Integer mincount = params.getFieldInt(field, FacetParams.FACET_MINCOUNT);
-    if (mincount==null) {
+    if (incomingMinCount==null) {
       Boolean zeros = params.getFieldBool(field, FacetParams.FACET_ZEROS);
-      // mincount = (zeros!=null && zeros) ? 0 : 1;
-      mincount = (zeros!=null && !zeros) ? 1 : 0;
-      // current default is to include zeros.
+      incomingMinCount = (zeros!=null && !zeros) ? 1 : 0;
     }
     boolean missing = params.getFieldBool(field, FacetParams.FACET_MISSING, false);
     // default to sorting if there is a limit.
     String sort = params.getFieldParam(field, FacetParams.FACET_SORT, limit>0 ? FacetParams.FACET_SORT_COUNT : FacetParams.FACET_SORT_INDEX);
     String prefix = params.getFieldParam(field,FacetParams.FACET_PREFIX);
-
-
+    
+    
     NamedList<Integer> counts;
     SchemaField sf = searcher.getSchema().getField(field);
     FieldType ft = sf.getType();
-
+    
     // determine what type of faceting method to use
     final String methodStr = params.getFieldParam(field, FacetParams.FACET_METHOD);
     FacetMethod method = null;
@@ -364,17 +373,17 @@ public class SimpleFacets {
     } else if (FacetParams.FACET_METHOD_fc.equals(methodStr)) {
       method = FacetMethod.FC;
     }
-
+    
     if (method == FacetMethod.ENUM && TrieField.getMainValuePrefix(ft) != null) {
       // enum can't deal with trie fields that index several terms per value
       method = sf.multiValued() ? FacetMethod.FC : FacetMethod.FCS;
     }
-
+    
     if (method == null && ft instanceof BoolField) {
       // Always use filters for booleans... we know the number of values is very small.
       method = FacetMethod.ENUM;
     }
-
+    
     final boolean multiToken = sf.multiValued() || ft.multiValuedFieldCache();
     
     if (method == null && ft.getNumericType() != null && !sf.multiValued()) {
@@ -383,17 +392,17 @@ public class SimpleFacets {
       // top-level reader
       method = FacetMethod.FCS;
     }
-
+    
     if (ft.getNumericType() != null && sf.hasDocValues()) {
       // only fcs is able to leverage the numeric field caches
       method = FacetMethod.FCS;
     }
-
+    
     if (method == null) {
       // TODO: default to per-segment or not?
       method = FacetMethod.FC;
     }
-
+    
     if (method == FacetMethod.FCS && multiToken) {
       // only fc knows how to deal with multi-token fields
       method = FacetMethod.FC;
@@ -403,15 +412,15 @@ public class SimpleFacets {
       // only fc can handle docvalues types
       method = FacetMethod.FC;
     }
-
+    
     if (params.getFieldBool(field, GroupParams.GROUP_FACET, false)) {
-      counts = getGroupedCounts(searcher, docs, field, multiToken, offset,limit, mincount, missing, sort, prefix);
+      counts = getGroupedCounts(searcher, docs, field, multiToken, offset,limit, incomingMinCount, missing, sort, prefix);
     } else {
       assert method != null;
       switch (method) {
         case ENUM:
           assert TrieField.getMainValuePrefix(ft) == null;
-          counts = getFacetTermEnumCounts(searcher, docs, field, offset, limit, mincount,missing,sort,prefix);
+          counts = getFacetTermEnumCounts(searcher, docs, field, offset, limit, incomingMinCount,missing,sort,prefix);
           break;
         case FCS:
           assert !multiToken;
@@ -420,9 +429,9 @@ public class SimpleFacets {
             if (prefix != null && !prefix.isEmpty()) {
               throw new SolrException(ErrorCode.BAD_REQUEST, FacetParams.FACET_PREFIX + " is not supported on numeric types");
             }
-            counts = NumericFacets.getCounts(searcher, docs, field, offset, limit, mincount, missing, sort);
+            counts = NumericFacets.getCounts(searcher, docs, field, offset, limit, incomingMinCount, missing, sort);
           } else {
-            PerSegmentSingleValuedFaceting ps = new PerSegmentSingleValuedFaceting(searcher, docs, field, offset,limit, mincount, missing, sort, prefix);
+            PerSegmentSingleValuedFaceting ps = new PerSegmentSingleValuedFaceting(searcher, docs, field, offset,limit, incomingMinCount, missing, sort, prefix);
             Executor executor = threads == 0 ? directExecutor : facetExecutor;
             ps.setNumThreads(threads);
             counts = ps.getFacetCounts(executor);
@@ -430,19 +439,19 @@ public class SimpleFacets {
           break;
         case FC:
           if (sf.hasDocValues()) {
-            counts = DocValuesFacets.getCounts(searcher, docs, field, offset,limit, mincount, missing, sort, prefix);
+            counts = DocValuesFacets.getCounts(searcher, docs, field, offset,limit, incomingMinCount, missing, sort, prefix);
           } else if (multiToken || TrieField.getMainValuePrefix(ft) != null) {
             UnInvertedField uif = UnInvertedField.getUnInvertedField(field, searcher);
-            counts = uif.getCounts(searcher, docs, offset, limit, mincount,missing,sort,prefix);
+            counts = uif.getCounts(searcher, docs, offset, limit, incomingMinCount,missing,sort,prefix);
           } else {
-            counts = getFieldCacheCounts(searcher, docs, field, offset,limit, mincount, missing, sort, prefix);
+            counts = getFieldCacheCounts(searcher, docs, field, offset,limit, incomingMinCount, missing, sort, prefix);
           }
           break;
         default:
           throw new AssertionError();
       }
     }
-
+    
     return counts;
   }
 
@@ -535,7 +544,7 @@ public class SimpleFacets {
   }
 
 
-  private NamedList<Integer> getListedTermCounts(String field, String termList) throws IOException {
+  public NamedList<Integer> getListedTermCounts(String field, String termList) throws IOException {
     FieldType ft = searcher.getSchema().getFieldType(field);
     List<String> terms = StrUtils.splitSmart(termList, ",", true);
     NamedList<Integer> res = new NamedList<Integer>();
