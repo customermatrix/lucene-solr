@@ -456,7 +456,7 @@ public class SimpleFacets {
               }
               counts = NumericFacets.getCounts(searcher, docs, field, offset, limit, incomingMinCount, missing, sort);
             } else {
-              PerSegmentSingleValuedFaceting ps = new PerSegmentSingleValuedFaceting(termValidator, searcher, docs, field, offset, limit, mincount, missing, sort, prefix);
+              PerSegmentSingleValuedFaceting ps = new PerSegmentSingleValuedFaceting(termValidator, searcher, docs, field, offset, limit, incomingMinCount, missing, sort, prefix);
               Executor executor = threads == 0 ? directExecutor : facetExecutor;
               ps.setNumThreads(threads);
               counts = ps.getFacetCounts(executor);
@@ -1195,8 +1195,7 @@ public class SimpleFacets {
     resOuter.add(key, getFacetRangeCounts(sf, calc));
   }
 
-  private <T extends Comparable<T>> NamedList getFacetRangeCounts
-      (final SchemaField sf,
+  private <T extends Comparable<T>> NamedList getFacetRangeCounts(final SchemaField sf,
        final RangeEndpointCalculator<T> calc) throws IOException {
 
     final String f = sf.getName();
