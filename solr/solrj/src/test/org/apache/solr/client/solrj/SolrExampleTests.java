@@ -1148,7 +1148,7 @@ abstract public class SolrExampleTests extends SolrJettyTestBase
   //  p.write(System.out, 5 );
     assertEquals( 2, counts.size() );  // 2 trues and 1 false under features=AAAA,cat=a
     assertEquals( "inStock",    counts.get(0).getField() );
-    assertEquals( Boolean.TRUE, counts.get(0).getValue() );
+    assertEquals( "true", counts.get(0).getValue() );
     assertEquals(  2,           counts.get(0).getCount() );
 
     if (missing) {

@@ -154,7 +154,8 @@ public class PivotFacetProcessor extends SimpleFacets
         } else {
           termval = new BytesRef();
           ftype.readableToIndexed(fieldValue, termval);
-          pivot.add("value",ftype.toObject(sfield, termval));
+          //pivot.add("value",ftype.toObject(sfield, termval));
+          pivot.add("value",fieldValue);
         }
         pivot.add( "count", kv.getValue() );
         
