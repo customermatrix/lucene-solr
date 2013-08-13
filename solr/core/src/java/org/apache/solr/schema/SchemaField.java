@@ -343,6 +343,9 @@ public class SchemaField extends FieldProperties {
           properties.add(key, boolVal);
         }
       }
+      if (multiValued() && properties.get(getPropertyName(MULTIVALUED)) == null) {
+        properties.add(getPropertyName(MULTIVALUED), multiValued());
+      }
     }
     return properties;
   }

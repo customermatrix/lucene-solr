@@ -220,7 +220,7 @@ public class CoreContainer
       adminPath = "/admin/cores";
       defaultCoreName = DEFAULT_DEFAULT_CORE_NAME;
     }
-    zkHost = cfg.get(ConfigSolr.CfgProp.SOLR_ZKHOST, null);
+    zkHost = cfg.get(ConfigSolr.CfgProp.SOLR_ZKHOST, System.getProperty("zkHost"));
     coreLoadThreads = cfg.getInt(ConfigSolr.CfgProp.SOLR_CORELOADTHREADS, CORE_LOAD_THREADS);
     
 
@@ -355,36 +355,7 @@ public class CoreContainer
 
           if (p.isLoadOnStartup()) { // The normal case
 
-            Callable<SolrCore> task = new Callable<SolrCore>() {
-              @Override
-              public SolrCore call() {
-                SolrCore c = null;
-                try {
-                  if (zkSys.getZkController() != null) {
-                    preRegisterInZk(p);
-                  }
-                  c = create(p);
-                  registerCore(p.isTransient(), name, c, false);
-                } catch (Throwable t) {
-                  if (isZooKeeperAware()) {
-                    try {
-                      zkSys.zkController.unregister(name, p);
-                    } catch (InterruptedException e) {
-                      Thread.currentThread().interrupt();
-                      SolrException.log(log, null, e);
-                    } catch (KeeperException e) {
-                      SolrException.log(log, null, e);
-                    }
-                  }
-                  SolrException.log(log, null, t);
-                  if (c != null) {
-                    c.close();
-                  }
-                }
-                return c;
-              }
-            };
-            pending.add(completionService.submit(task));
+            doStartupCoreCreation(completionService, pending, name, p);
 
           }
         } catch (Throwable ex) {
@@ -424,6 +395,39 @@ public class CoreContainer
         ExecutorUtil.shutdownNowAndAwaitTermination(coreLoadExecutor);
       }
     }
+  }
+
+  protected void doStartupCoreCreation(CompletionService<SolrCore> completionService, Set<Future<SolrCore>> pending, final String name, final CoreDescriptor coreDescriptor) {
+    Callable<SolrCore> task = new Callable<SolrCore>() {
+      @Override
+      public SolrCore call() {
+        SolrCore c = null;
+        try {
+          if (zkSys.getZkController() != null) {
+            preRegisterInZk(coreDescriptor);
+          }
+          c = create(coreDescriptor);
+          registerCore(coreDescriptor.isTransient(), name, c, false);
+        } catch (Throwable t) {
+          if (isZooKeeperAware()) {
+            try {
+              zkSys.zkController.unregister(name, coreDescriptor);
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+              SolrException.log(log, null, e);
+            } catch (KeeperException e) {
+              SolrException.log(log, null, e);
+            }
+          }
+          SolrException.log(log, null, t);
+          if (c != null) {
+            c.close();
+          }
+        }
+        return c;
+      }
+    };
+    pending.add(completionService.submit(task));
   }
 
   private volatile boolean isShutDown = false;

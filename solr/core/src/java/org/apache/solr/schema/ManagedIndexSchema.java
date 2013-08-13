@@ -44,8 +44,9 @@ import java.util.Collections;
 import java.util.Map;
 
 /** Solr-managed schema - non-user-editable, but can be mutable via internal and external REST API requests. */
-public final class ManagedIndexSchema extends IndexSchema {
+public class ManagedIndexSchema extends IndexSchema {
 
+  private boolean allowOverride;
   private boolean isMutable = false;
 
   @Override public boolean isMutable() { return isMutable; }
@@ -71,9 +72,15 @@ public final class ManagedIndexSchema extends IndexSchema {
     this.managedSchemaResourceName = managedSchemaResourceName;
     this.schemaZkVersion = schemaZkVersion;
     this.schemaUpdateLock = schemaUpdateLock;
+    this.allowOverride = Boolean.valueOf(System.getProperty("solr.schema.allowOverride"));
   }
-  
-  
+
+  public ManagedIndexSchema(String managedSchemaResourceName, boolean isMutable, Object schemaUpdateLock) {
+    this.isMutable = isMutable;
+    this.managedSchemaResourceName = managedSchemaResourceName;
+    this.schemaUpdateLock = schemaUpdateLock;
+  }
+
   /** Persist the schema to local storage or to ZooKeeper */
   boolean persistManagedSchema(boolean createOnly) {
     if (loader instanceof ZkSolrResourceLoader) {
@@ -201,7 +208,7 @@ public final class ManagedIndexSchema extends IndexSchema {
           newSchema = shallowCopy(true);
 
           for (SchemaField newField : newFields) {
-            if (null != newSchema.getFieldOrNull(newField.getName())) {
+            if (!allowOverride && null != newSchema.getFieldOrNull(newField.getName())) {
               String msg = "Field '" + newField.getName() + "' already exists.";
               throw new FieldExistsException(ErrorCode.BAD_REQUEST, msg);
             }
@@ -230,6 +237,46 @@ public final class ManagedIndexSchema extends IndexSchema {
           success = newSchema.persistManagedSchema(false); // don't just create - update it if it already exists
           if (success) {
             log.debug("Added field(s): {}", newFields);
+          }
+        }
+        // release the lock between tries to allow the schema reader to update the schema & schemaZkVersion
+      }
+    } else {
+      String msg = "This ManagedIndexSchema is not mutable.";
+      log.error(msg);
+      throw new SolrException(ErrorCode.SERVER_ERROR, msg);
+    }
+    return newSchema;
+  }
+
+  @Override
+  public ManagedIndexSchema removeFields(Collection<SchemaField> removeFields) {
+    ManagedIndexSchema newSchema = null;
+    if (isMutable) {
+      boolean success = false;
+      while ( ! success) { // optimistic concurrency
+        // even though fields is volatile, we need to synchronize to avoid two addFields
+        // happening concurrently (and ending up missing one of them)
+        synchronized (getSchemaUpdateLock()) {
+          newSchema = shallowCopy(true);
+
+          for (SchemaField removeField : removeFields) {
+            if (null != newSchema.getFieldOrNull(removeField.getName())) {
+
+              newSchema.fields.remove(removeField.getName());
+              newSchema.fieldsWithDefaultValue.remove(removeField);
+              newSchema.requiredFields.remove(removeField);
+
+            }
+          }
+          // Run the callbacks on SchemaAware now that everything else is done
+          for (SchemaAware aware : newSchema.schemaAware) {
+            aware.inform(newSchema);
+          }
+          newSchema.refreshAnalyzers();
+          success = newSchema.persistManagedSchema(false); // don't just create - update it if it already exists
+          if (success) {
+            log.debug("Removed field(s): {}", removeFields);
           }
         }
         // release the lock between tries to allow the schema reader to update the schema & schemaZkVersion
@@ -361,7 +408,7 @@ public final class ManagedIndexSchema extends IndexSchema {
    *                                   are copied; otherwise, they are not.
    * @return A shallow copy of this schema
    */
-  private ManagedIndexSchema shallowCopy(boolean includeFieldDataStructures) {
+  protected ManagedIndexSchema shallowCopy(boolean includeFieldDataStructures) {
     ManagedIndexSchema newSchema = null;
     try {
       newSchema = new ManagedIndexSchema

@@ -1469,6 +1469,19 @@ public class IndexSchema {
    * Copies this schema, adds the given fields to the copy, then persists the new schema.
    *
    * @param newFields the SchemaFields to add
+   * @return a new IndexSchema based on this schema with newFields added
+   * @see #newField(String, String, Map)
+   */
+  public IndexSchema removeFields(Collection<SchemaField> newFields) {
+    String msg = "This IndexSchema is not mutable.";
+    log.error(msg);
+    throw new SolrException(ErrorCode.SERVER_ERROR, msg);
+  }
+
+  /**
+   * Copies this schema, adds the given fields to the copy, then persists the new schema.
+   *
+   * @param newFields the SchemaFields to add
    * @param copyFieldNames 0 or more names of targets to copy this field to.  The target fields must already exist.
    * @return a new IndexSchema based on this schema with newFields added
    * @see #newField(String, String, Map)

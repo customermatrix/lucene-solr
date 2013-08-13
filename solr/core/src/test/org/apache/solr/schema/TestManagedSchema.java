@@ -35,6 +35,7 @@ import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.response.SolrQueryResponse;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 
 public class TestManagedSchema extends AbstractBadConfigTestBase {
 
