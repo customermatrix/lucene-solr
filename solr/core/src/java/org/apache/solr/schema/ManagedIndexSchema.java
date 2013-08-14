@@ -46,7 +46,7 @@ import java.util.Map;
 /** Solr-managed schema - non-user-editable, but can be mutable via internal and external REST API requests. */
 public class ManagedIndexSchema extends IndexSchema {
 
-  private boolean allowOverride;
+  private final boolean allowOverride;
   private boolean isMutable = false;
 
   @Override public boolean isMutable() { return isMutable; }
@@ -72,13 +72,14 @@ public class ManagedIndexSchema extends IndexSchema {
     this.managedSchemaResourceName = managedSchemaResourceName;
     this.schemaZkVersion = schemaZkVersion;
     this.schemaUpdateLock = schemaUpdateLock;
-    this.allowOverride = Boolean.valueOf(System.getProperty("solr.schema.allowOverride"));
+    this.allowOverride = getAllowSchemaOverride();
   }
 
   public ManagedIndexSchema(String managedSchemaResourceName, boolean isMutable, Object schemaUpdateLock) {
     this.isMutable = isMutable;
     this.managedSchemaResourceName = managedSchemaResourceName;
     this.schemaUpdateLock = schemaUpdateLock;
+    this.allowOverride = true;
   }
 
   /** Persist the schema to local storage or to ZooKeeper */
@@ -397,6 +398,11 @@ public class ManagedIndexSchema extends IndexSchema {
     this.managedSchemaResourceName = managedSchemaResourceName;
     this.schemaZkVersion = schemaZkVersion;
     this.schemaUpdateLock = schemaUpdateLock;
+    this.allowOverride = getAllowSchemaOverride();
+  }
+
+  private Boolean getAllowSchemaOverride() {
+    return Boolean.valueOf(System.getProperty("solr.schema.allowOverride"));
   }
 
   /**
