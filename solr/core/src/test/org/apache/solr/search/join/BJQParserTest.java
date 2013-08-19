@@ -24,6 +24,7 @@ import org.apache.solr.search.QParser;
 import org.apache.solr.search.SolrCache;
 import org.apache.solr.search.SyntaxError;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -33,6 +34,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.ListIterator;
 
+@Ignore
 public class BJQParserTest extends SolrTestCaseJ4 {
   
   private static final String[] klm = new String[] {"k", "l", "m"};
