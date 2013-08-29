@@ -17,7 +17,6 @@
 
 package org.apache.solr.request;
 
-import org.apache.solr.schema.VirtualIndexSchema;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.util.RefCounted;
 import org.apache.solr.schema.IndexSchema;
@@ -54,7 +53,7 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
   protected SolrParams params;
   protected Map<Object,Object> context;
   protected Iterable<ContentStream> streams;
-  protected VirtualIndexSchema virtualSchema;
+  protected IndexSchema virtualSchema;
 
   public SolrQueryRequestBase(SolrCore core, SolrParams params) {
     this.core = core;
@@ -117,34 +116,19 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
   @Override
   public IndexSchema getSchema() {
     if (core != null && core.getName().equals(API_CORE_NAME)) {
-      List<String> collections = getCollections();
+      Collection<String> collections = getCollections();
 
       if (!collections.isEmpty()) {
         if (virtualSchema == null) {
           synchronized (this) {
             if (virtualSchema == null) {
-              VirtualIndexSchema virtualIndexSchema = new VirtualIndexSchema();
-              Collection<SolrCore> cores = core.getCoreDescriptor().getCoreContainer().getCores();
-
-              for (SolrCore solrCore : cores) {
-                if (collections.contains(solrCore.getCoreDescriptor().getCloudDescriptor().getCollectionName())) {
-                  IndexSchema schema = solrCore.getLatestSchema();
-                  virtualIndexSchema.putAllFields(schema.getFields());
-                  virtualIndexSchema.putAllFieldTypes(schema.getFieldTypes());
-                  virtualIndexSchema.setUniqueKeyField(schema.getUniqueKeyField());
-                  virtualIndexSchema.setQueryParserDefaultOperator(schema.getQueryParserDefaultOperator());
-                  virtualIndexSchema.setDefaultSearchFieldName(schema.getDefaultSearchFieldName());
-                  if (core.getLatestSchema().getDynamicFieldPrototypes() != null) {
-                    virtualIndexSchema.registerDynamicFields(core.getLatestSchema().getDynamicFieldPrototypes());
-                  }
-                }
-              }
-              virtualSchema = virtualIndexSchema;
-              virtualSchema.refreshAnalyzers();
+              virtualSchema = core.getCoreDescriptor().getCoreContainer().getVirtualSchema(collections);
             }
           }
         }
-        return virtualSchema;
+        if (virtualSchema != null) {
+          return virtualSchema;
+        }
       }
     }
 

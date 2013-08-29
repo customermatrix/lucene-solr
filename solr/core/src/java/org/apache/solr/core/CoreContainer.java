@@ -1171,8 +1171,11 @@ public class CoreContainer
   String getCoreToOrigName(SolrCore core) {
     return solrCores.getCoreToOrigName(core);
   }
-  
 
+
+  public IndexSchema getVirtualSchema(Collection<String> collections) {
+    return null;
+  }
 }
 
 class CloserThread extends Thread {
