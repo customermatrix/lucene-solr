@@ -603,17 +603,25 @@ public class SimpleFacets {
 
 
   /**
-   * Returns a count of the documents in the set which do not have any 
+   * Returns a count of the documents in the set which do not have any
    * terms for for the specified field.
    *
    * @see FacetParams#FACET_MISSING
    */
   public static int getFieldMissingCount(SolrIndexSearcher searcher, DocSet docs, String fieldName)
       throws IOException {
+    //BEGIN: SEA-821
     SchemaField sf = searcher.getSchema().getField(fieldName);
-    DocSet hasVal = searcher.getDocSet
-        (sf.getType().getRangeQuery(null, sf, null, null, false, false));
-    return docs.andNotSize(hasVal);
+    if (sf == null) {
+         return searcher.getIndexReader().maxDoc();
+    }
+    //END: SEA-821
+    else {
+      DocSet hasVal = searcher.getDocSet
+          (sf.getType().getRangeQuery(null, sf, null, null, false, false));
+      return docs.andNotSize(hasVal);
+    }
+
   }
 
 
