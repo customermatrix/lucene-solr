@@ -25,7 +25,6 @@ import org.apache.solr.common.cloud.SolrZkClient;
 import org.apache.solr.common.cloud.ZkCmdExecutor;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
-import org.apache.solr.core.CoreDescriptor;
 import org.apache.solr.core.SolrConfig;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.core.SolrResourceLoader;
@@ -41,9 +40,6 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Collection;
-
-import static com.google.common.collect.Lists.newArrayList;
 
 /** Factory for ManagedIndexSchema */
 public class ManagedIndexSchemaFactory extends IndexSchemaFactory implements SolrCoreAware {
@@ -64,14 +60,9 @@ public class ManagedIndexSchemaFactory extends IndexSchemaFactory implements Sol
   private ManagedIndexSchema schema;
   private SolrCore core;
   private ZkIndexSchemaReader zkIndexSchemaReader;
-  private final Collection<SchemaUpdateListener> updateListeners = newArrayList();
 
   private String loadedResource;
   private boolean shouldUpgrade = false;
-
-  public void addUpdateListener(SchemaUpdateListener listener) {
-    updateListeners.add(listener);
-  }
 
   @Override
   public void init(NamedList args) {
@@ -176,8 +167,8 @@ public class ManagedIndexSchemaFactory extends IndexSchemaFactory implements Sol
     InputSource inputSource = new InputSource(schemaInputStream);
     inputSource.setSystemId(SystemIdResolver.createSystemIdFromResourceName(loadedResource));
     try {
-      schema = new ManagedIndexSchema(config, loadedResource, inputSource, isMutable, 
-                                      managedSchemaResourceName, schemaZkVersion, getSchemaUpdateLock());
+      schema = newSchema(config, loadedResource, inputSource, isMutable,
+        managedSchemaResourceName, schemaZkVersion, getSchemaUpdateLock());
     } catch (KeeperException e) {
       final String msg = "Error instantiating ManagedIndexSchema";
       log.error(msg, e);
@@ -194,6 +185,11 @@ public class ManagedIndexSchemaFactory extends IndexSchemaFactory implements Sol
     }
 
     return schema;
+  }
+
+  protected ManagedIndexSchema newSchema(SolrConfig solrConfig, String name, InputSource is, boolean isMutable,
+                                         String managedSchemaResourceName, int schemaZkVersion, Object schemaUpdateLock) throws KeeperException, InterruptedException {
+    return new ManagedIndexSchema(solrConfig, name, is, isMutable, managedSchemaResourceName, schemaZkVersion, schemaUpdateLock);
   }
 
   private InputStream readSchemaLocally() {
@@ -409,13 +405,5 @@ public class ManagedIndexSchemaFactory extends IndexSchemaFactory implements Sol
   public void setSchema(ManagedIndexSchema schema) {
     this.schema = schema;
     core.setLatestSchema(schema);
-
-    onUpdate(core.getCoreDescriptor(), schema);
-  }
-
-  private void onUpdate(CoreDescriptor coreDescriptor, ManagedIndexSchema lastSchema) {
-    for (SchemaUpdateListener updateListener : updateListeners) {
-      updateListener.onUpdate(coreDescriptor, lastSchema);
-    }
   }
 }

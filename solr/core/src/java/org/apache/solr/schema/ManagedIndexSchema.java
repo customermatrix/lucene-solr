@@ -56,7 +56,7 @@ public class ManagedIndexSchema extends IndexSchema {
   int schemaZkVersion;
   
   final Object schemaUpdateLock;
-  
+
   /**
    * Constructs a schema using the specified resource name and stream.
    *
@@ -64,7 +64,7 @@ public class ManagedIndexSchema extends IndexSchema {
    *      By default, this follows the normal config path directory searching rules.
    * @see org.apache.solr.core.SolrResourceLoader#openResource
    */
-  ManagedIndexSchema(SolrConfig solrConfig, String name, InputSource is, boolean isMutable, 
+  public ManagedIndexSchema(SolrConfig solrConfig, String name, InputSource is, boolean isMutable,
                      String managedSchemaResourceName, int schemaZkVersion, Object schemaUpdateLock) 
       throws KeeperException, InterruptedException {
     super(solrConfig, name, is);
@@ -157,7 +157,7 @@ public class ManagedIndexSchema extends IndexSchema {
           schemaZkVersion = stat.getVersion();
           log.info("Persisted managed schema at " + managedSchemaPath);
         } catch (KeeperException.BadVersionException e) {
-          log.info("Failed to persist managed schema at " + managedSchemaPath 
+          log.info("Failed to persist managed schema at " + managedSchemaPath
                   + " - version mismatch");
           success = false;
         }
@@ -170,7 +170,7 @@ public class ManagedIndexSchema extends IndexSchema {
       log.error(msg, e);
       throw new SolrException(ErrorCode.SERVER_ERROR, msg, e);
     }
-    return success; 
+    return success;
   }
 
   @Override
@@ -325,7 +325,7 @@ public class ManagedIndexSchema extends IndexSchema {
 
   @Override
   public SchemaField newField(String fieldName, String fieldType, Map<String,?> options) {
-    SchemaField sf; 
+    SchemaField sf;
     if (isMutable) {
       try {
         if (-1 != fieldName.indexOf('*')) {
@@ -357,10 +357,10 @@ public class ManagedIndexSchema extends IndexSchema {
     return sf;
   }
 
-  /** 
+  /**
    * Called from ZkIndexSchemaReader to merge the fields from the serialized managed schema
    * on ZooKeeper with the local managed schema.
-   * 
+   *
    * @param inputSource The serialized content of the managed schema from ZooKeeper
    * @param schemaZkVersion The ZK version of the managed schema on ZooKeeper
    * @return The new merged schema
@@ -389,9 +389,9 @@ public class ManagedIndexSchema extends IndexSchema {
     }
     return newSchema;
   }
-  
-  private ManagedIndexSchema(final SolrConfig solrConfig, final SolrResourceLoader loader, boolean isMutable,
-                             String managedSchemaResourceName, int schemaZkVersion, Object schemaUpdateLock) 
+
+  public ManagedIndexSchema(final SolrConfig solrConfig, final SolrResourceLoader loader, boolean isMutable,
+                             String managedSchemaResourceName, int schemaZkVersion, Object schemaUpdateLock)
       throws KeeperException, InterruptedException {
     super(solrConfig, loader);
     this.isMutable = isMutable;
@@ -407,9 +407,9 @@ public class ManagedIndexSchema extends IndexSchema {
 
   /**
    * Makes a shallow copy of this schema.
-   * 
-   * Not copied: analyzers 
-   * 
+   *
+   * Not copied: analyzers
+   *
    * @param includeFieldDataStructures if true, fields, fieldsWithDefaultValue, and requiredFields
    *                                   are copied; otherwise, they are not.
    * @return A shallow copy of this schema
@@ -430,7 +430,7 @@ public class ManagedIndexSchema extends IndexSchema {
     }
 
     assert newSchema != null;
-    
+
     newSchema.name = name;
     newSchema.version = version;
     newSchema.defaultSearchFieldName = defaultSearchFieldName;
@@ -460,7 +460,7 @@ public class ManagedIndexSchema extends IndexSchema {
 
     return newSchema;
   }
-  
+
   public Object getSchemaUpdateLock() {
     return schemaUpdateLock;
   }
