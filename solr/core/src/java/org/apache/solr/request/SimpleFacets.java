@@ -613,7 +613,7 @@ public class SimpleFacets {
     //BEGIN: SEA-821
     SchemaField sf = searcher.getSchema().getField(fieldName);
     if (sf == null) {
-         return searcher.getIndexReader().maxDoc();
+         return searcher.getIndexReader().numDocs();
     }
     //END: SEA-821
     else {
