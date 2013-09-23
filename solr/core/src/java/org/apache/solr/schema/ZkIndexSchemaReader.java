@@ -60,6 +60,9 @@ public class ZkIndexSchemaReader {
           if (Event.EventType.None.equals(event.getType())) {
             return;
           }
+          if (Event.EventType.NodeDeleted.equals(event.getType())) {
+            return;
+          }
           log.info("A schema change: {}, has occurred - updating schema from ZooKeeper ...", event);
           try {
             updateSchema(this);
