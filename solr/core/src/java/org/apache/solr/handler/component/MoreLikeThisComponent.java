@@ -337,7 +337,7 @@ public class MoreLikeThisComponent extends SearchComponent {
 
   NamedList<DocList> getMoreLikeThese(ResponseBuilder rb,
       SolrIndexSearcher searcher, DocList docs) throws IOException {
-                                      SolrIndexSearcher searcher, DocList docs, int flags) throws IOException {
+
     SolrParams p = rb.req.getParams();
     IndexSchema schema = searcher.getSchema();
     MoreLikeThisHandler.MoreLikeThisHelper mltHelper = new MoreLikeThisHandler.MoreLikeThisHelper(
