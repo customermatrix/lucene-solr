@@ -105,13 +105,12 @@ public class MoreLikeThisComponent extends SearchComponent {
           rb.rsp.add("moreLikeThis", temp);
         } else {
           NamedList<DocList> sim = getMoreLikeThese(rb, rb.req.getSearcher(),
-              rb.getResults().docList, mltcount);
+              rb.getResults().docList);
           rb.rsp.add("moreLikeThis", sim);
         }
       } else {
         // non distrib case
-        NamedList<DocList> sim = getMoreLikeThese(rb, rb.req.getSearcher(), rb.getResults().docList,
-            mltcount);
+        NamedList<DocList> sim = getMoreLikeThese(rb, rb.req.getSearcher(), rb.getResults().docList);
         rb.rsp.add("moreLikeThis", sim);
       }
     }
@@ -337,6 +336,7 @@ public class MoreLikeThisComponent extends SearchComponent {
   }
 
   NamedList<DocList> getMoreLikeThese(ResponseBuilder rb,
+      SolrIndexSearcher searcher, DocList docs) throws IOException {
                                       SolrIndexSearcher searcher, DocList docs, int flags) throws IOException {
     SolrParams p = rb.req.getParams();
     IndexSchema schema = searcher.getSchema();
@@ -354,7 +354,7 @@ public class MoreLikeThisComponent extends SearchComponent {
       int id = iterator.nextDoc();
       int rows = p.getInt(MoreLikeThisParams.DOC_COUNT, 5);
       DocListAndSet sim = mltHelper.getMoreLikeThis(id, 0, rows, null, null,
-          flags);
+                                                    rb.getFieldFlags());
       String name = schema.printableUniqueKey(searcher.doc(id));
       mlt.add(name, sim.docList);
 
