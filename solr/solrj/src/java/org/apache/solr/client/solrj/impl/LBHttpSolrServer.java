@@ -77,13 +77,13 @@ public class LBHttpSolrServer extends SolrServer {
 
   // keys to the maps are currently of the form "http://localhost:8983/solr"
   // which should be equivalent to CommonsHttpSolrServer.getBaseURL()
-  private final Map<String, ServerWrapper> aliveServers = new LinkedHashMap<String, ServerWrapper>();
+  protected final Map<String, ServerWrapper> aliveServers = new LinkedHashMap<String, ServerWrapper>();
   // access to aliveServers should be synchronized on itself
   
   protected final Map<String, ServerWrapper> zombieServers = new ConcurrentHashMap<String, ServerWrapper>();
 
   // changes to aliveServers are reflected in this array, no need to synchronize
-  private volatile ServerWrapper[] aliveServerList = new ServerWrapper[0];
+  protected volatile ServerWrapper[] aliveServerList = new ServerWrapper[0];
 
 
   private ScheduledExecutorService aliveCheckExecutor;
@@ -99,8 +99,8 @@ public class LBHttpSolrServer extends SolrServer {
     solrQuery.setRows(0);
   }
 
-  protected static class ServerWrapper {
-    final HttpSolrServer solrServer;
+  public static class ServerWrapper {
+    public final HttpSolrServer solrServer;
 
     long lastUsed;     // last time used for a real request
     long lastChecked;  // last time checked for liveness
@@ -355,7 +355,7 @@ public class LBHttpSolrServer extends SolrServer {
     }
   }
 
-  private ServerWrapper removeFromAlive(String key) {
+  protected ServerWrapper removeFromAlive(String key) {
     synchronized (aliveServers) {
       ServerWrapper wrapper = aliveServers.remove(key);
       if (wrapper != null)
@@ -364,7 +364,7 @@ public class LBHttpSolrServer extends SolrServer {
     }
   }
 
-  private void addToAlive(ServerWrapper wrapper) {
+  protected void addToAlive(ServerWrapper wrapper) {
     synchronized (aliveServers) {
       ServerWrapper prev = aliveServers.put(wrapper.getKey(), wrapper);
       // TODO: warn if there was a previous entry?
@@ -532,7 +532,7 @@ public class LBHttpSolrServer extends SolrServer {
     }
   }
 
-  private void moveAliveToDead(ServerWrapper wrapper) {
+  protected void moveAliveToDead(ServerWrapper wrapper) {
     wrapper = removeFromAlive(wrapper.getKey());
     if (wrapper == null)
       return;  // another thread already detected the failure and removed it
