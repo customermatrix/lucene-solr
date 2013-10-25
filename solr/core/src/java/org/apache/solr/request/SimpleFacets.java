@@ -320,7 +320,7 @@ public class SimpleFacets {
             res.add(key, searcher.numDocs(qobj, docs));
           }
         } catch (Exception e) {
-          logger.error("", e);
+          logger.warn("", e);
         }
       }
     }
