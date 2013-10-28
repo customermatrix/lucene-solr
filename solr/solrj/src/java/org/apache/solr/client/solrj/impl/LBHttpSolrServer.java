@@ -92,11 +92,13 @@ public class LBHttpSolrServer extends SolrServer {
   private final boolean clientIsInternal;
   private final AtomicInteger counter = new AtomicInteger(-1);
 
-  private static final SolrQuery solrQuery = new SolrQuery("*:*");
   private final ResponseParser parser;
 
-  static {
+
+  protected SolrQuery newPingQuery() {
+    SolrQuery solrQuery = new SolrQuery("*:*");
     solrQuery.setRows(0);
+    return solrQuery;
   }
 
   public static class ServerWrapper {
@@ -504,7 +506,7 @@ public class LBHttpSolrServer extends SolrServer {
     long currTime = System.currentTimeMillis();
     try {
       zombieServer.lastChecked = currTime;
-      QueryResponse resp = zombieServer.solrServer.query(solrQuery);
+      QueryResponse resp = newPingQuery(zombieServer);
       if (resp.getStatus() == 0) {
         // server has come back up.
         // make sure to remove from zombies before adding to alive to avoid a race condition
@@ -530,6 +532,10 @@ public class LBHttpSolrServer extends SolrServer {
         zombieServers.remove(zombieServer.getKey());
       }
     }
+  }
+
+  protected QueryResponse newPingQuery(ServerWrapper zombieServer) throws SolrServerException {
+    return zombieServer.solrServer.query(newPingQuery());
   }
 
   protected void moveAliveToDead(ServerWrapper wrapper) {
