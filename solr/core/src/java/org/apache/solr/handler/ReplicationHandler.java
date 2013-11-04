@@ -111,20 +111,22 @@ import org.slf4j.LoggerFactory;
  * 
  * @since solr 1.4
  */
-public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAware {
-
-  private static final Logger LOG = LoggerFactory.getLogger(ReplicationHandler.class.getName());
+public class ReplicationHandler extends RequestHandlerBase implements
+    SolrCoreAware {
+  
+  private static final Logger LOG = LoggerFactory
+      .getLogger(ReplicationHandler.class.getName());
   SolrCore core;
-
+  
   private static final class CommitVersionInfo {
     public final long version;
     public final long generation;
-
+    
     private CommitVersionInfo(long g, long v) {
       generation = g;
       version = v;
     }
-
+    
     /**
      * builds a CommitVersionInfo data for the specified IndexCommit. Will never
      * be null, ut version and generation may be zero if there are problems
@@ -134,13 +136,15 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
       long generation = commit.getGeneration();
       long version = 0;
       try {
-        final Map<String, String> commitData = commit.getUserData();
-        String commitTime = commitData.get(SolrIndexWriter.COMMIT_TIME_MSEC_KEY);
+        final Map<String,String> commitData = commit.getUserData();
+        String commitTime = commitData
+            .get(SolrIndexWriter.COMMIT_TIME_MSEC_KEY);
         if (commitTime != null) {
           try {
             version = Long.parseLong(commitTime);
           } catch (NumberFormatException e) {
-            LOG.warn("Version in commitData was not formated correctly: " + commitTime, e);
+            LOG.warn("Version in commitData was not formated correctly: "
+                + commitTime, e);
           }
         }
       } catch (IOException e) {
@@ -149,41 +153,42 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
       return new CommitVersionInfo(generation, version);
     }
   }
-
+  
   private SnapPuller snapPuller;
-
+  
   private ReentrantLock snapPullLock = new ReentrantLock();
-
+  
   private String includeConfFiles;
-
+  
   private NamedList<String> confFileNameAlias = new NamedList<String>();
-
+  
   private boolean isMaster = false;
-
+  
   private boolean isSlave = false;
-
+  
   private boolean replicateOnOptimize = false;
-
+  
   private boolean replicateOnCommit = false;
-
+  
   private boolean replicateOnStart = false;
-
+  
   private int numberBackupsToKeep = 0; // zero: do not delete old backups
-
+  
   private int numTimesReplicated = 0;
-
-  private final Map<String, FileInfo> confFileInfoCache = new HashMap<String, FileInfo>();
-
+  
+  private final Map<String,FileInfo> confFileInfoCache = new HashMap<String,FileInfo>();
+  
   private Integer reserveCommitDuration = SnapPuller.readInterval("00:00:10");
-
+  
   volatile IndexCommit indexCommitPoint;
-
+  
   volatile NamedList<Object> snapShootDetails;
-
+  
   private AtomicBoolean replicationEnabled = new AtomicBoolean(true);
-
+  
   @Override
-  public void handleRequestBody(SolrQueryRequest req, SolrQueryResponse rsp) throws Exception {
+  public void handleRequestBody(SolrQueryRequest req, SolrQueryResponse rsp)
+      throws Exception {
     rsp.setHttpCaching(false);
     final SolrParams solrParams = req.getParams();
     String command = solrParams.get(COMMAND);
@@ -197,13 +202,13 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
     if (command.equals(CMD_INDEX_VERSION)) {
       IndexCommit commitPoint = indexCommitPoint; // make a copy so it won't
                                                   // change
-
+      
       if (commitPoint == null) {
         // if this handler is 'lazy', we may not have tracked the last commit
         // because our commit listener is registered on inform
         commitPoint = core.getDeletionPolicy().getLatestCommit();
       }
-
+      
       if (commitPoint != null && replicationEnabled.get()) {
         //
         // There is a race condition here. The commit point may be changed /
@@ -214,8 +219,10 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
         // empty file list for
         // the CMD_GET_FILE_LIST command.
         //
-        core.getDeletionPolicy().setReserveDuration(commitPoint.getGeneration(), reserveCommitDuration);
-        rsp.add(CMD_INDEX_VERSION, IndexDeletionPolicyWrapper.getCommitTimestamp(commitPoint));
+        core.getDeletionPolicy().setReserveDuration(
+            commitPoint.getGeneration(), reserveCommitDuration);
+        rsp.add(CMD_INDEX_VERSION,
+            IndexDeletionPolicyWrapper.getCommitTimestamp(commitPoint));
         rsp.add(GENERATION, commitPoint.getGeneration());
       } else {
         // This happens when replication is not configured to happen after
@@ -278,7 +285,8 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
     } else if (command.equals(CMD_SHOW_COMMITS)) {
       rsp.add(CMD_SHOW_COMMITS, getCommits());
     } else if (command.equals(CMD_DETAILS)) {
-      rsp.add(CMD_DETAILS, getReplicationDetails(solrParams.getBool("slave", true)));
+      rsp.add(CMD_DETAILS,
+          getReplicationDetails(solrParams.getBool("slave", true)));
       RequestHandlerUtils.addExperimentalFormatWarning(rsp);
     } else if (CMD_ENABLE_REPL.equalsIgnoreCase(command)) {
       replicationEnabled.set(true);
@@ -288,11 +296,11 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
       rsp.add(STATUS, OK_STATUS);
     }
   }
-
+  
   private List<NamedList<Object>> getCommits() {
-    Map<Long, IndexCommit> commits = core.getDeletionPolicy().getCommits();
+    Map<Long,IndexCommit> commits = core.getDeletionPolicy().getCommits();
     List<NamedList<Object>> l = new ArrayList<NamedList<Object>>();
-
+    
     for (IndexCommit c : commits.values()) {
       try {
         NamedList<Object> nl = new NamedList<Object>();
@@ -309,7 +317,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
     }
     return l;
   }
-
+  
   static Long getCheckSum(Checksum checksum, File f) {
     FileInputStream fis = null;
     checksum.reset();
@@ -327,15 +335,14 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
     }
     return null;
   }
-
+  
   private volatile SnapPuller tempSnapPuller;
   private BackupAndReplicationListener optimizeEventHandler;
   private BackupAndReplicationListener commitEventHandler;
-
+  
   public boolean doFetch(SolrParams solrParams, boolean forceReplication) {
     String masterUrl = solrParams == null ? null : solrParams.get(MASTER_URL);
-    if (!snapPullLock.tryLock())
-      return false;
+    if (!snapPullLock.tryLock()) return false;
     try {
       tempSnapPuller = snapPuller;
       if (masterUrl != null) {
@@ -354,39 +361,43 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
     }
     return false;
   }
-
+  
   boolean isReplicating() {
     return snapPullLock.isLocked();
   }
-
-  private void doSnapShoot(SolrParams params, SolrQueryResponse rsp, SolrQueryRequest req) {
+  
+  private void doSnapShoot(SolrParams params, SolrQueryResponse rsp,
+      SolrQueryRequest req) {
     try {
       int numberToKeep = params.getInt(NUMBER_BACKUPS_TO_KEEP_REQUEST_PARAM, 0);
       if (numberToKeep > 0 && numberBackupsToKeep > 0) {
-        throw new SolrException(ErrorCode.BAD_REQUEST, "Cannot use " + NUMBER_BACKUPS_TO_KEEP_REQUEST_PARAM + " if " + NUMBER_BACKUPS_TO_KEEP_INIT_PARAM
+        throw new SolrException(ErrorCode.BAD_REQUEST, "Cannot use "
+            + NUMBER_BACKUPS_TO_KEEP_REQUEST_PARAM + " if "
+            + NUMBER_BACKUPS_TO_KEEP_INIT_PARAM
             + " was specified in the configuration.");
       }
       numberToKeep = Math.max(numberToKeep, numberBackupsToKeep);
       if (numberToKeep < 1) {
         numberToKeep = Integer.MAX_VALUE;
       }
-
+      
       IndexDeletionPolicyWrapper delPolicy = core.getDeletionPolicy();
       IndexCommit indexCommit = delPolicy.getLatestCommit();
-
+      
       if (indexCommit == null) {
         indexCommit = req.getSearcher().getIndexReader().getIndexCommit();
       }
-
+      
       // small race here before the commit point is saved
-      new SnapShooter(core, params.get("location")).createSnapAsync(indexCommit, numberToKeep, this);
-
+      new SnapShooter(core, params.get("location")).createSnapAsync(
+          indexCommit, numberToKeep, this);
+      
     } catch (Exception e) {
       LOG.warn("Exception during creating a snapshot", e);
       rsp.add("exception", e);
     }
   }
-
+  
   /**
    * This method adds an Object of FileStream to the response . The FileStream
    * implements a custom protocol which is understood by SnapPuller.FileFetcher
@@ -397,7 +408,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
   private void getFileStream(SolrParams solrParams, SolrQueryResponse rsp) {
     ModifiableSolrParams rawParams = new ModifiableSolrParams(solrParams);
     rawParams.set(CommonParams.WT, FILE_STREAM);
-
+    
     String cfileName = solrParams.get(CONF_FILE_SHORT);
     if (cfileName != null) {
       rsp.add(FILE_STREAM, new LocalFsFileStream(solrParams));
@@ -405,7 +416,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
       rsp.add(FILE_STREAM, new DirectoryFileStream(solrParams));
     }
   }
-
+  
   @SuppressWarnings("unchecked")
   private void getFileList(SolrParams solrParams, SolrQueryResponse rsp) {
     String v = solrParams.get(GENERATION);
@@ -415,7 +426,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
     }
     long gen = Long.parseLong(v);
     IndexCommit commit = core.getDeletionPolicy().getCommitPoint(gen);
-
+    
     // System.out.println("ask for files for gen:" + commit.getGeneration() +
     // core.getCoreDescriptor().getCoreContainer().getZkController().getNodeName());
     if (commit == null) {
@@ -424,20 +435,20 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
     }
     // reserve the indexcommit for sometime
     core.getDeletionPolicy().setReserveDuration(gen, reserveCommitDuration);
-    List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
+    List<Map<String,Object>> result = new ArrayList<Map<String,Object>>();
     Directory dir = null;
     try {
       // get all the files in the commit
       // use a set to workaround possible Lucene bug which returns same file
       // name multiple times
       Collection<String> files = new HashSet<String>(commit.getFileNames());
-      dir = core.getDirectoryFactory().get(core.getNewIndexDir(), DirContext.DEFAULT, core.getSolrConfig().indexConfig.lockType);
+      dir = core.getDirectoryFactory().get(core.getNewIndexDir(),
+          DirContext.DEFAULT, core.getSolrConfig().indexConfig.lockType);
       try {
-
+        
         for (String fileName : files) {
-          if (fileName.endsWith(".lock"))
-            continue;
-          Map<String, Object> fileMeta = new HashMap<String, Object>();
+          if (fileName.endsWith(".lock")) continue;
+          Map<String,Object> fileMeta = new HashMap<String,Object>();
           fileMeta.put(NAME, fileName);
           fileMeta.put(SIZE, dir.fileLength(fileName));
           result.add(fileMeta);
@@ -448,16 +459,18 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
     } catch (IOException e) {
       rsp.add("status", "unable to get file names for given index generation");
       rsp.add("exception", e);
-      LOG.error("Unable to get file names for indexCommit generation: " + gen, e);
+      LOG.error("Unable to get file names for indexCommit generation: " + gen,
+          e);
     }
     rsp.add(CMD_GET_FILE_LIST, result);
-    if (confFileNameAlias.size() < 1 || core.getCoreDescriptor().getCoreContainer().isZooKeeperAware())
-      return;
+    if (confFileNameAlias.size() < 1
+        || core.getCoreDescriptor().getCoreContainer().isZooKeeperAware()) return;
     LOG.debug("Adding config files to list: " + includeConfFiles);
     // if configuration files need to be included get their details
-    rsp.add(CONF_FILES, getConfFileInfoFromCache(confFileNameAlias, confFileInfoCache));
+    rsp.add(CONF_FILES,
+        getConfFileInfoFromCache(confFileNameAlias, confFileInfoCache));
   }
-
+  
   /**
    * For configuration files, checksum of the file is included because, unlike
    * index files, they may have same content but different timestamps.
@@ -466,104 +479,105 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
    * have to compute the checksum. The cache is refreshed only if the
    * lastModified of the file changes
    */
-  List<Map<String, Object>> getConfFileInfoFromCache(NamedList<String> nameAndAlias, final Map<String, FileInfo> confFileInfoCache) {
-    List<Map<String, Object>> confFiles = new ArrayList<Map<String, Object>>();
+  List<Map<String,Object>> getConfFileInfoFromCache(
+      NamedList<String> nameAndAlias,
+      final Map<String,FileInfo> confFileInfoCache) {
+    List<Map<String,Object>> confFiles = new ArrayList<Map<String,Object>>();
     synchronized (confFileInfoCache) {
       File confDir = new File(core.getResourceLoader().getConfigDir());
       Checksum checksum = null;
       for (int i = 0; i < nameAndAlias.size(); i++) {
         String cf = nameAndAlias.getName(i);
         File f = new File(confDir, cf);
-        if (!f.exists() || f.isDirectory())
-          continue; // must not happen
+        if (!f.exists() || f.isDirectory()) continue; // must not happen
         FileInfo info = confFileInfoCache.get(cf);
-        if (info == null || info.lastmodified != f.lastModified() || info.size != f.length()) {
-          if (checksum == null)
-            checksum = new Adler32();
-          info = new FileInfo(f.lastModified(), cf, f.length(), getCheckSum(checksum, f));
+        if (info == null || info.lastmodified != f.lastModified()
+            || info.size != f.length()) {
+          if (checksum == null) checksum = new Adler32();
+          info = new FileInfo(f.lastModified(), cf, f.length(), getCheckSum(
+              checksum, f));
           confFileInfoCache.put(cf, info);
         }
-        Map<String, Object> m = info.getAsMap();
-        if (nameAndAlias.getVal(i) != null)
-          m.put(ALIAS, nameAndAlias.getVal(i));
+        Map<String,Object> m = info.getAsMap();
+        if (nameAndAlias.getVal(i) != null) m
+            .put(ALIAS, nameAndAlias.getVal(i));
         confFiles.add(m);
       }
     }
     return confFiles;
   }
-
+  
   static class FileInfo {
     long lastmodified;
     String name;
     long size;
     long checksum;
-
+    
     public FileInfo(long lasmodified, String name, long size, long checksum) {
       this.lastmodified = lasmodified;
       this.name = name;
       this.size = size;
       this.checksum = checksum;
     }
-
-    Map<String, Object> getAsMap() {
-      Map<String, Object> map = new HashMap<String, Object>();
+    
+    Map<String,Object> getAsMap() {
+      Map<String,Object> map = new HashMap<String,Object>();
       map.put(NAME, name);
       map.put(SIZE, size);
       map.put(CHECKSUM, checksum);
       return map;
     }
   }
-
+  
   void disablePoll() {
-    if (isSlave)
-      snapPuller.disablePoll();
+    if (isSlave) snapPuller.disablePoll();
   }
-
+  
   void enablePoll() {
-    if (isSlave)
-      snapPuller.enablePoll();
+    if (isSlave) snapPuller.enablePoll();
   }
-
+  
   boolean isPollingDisabled() {
-    if (snapPuller == null)
-      return true;
+    if (snapPuller == null) return true;
     return snapPuller.isPollingDisabled();
   }
-
+  
   int getTimesReplicatedSinceStartup() {
     return numTimesReplicated;
   }
-
+  
   void setTimesReplicatedSinceStartup() {
     numTimesReplicated++;
   }
-
+  
   long getIndexSize() {
     Directory dir;
     long size = 0;
     try {
-      dir = core.getDirectoryFactory().get(core.getIndexDir(), DirContext.DEFAULT, core.getSolrConfig().indexConfig.lockType);
+      dir = core.getDirectoryFactory().get(core.getIndexDir(),
+          DirContext.DEFAULT, core.getSolrConfig().indexConfig.lockType);
       try {
         size = DirectoryFactory.sizeOfDirectory(dir);
       } finally {
         core.getDirectoryFactory().release(dir);
       }
     } catch (IOException e) {
-      SolrException.log(LOG, "IO error while trying to get the size of the Directory", e);
+      SolrException.log(LOG,
+          "IO error while trying to get the size of the Directory", e);
     }
     return size;
   }
-
+  
   @Override
   public String getDescription() {
     return "ReplicationHandler provides replication of index and configuration files from Master to Slaves";
   }
-
+  
   @Override
   public String getSource() {
     return "$URL$";
   }
-
+  
   /**
    * returns the CommitVersionInfo for the current searcher, or null on error.
    */
@@ -571,7 +585,8 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
     CommitVersionInfo v = null;
     RefCounted<SolrIndexSearcher> searcher = core.getSearcher();
     try {
-      v = CommitVersionInfo.build(searcher.get().getIndexReader().getIndexCommit());
+      v = CommitVersionInfo.build(searcher.get().getIndexReader()
+          .getIndexCommit());
     } catch (IOException e) {
       LOG.warn("Unable to get index commit: ", e);
     } finally {
@@ -579,7 +594,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
     }
     return v;
   }
-
+  
   @Override
   @SuppressWarnings("unchecked")
   public NamedList getStatistics() {
@@ -589,11 +604,11 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
       CommitVersionInfo vInfo = getIndexVersion();
       list.add("indexVersion", null == vInfo ? 0 : vInfo.version);
       list.add(GENERATION, null == vInfo ? 0 : vInfo.generation);
-
+      
       list.add("indexPath", core.getIndexDir());
       list.add("isMaster", String.valueOf(isMaster));
       list.add("isSlave", String.valueOf(isSlave));
-
+      
       SnapPuller snapPuller = tempSnapPuller;
       if (snapPuller != null) {
         list.add(MASTER_URL, snapPuller.getMasterUrl());
@@ -621,15 +636,15 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
         addVal(list, SnapPuller.CONF_FILES_REPLICATED, props, String.class);
       }
       if (isMaster) {
-        if (includeConfFiles != null)
-          list.add("confFilesToReplicate", includeConfFiles);
+        if (includeConfFiles != null) list.add("confFilesToReplicate",
+            includeConfFiles);
         list.add(REPLICATE_AFTER, getReplicateAfterStrings());
         list.add("replicationEnabled", String.valueOf(replicationEnabled.get()));
       }
     }
     return list;
   }
-
+  
   /**
    * Used for showing statistics and progress information.
    */
@@ -637,7 +652,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
     NamedList<Object> details = new SimpleOrderedMap<Object>();
     NamedList<Object> master = new SimpleOrderedMap<Object>();
     NamedList<Object> slave = new SimpleOrderedMap<Object>();
-
+    
     details.add("indexSize", NumberUtils.readableSize(getIndexSize()));
     details.add("indexPath", core.getIndexDir());
     details.add(CMD_SHOW_COMMITS, getCommits());
@@ -646,22 +661,22 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
     CommitVersionInfo vInfo = getIndexVersion();
     details.add("indexVersion", null == vInfo ? 0 : vInfo.version);
     details.add(GENERATION, null == vInfo ? 0 : vInfo.generation);
-
+    
     IndexCommit commit = indexCommitPoint; // make a copy so it won't change
-
+    
     if (isMaster) {
-      if (includeConfFiles != null)
-        master.add(CONF_FILES, includeConfFiles);
+      if (includeConfFiles != null) master.add(CONF_FILES, includeConfFiles);
       master.add(REPLICATE_AFTER, getReplicateAfterStrings());
-      master.add("replicationEnabled", String.valueOf(replicationEnabled.get()));
+      master
+          .add("replicationEnabled", String.valueOf(replicationEnabled.get()));
     }
-
+    
     if (isMaster && commit != null) {
       CommitVersionInfo repCommitInfo = CommitVersionInfo.build(commit);
       master.add("replicableVersion", repCommitInfo.version);
       master.add("replicableGeneration", repCommitInfo.generation);
     }
-
+    
     SnapPuller snapPuller = tempSnapPuller;
     if (snapPuller != null) {
       Properties props = loadReplicationProperties();
@@ -670,7 +685,9 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
           NamedList nl = snapPuller.getDetails();
           slave.add("masterDetails", nl.get(CMD_DETAILS));
         } catch (Exception e) {
-          LOG.warn("Exception while invoking 'details' method for replication on master ", e);
+          LOG.warn(
+              "Exception while invoking 'details' method for replication on master ",
+              e);
           slave.add(ERR_STATUS, "invalid_master");
         }
       }
@@ -679,7 +696,8 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
         slave.add(SnapPuller.POLL_INTERVAL, snapPuller.getPollInterval());
       }
       if (snapPuller.getNextScheduledExecTime() != null && !isPollingDisabled()) {
-        slave.add(NEXT_EXECUTION_AT, new Date(snapPuller.getNextScheduledExecTime()).toString());
+        slave.add(NEXT_EXECUTION_AT,
+            new Date(snapPuller.getNextScheduledExecTime()).toString());
       } else if (isPollingDisabled()) {
         slave.add(NEXT_EXECUTION_AT, "Polling disabled");
       }
@@ -694,7 +712,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
       addVal(slave, SnapPuller.TIMES_FAILED, props, Integer.class);
       addVal(slave, SnapPuller.REPLICATION_FAILED_AT, props, Date.class);
       addVal(slave, SnapPuller.PREVIOUS_CYCLE_TIME_TAKEN, props, Long.class);
-
+      
       slave.add("currentDate", new Date().toString());
       slave.add("isPollingDisabled", String.valueOf(isPollingDisabled()));
       boolean isReplicating = isReplicating();
@@ -703,35 +721,37 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
         try {
           long bytesToDownload = 0;
           List<String> filesToDownload = new ArrayList<String>();
-          for (Map<String, Object> file : snapPuller.getFilesToDownload()) {
+          for (Map<String,Object> file : snapPuller.getFilesToDownload()) {
             filesToDownload.add((String) file.get(NAME));
             bytesToDownload += (Long) file.get(SIZE);
           }
-
+          
           // get list of conf files to download
-          for (Map<String, Object> file : snapPuller.getConfFilesToDownload()) {
+          for (Map<String,Object> file : snapPuller.getConfFilesToDownload()) {
             filesToDownload.add((String) file.get(NAME));
             bytesToDownload += (Long) file.get(SIZE);
           }
-
+          
           slave.add("filesToDownload", filesToDownload);
-          slave.add("numFilesToDownload", String.valueOf(filesToDownload.size()));
-          slave.add("bytesToDownload", NumberUtils.readableSize(bytesToDownload));
-
+          slave.add("numFilesToDownload",
+              String.valueOf(filesToDownload.size()));
+          slave.add("bytesToDownload",
+              NumberUtils.readableSize(bytesToDownload));
+          
           long bytesDownloaded = 0;
           List<String> filesDownloaded = new ArrayList<String>();
-          for (Map<String, Object> file : snapPuller.getFilesDownloaded()) {
+          for (Map<String,Object> file : snapPuller.getFilesDownloaded()) {
             filesDownloaded.add((String) file.get(NAME));
             bytesDownloaded += (Long) file.get(SIZE);
           }
-
+          
           // get list of conf files downloaded
-          for (Map<String, Object> file : snapPuller.getConfFilesDownloaded()) {
+          for (Map<String,Object> file : snapPuller.getConfFilesDownloaded()) {
             filesDownloaded.add((String) file.get(NAME));
             bytesDownloaded += (Long) file.get(SIZE);
           }
-
-          Map<String, Object> currentFile = snapPuller.getCurrentFile();
+          
+          Map<String,Object> currentFile = snapPuller.getCurrentFile();
           String currFile = null;
           long currFileSize = 0, currFileSizeDownloaded = 0;
           float percentDownloaded = 0;
@@ -739,62 +759,64 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
             currFile = (String) currentFile.get(NAME);
             currFileSize = (Long) currentFile.get(SIZE);
             if (currentFile.containsKey("bytesDownloaded")) {
-              currFileSizeDownloaded = (Long) currentFile.get("bytesDownloaded");
+              currFileSizeDownloaded = (Long) currentFile
+                  .get("bytesDownloaded");
               bytesDownloaded += currFileSizeDownloaded;
-              if (currFileSize > 0)
-                percentDownloaded = (currFileSizeDownloaded * 100) / currFileSize;
+              if (currFileSize > 0) percentDownloaded = (currFileSizeDownloaded * 100)
+                  / currFileSize;
             }
           }
           slave.add("filesDownloaded", filesDownloaded);
-          slave.add("numFilesDownloaded", String.valueOf(filesDownloaded.size()));
-
+          slave.add("numFilesDownloaded",
+              String.valueOf(filesDownloaded.size()));
+          
           long estimatedTimeRemaining = 0;
-
+          
           if (snapPuller.getReplicationStartTime() > 0) {
-            slave.add("replicationStartTime", new Date(snapPuller.getReplicationStartTime()).toString());
+            slave.add("replicationStartTime",
+                new Date(snapPuller.getReplicationStartTime()).toString());
           }
           long elapsed = getTimeElapsed(snapPuller);
           slave.add("timeElapsed", String.valueOf(elapsed) + "s");
-
-          if (bytesDownloaded > 0)
-            estimatedTimeRemaining = ((bytesToDownload - bytesDownloaded) * elapsed) / bytesDownloaded;
+          
+          if (bytesDownloaded > 0) estimatedTimeRemaining = ((bytesToDownload - bytesDownloaded) * elapsed)
+              / bytesDownloaded;
           float totalPercent = 0;
           long downloadSpeed = 0;
-          if (bytesToDownload > 0)
-            totalPercent = (bytesDownloaded * 100) / bytesToDownload;
-          if (elapsed > 0)
-            downloadSpeed = (bytesDownloaded / elapsed);
-          if (currFile != null)
-            slave.add("currentFile", currFile);
+          if (bytesToDownload > 0) totalPercent = (bytesDownloaded * 100)
+              / bytesToDownload;
+          if (elapsed > 0) downloadSpeed = (bytesDownloaded / elapsed);
+          if (currFile != null) slave.add("currentFile", currFile);
           slave.add("currentFileSize", NumberUtils.readableSize(currFileSize));
-          slave.add("currentFileSizeDownloaded", NumberUtils.readableSize(currFileSizeDownloaded));
-          slave.add("currentFileSizePercent", String.valueOf(percentDownloaded));
-          slave.add("bytesDownloaded", NumberUtils.readableSize(bytesDownloaded));
+          slave.add("currentFileSizeDownloaded",
+              NumberUtils.readableSize(currFileSizeDownloaded));
+          slave
+              .add("currentFileSizePercent", String.valueOf(percentDownloaded));
+          slave.add("bytesDownloaded",
+              NumberUtils.readableSize(bytesDownloaded));
           slave.add("totalPercent", String.valueOf(totalPercent));
-          slave.add("timeRemaining", String.valueOf(estimatedTimeRemaining) + "s");
+          slave.add("timeRemaining", String.valueOf(estimatedTimeRemaining)
+              + "s");
           slave.add("downloadSpeed", NumberUtils.readableSize(downloadSpeed));
         } catch (Exception e) {
           LOG.error("Exception while writing replication details: ", e);
         }
       }
     }
-
-    if (isMaster)
-      details.add("master", master);
-    if (slave.size() > 0)
-      details.add("slave", slave);
-
+    
+    if (isMaster) details.add("master", master);
+    if (slave.size() > 0) details.add("slave", slave);
+    
     NamedList snapshotStats = snapShootDetails;
-    if (snapshotStats != null)
-      details.add(CMD_BACKUP, snapshotStats);
-
+    if (snapshotStats != null) details.add(CMD_BACKUP, snapshotStats);
+    
     return details;
   }
-
-  private void addVal(NamedList<Object> nl, String key, Properties props, Class clzz) {
+  
+  private void addVal(NamedList<Object> nl, String key, Properties props,
+      Class clzz) {
     String s = props.getProperty(key);
-    if (s == null || s.trim().length() == 0)
-      return;
+    if (s == null || s.trim().length() == 0) return;
     if (clzz == Date.class) {
       try {
         Long l = Long.parseLong(s);
@@ -811,36 +833,35 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
     } else {
       nl.add(key, s);
     }
-
+    
   }
-
+  
   private List<String> getReplicateAfterStrings() {
     List<String> replicateAfter = new ArrayList<String>();
-    if (replicateOnCommit)
-      replicateAfter.add("commit");
-    if (replicateOnOptimize)
-      replicateAfter.add("optimize");
-    if (replicateOnStart)
-      replicateAfter.add("startup");
+    if (replicateOnCommit) replicateAfter.add("commit");
+    if (replicateOnOptimize) replicateAfter.add("optimize");
+    if (replicateOnStart) replicateAfter.add("startup");
     return replicateAfter;
   }
-
+  
   private long getTimeElapsed(SnapPuller snapPuller) {
     long timeElapsed = 0;
-    if (snapPuller.getReplicationStartTime() > 0)
-      timeElapsed = (System.currentTimeMillis() - snapPuller.getReplicationStartTime()) / 1000;
+    if (snapPuller.getReplicationStartTime() > 0) timeElapsed = (System
+        .currentTimeMillis() - snapPuller.getReplicationStartTime()) / 1000;
     return timeElapsed;
   }
-
+  
   Properties loadReplicationProperties() {
     Directory dir = null;
     try {
       try {
-        dir = core.getDirectoryFactory().get(core.getDataDir(), DirContext.META_DATA, core.getSolrConfig().indexConfig.lockType);
+        dir = core.getDirectoryFactory().get(core.getDataDir(),
+            DirContext.META_DATA, core.getSolrConfig().indexConfig.lockType);
         if (!dir.fileExists(SnapPuller.REPLICATION_PROPERTIES)) {
           return new Properties();
         }
-        final IndexInput input = dir.openInput(SnapPuller.REPLICATION_PROPERTIES, IOContext.DEFAULT);
+        final IndexInput input = dir.openInput(
+            SnapPuller.REPLICATION_PROPERTIES, IOContext.DEFAULT);
         try {
           final InputStream is = new PropertiesInputStream(input);
           Properties props = new Properties();
@@ -858,7 +879,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
       throw new SolrException(ErrorCode.SERVER_ERROR, e);
     }
   }
-
+  
   // void refreshCommitpoint() {
   // IndexCommit commitPoint = core.getDeletionPolicy().getLatestCommit();
   // if(replicateOnCommit || (replicateOnOptimize &&
@@ -866,26 +887,26 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
   // indexCommitPoint = commitPoint;
   // }
   // }
-
+  
   @Override
   @SuppressWarnings("unchecked")
   public void inform(SolrCore core) {
     boolean wasAlreadyInformed = this.core != null;
     this.core = core;
-    if(!wasAlreadyInformed) {
+    if (!wasAlreadyInformed) {
       registerFileStreamResponseWriter();
       registerCloseHook();
     }
     Object nbtk = initArgs.get(NUMBER_BACKUPS_TO_KEEP_INIT_PARAM);
-    if(nbtk!=null) {
+    if (nbtk != null) {
       numberBackupsToKeep = Integer.parseInt(nbtk.toString());
     } else {
       numberBackupsToKeep = 0;
     }
     NamedList slave = (NamedList) initArgs.get("slave");
-    boolean enableSlave = isEnabled( slave );
+    boolean enableSlave = isEnabled(slave);
     if (enableSlave) {
-      if(snapPuller!=null) {
+      if (snapPuller != null) {
         snapPuller.disablePoll();
         snapPuller.abortPull();
         snapPuller.destroy();
@@ -894,7 +915,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
       isSlave = true;
     }
     NamedList master = (NamedList) initArgs.get("master");
-    boolean enableMaster = isEnabled( master );
+    boolean enableMaster = isEnabled(master);
     
     if (!enableSlave && !enableMaster) {
       enableMaster = true;
@@ -911,50 +932,60 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
           // if there is an alias add it or it is null
           confFileNameAlias.add(strs[0], strs.length > 1 ? strs[1] : null);
         }
-        LOG.info("Replication enabled for following config files: " + includeConfFiles);
+        LOG.info("Replication enabled for following config files: "
+            + includeConfFiles);
       }
       List backup = master.getAll("backupAfter");
       boolean backupOnCommit = backup.contains("commit");
       boolean backupOnOptimize = !backupOnCommit && backup.contains("optimize");
       List replicateAfter = master.getAll(REPLICATE_AFTER);
       replicateOnCommit = replicateAfter.contains("commit");
-      replicateOnOptimize = !replicateOnCommit && replicateAfter.contains("optimize");
-
-      if (!replicateOnCommit && ! replicateOnOptimize) {
+      replicateOnOptimize = !replicateOnCommit
+          && replicateAfter.contains("optimize");
+      
+      if (!replicateOnCommit && !replicateOnOptimize) {
         replicateOnCommit = true;
       }
       
-      // if we only want to replicate on optimize, we need the deletion policy to
+      // if we only want to replicate on optimize, we need the deletion policy
+      // to
       // save the last optimized commit point.
       if (replicateOnOptimize) {
         IndexDeletionPolicyWrapper wrapper = core.getDeletionPolicy();
-        IndexDeletionPolicy policy = wrapper == null ? null : wrapper.getWrappedDeletionPolicy();
+        IndexDeletionPolicy policy = wrapper == null ? null : wrapper
+            .getWrappedDeletionPolicy();
         if (policy instanceof SolrDeletionPolicy) {
-          SolrDeletionPolicy solrPolicy = (SolrDeletionPolicy)policy;
+          SolrDeletionPolicy solrPolicy = (SolrDeletionPolicy) policy;
           if (solrPolicy.getMaxOptimizedCommitsToKeep() < 1) {
             solrPolicy.setMaxOptimizedCommitsToKeep(1);
           }
         } else {
-          LOG.warn("Replication can't call setMaxOptimizedCommitsToKeep on " + policy);
+          LOG.warn("Replication can't call setMaxOptimizedCommitsToKeep on "
+              + policy);
         }
       }
-
-      if (replicateOnOptimize || backupOnOptimize || optimizeEventHandler != null) {
+      
+      if (replicateOnOptimize || backupOnOptimize
+          || optimizeEventHandler != null) {
         if (optimizeEventHandler == null) {
-          optimizeEventHandler = new BackupAndReplicationListener(backupOnOptimize, replicateOnOptimize);
-          core.getUpdateHandler().registerOptimizeCallback(optimizeEventHandler);
+          optimizeEventHandler = new BackupAndReplicationListener(
+              backupOnOptimize, replicateOnOptimize);
+          core.getUpdateHandler()
+              .registerOptimizeCallback(optimizeEventHandler);
         } else {
           optimizeEventHandler.getCommit = backupOnOptimize;
           optimizeEventHandler.snapshoot = replicateOnOptimize;
         }
       }
+      
       if (replicateOnCommit || backupOnCommit || commitEventHandler != null) {
         replicateOnCommit = replicateOnCommit || backupOnCommit;
-        if (optimizeEventHandler == null) {
-          commitEventHandler = new BackupAndReplicationListener(backupOnOptimize, replicateOnCommit);
+        if (commitEventHandler == null) {
+          commitEventHandler = new BackupAndReplicationListener(backupOnCommit,
+              replicateOnCommit);
           core.getUpdateHandler().registerCommitCallback(commitEventHandler);
         } else {
-          commitEventHandler.getCommit = backupOnOptimize;
+          commitEventHandler.getCommit = backupOnCommit;
           commitEventHandler.snapshoot = replicateOnCommit;
         }
       }
@@ -962,38 +993,45 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
         replicateOnStart = true;
         RefCounted<SolrIndexSearcher> s = core.getNewestSearcher(false);
         try {
-          DirectoryReader reader = s==null ? null : s.get().getIndexReader();
-          if (reader!=null && reader.getIndexCommit() != null && reader.getIndexCommit().getGeneration() != 1L) {
+          DirectoryReader reader = s == null ? null : s.get().getIndexReader();
+          if (reader != null && reader.getIndexCommit() != null
+              && reader.getIndexCommit().getGeneration() != 1L) {
             try {
-              if(replicateOnOptimize){
-                Collection<IndexCommit> commits = DirectoryReader.listCommits(reader.directory());
+              if (replicateOnOptimize) {
+                Collection<IndexCommit> commits = DirectoryReader
+                    .listCommits(reader.directory());
                 for (IndexCommit ic : commits) {
-                  if(ic.getSegmentCount() == 1){
-                    if(indexCommitPoint == null || indexCommitPoint.getGeneration() < ic.getGeneration()) indexCommitPoint = ic;
+                  if (ic.getSegmentCount() == 1) {
+                    if (indexCommitPoint == null
+                        || indexCommitPoint.getGeneration() < ic
+                            .getGeneration()) indexCommitPoint = ic;
                   }
                 }
-              } else{
+              } else {
                 indexCommitPoint = reader.getIndexCommit();
               }
             } finally {
-              // We don't need to save commit points for replication, the SolrDeletionPolicy
-              // always saves the last commit point (and the last optimized commit point, if needed)
+              // We don't need to save commit points for replication, the
+              // SolrDeletionPolicy
+              // always saves the last commit point (and the last optimized
+              // commit point, if needed)
               /***
-              if(indexCommitPoint != null){
-                core.getDeletionPolicy().saveCommitPoint(indexCommitPoint.getGeneration());
-              }
-              ***/
+               * if(indexCommitPoint != null){
+               * core.getDeletionPolicy().saveCommitPoint
+               * (indexCommitPoint.getGeneration()); }
+               ***/
             }
           }
-
+          
           // ensure the writer is init'd so that we have a list of commit points
-          RefCounted<IndexWriter> iw = core.getUpdateHandler().getSolrCoreState().getIndexWriter(core);
+          RefCounted<IndexWriter> iw = core.getUpdateHandler()
+              .getSolrCoreState().getIndexWriter(core);
           iw.decref();
-
+          
         } catch (IOException e) {
           LOG.warn("Unable to get IndexCommit on startup", e);
         } finally {
-          if (s!=null) s.decref();
+          if (s != null) s.decref();
         }
       }
       String reserve = (String) master.get(RESERVE);
@@ -1004,19 +1042,16 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
       isMaster = true;
     }
   }
-
+  
   // check master or slave is enabled
   private boolean isEnabled(NamedList params) {
-    if (params == null)
-      return false;
+    if (params == null) return false;
     Object enable = params.get("enable");
-    if (enable == null)
-      return true;
-    if (enable instanceof String)
-      return StrUtils.parseBool((String) enable);
+    if (enable == null) return true;
+    if (enable instanceof String) return StrUtils.parseBool((String) enable);
     return Boolean.TRUE.equals(enable);
   }
-
+  
   /**
    * register a closehook
    */
@@ -1028,13 +1063,12 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
           snapPuller.destroy();
         }
       }
-
+      
       @Override
-      public void postClose(SolrCore core) {
-      }
+      public void postClose(SolrCore core) {}
     });
   }
-
+  
   /**
    * A ResponseWriter is registered automatically for wt=filestream This
    * response writer is used to transfer index files in a block-by-block manner
@@ -1043,85 +1077,46 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
   private void registerFileStreamResponseWriter() {
     core.registerResponseWriter(FILE_STREAM, new BinaryQueryResponseWriter() {
       @Override
-      public void write(OutputStream out, SolrQueryRequest request, SolrQueryResponse resp) throws IOException {
-        DirectoryFileStream stream = (DirectoryFileStream) resp.getValues().get(FILE_STREAM);
+      public void write(OutputStream out, SolrQueryRequest request,
+          SolrQueryResponse resp) throws IOException {
+        DirectoryFileStream stream = (DirectoryFileStream) resp.getValues()
+            .get(FILE_STREAM);
         stream.write(out);
       }
-
+      
       @Override
-      public void write(Writer writer, SolrQueryRequest request, SolrQueryResponse response) {
-        throw new RuntimeException("This is a binary writer , Cannot write to a characterstream");
+      public void write(Writer writer, SolrQueryRequest request,
+          SolrQueryResponse response) {
+        throw new RuntimeException(
+            "This is a binary writer , Cannot write to a characterstream");
       }
-
+      
       @Override
-      public String getContentType(SolrQueryRequest request, SolrQueryResponse response) {
+      public String getContentType(SolrQueryRequest request,
+          SolrQueryResponse response) {
         return "application/octet-stream";
       }
-
+      
       @Override
       public void init(NamedList args) { /* no op */
       }
     });
-
+    
   }
-
-  class BackupAndReplicationListener implements SolrEventListener {
-    private volatile boolean getCommit;
-    private volatile boolean snapshoot;
-
-    public BackupAndReplicationListener(boolean getCommit, boolean snapshoot) {
-      this.getCommit = getCommit;
-      this.snapshoot = snapshoot;
-    }
-
-    @Override
-    public void init(NamedList args) {
-    }
-
-    @Override
-    public void postCommit() {
-      IndexCommit currentCommitPoint = core.getDeletionPolicy().getLatestCommit();
-
-      if (getCommit) {
-        indexCommitPoint = currentCommitPoint;
-      }
-
-      if (snapshoot) {
-        try {
-          int numberToKeep = numberBackupsToKeep;
-          if (numberToKeep < 1) {
-            numberToKeep = Integer.MAX_VALUE;
-          }
-          SnapShooter snapShooter = new SnapShooter(core, null);
-          snapShooter.createSnapAsync(currentCommitPoint, numberToKeep, ReplicationHandler.this);
-        } catch (Exception e) {
-          LOG.error("Exception while snapshooting", e);
-        }
-      }
-    }
-
-    @Override
-    public void newSearcher(SolrIndexSearcher newSearcher, SolrIndexSearcher currentSearcher) {
-    }
-
-    @Override
-    public void postSoftCommit() {
-    }
-  }
-
+  
   private class DirectoryFileStream {
     protected SolrParams params;
-
+    
     protected FastOutputStream fos;
-
+    
     protected Long indexGen;
     protected IndexDeletionPolicyWrapper delPolicy;
-
+    
     public DirectoryFileStream(SolrParams solrParams) {
       params = solrParams;
       delPolicy = core.getDeletionPolicy();
     }
-
+    
     public void write(OutputStream out) throws IOException {
       String fileName = params.get(FILE);
       String cfileName = params.get(CONF_FILE_SHORT);
@@ -1130,14 +1125,13 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
       String compress = params.get(COMPRESSION);
       String sChecksum = params.get(CHECKSUM);
       String sGen = params.get(GENERATION);
-      if (sGen != null)
-        indexGen = Long.parseLong(sGen);
+      if (sGen != null) indexGen = Long.parseLong(sGen);
       if (Boolean.parseBoolean(compress)) {
         fos = new FastOutputStream(new DeflaterOutputStream(out));
       } else {
         fos = new FastOutputStream(out);
       }
-
+      
       int packetsWritten = 0;
       IndexInput in = null;
       try {
@@ -1145,15 +1139,13 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
         int len = -1;
         // check if checksum is requested
         boolean useChecksum = Boolean.parseBoolean(sChecksum);
-        if (sOffset != null)
-          offset = Long.parseLong(sOffset);
-        if (sLen != null)
-          len = Integer.parseInt(sLen);
+        if (sOffset != null) offset = Long.parseLong(sOffset);
+        if (sLen != null) len = Integer.parseInt(sLen);
         if (fileName == null && cfileName == null) {
           // no filename do nothing
           writeNothing();
         }
-
+        
         RefCounted<SolrIndexSearcher> sref = core.getSearcher();
         Directory dir;
         try {
@@ -1164,19 +1156,17 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
         }
         in = dir.openInput(fileName, IOContext.READONCE);
         // if offset is mentioned move the pointer to that point
-        if (offset != -1)
-          in.seek(offset);
+        if (offset != -1) in.seek(offset);
         byte[] buf = new byte[(len == -1 || len > PACKET_SZ) ? PACKET_SZ : len];
         Checksum checksum = null;
-        if (useChecksum)
-          checksum = new Adler32();
-
+        if (useChecksum) checksum = new Adler32();
+        
         long filelen = dir.fileLength(fileName);
         while (true) {
           offset = offset == -1 ? 0 : offset;
           int read = (int) Math.min(buf.length, filelen - offset);
           in.readBytes(buf, 0, read);
-
+          
           fos.writeInt((int) read);
           if (useChecksum) {
             checksum.reset();
@@ -1206,7 +1196,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
         }
       }
     }
-
+    
     /**
      * Used to write a marker for EOF
      */
@@ -1215,13 +1205,13 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
       fos.flush();
     }
   }
-
+  
   private class LocalFsFileStream extends DirectoryFileStream {
-
+    
     public LocalFsFileStream(SolrParams solrParams) {
       super(solrParams);
     }
-
+    
     @Override
     public void write(OutputStream out) throws IOException {
       String fileName = params.get(FILE);
@@ -1231,8 +1221,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
       String compress = params.get(COMPRESSION);
       String sChecksum = params.get(CHECKSUM);
       String sGen = params.get(GENERATION);
-      if (sGen != null)
-        indexGen = Long.parseLong(sGen);
+      if (sGen != null) indexGen = Long.parseLong(sGen);
       if (Boolean.parseBoolean(compress)) {
         fos = new FastOutputStream(new DeflaterOutputStream(out));
       } else {
@@ -1245,32 +1234,29 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
         int len = -1;
         // check if checksum is requested
         boolean useChecksum = Boolean.parseBoolean(sChecksum);
-        if (sOffset != null)
-          offset = Long.parseLong(sOffset);
-        if (sLen != null)
-          len = Integer.parseInt(sLen);
+        if (sOffset != null) offset = Long.parseLong(sOffset);
+        if (sLen != null) len = Integer.parseInt(sLen);
         if (fileName == null && cfileName == null) {
           // no filename do nothing
           writeNothing();
         }
-
+        
         File file = null;
-
+        
         // if if is a conf file read from config diectory
         file = new File(core.getResourceLoader().getConfigDir(), cfileName);
-
+        
         if (file.exists() && file.canRead()) {
           inputStream = new FileInputStream(file);
           FileChannel channel = inputStream.getChannel();
           // if offset is mentioned move the pointer to that point
-          if (offset != -1)
-            channel.position(offset);
-          byte[] buf = new byte[(len == -1 || len > PACKET_SZ) ? PACKET_SZ : len];
+          if (offset != -1) channel.position(offset);
+          byte[] buf = new byte[(len == -1 || len > PACKET_SZ) ? PACKET_SZ
+              : len];
           Checksum checksum = null;
-          if (useChecksum)
-            checksum = new Adler32();
+          if (useChecksum) checksum = new Adler32();
           ByteBuffer bb = ByteBuffer.wrap(buf);
-
+          
           while (true) {
             bb.clear();
             long bytesRead = channel.read(bb);
@@ -1303,83 +1289,132 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
       }
     }
   }
-
+  
+  public class BackupAndReplicationListener implements SolrEventListener {
+    private volatile boolean getCommit;
+    private volatile boolean snapshoot;
+    
+    public BackupAndReplicationListener(boolean snapshoot, boolean getCommit) {
+      this.getCommit = getCommit;
+      this.snapshoot = snapshoot;
+    }
+    
+    @Override
+    public void init(NamedList args) {/* no op */}
+    
+    /**
+     * This refreshes the latest replicateable index commit and optionally can
+     * create Snapshots as well
+     */
+    @Override
+    public void postCommit() {
+      IndexCommit currentCommitPoint = core.getDeletionPolicy()
+          .getLatestCommit();
+      
+      if (getCommit) {
+        indexCommitPoint = currentCommitPoint;
+      }
+      if (snapshoot) {
+        try {
+          int numberToKeep = numberBackupsToKeep;
+          if (numberToKeep < 1) {
+            numberToKeep = Integer.MAX_VALUE;
+          }
+          SnapShooter snapShooter = new SnapShooter(core, null);
+          snapShooter.createSnapAsync(currentCommitPoint, numberToKeep,
+              ReplicationHandler.this);
+        } catch (Exception e) {
+          LOG.error("Exception while snapshooting", e);
+        }
+      }
+    }
+    
+    @Override
+    public void newSearcher(SolrIndexSearcher newSearcher,
+        SolrIndexSearcher currentSearcher) { /* no op */}
+    
+    @Override
+    public void postSoftCommit() {
+      
+    }
+  }
+  
   public static final String MASTER_URL = "masterUrl";
-
+  
   public static final String STATUS = "status";
-
+  
   public static final String COMMAND = "command";
-
+  
   public static final String CMD_DETAILS = "details";
-
+  
   public static final String CMD_BACKUP = "backup";
-
+  
   public static final String CMD_FETCH_INDEX = "fetchindex";
-
+  
   public static final String CMD_ABORT_FETCH = "abortfetch";
-
+  
   public static final String CMD_GET_FILE_LIST = "filelist";
-
+  
   public static final String CMD_GET_FILE = "filecontent";
-
+  
   public static final String CMD_DISABLE_POLL = "disablepoll";
-
+  
   public static final String CMD_DISABLE_REPL = "disablereplication";
-
+  
   public static final String CMD_ENABLE_REPL = "enablereplication";
-
+  
   public static final String CMD_ENABLE_POLL = "enablepoll";
-
+  
   public static final String CMD_INDEX_VERSION = "indexversion";
-
+  
   public static final String CMD_SHOW_COMMITS = "commits";
-
+  
   public static final String GENERATION = "generation";
-
+  
   public static final String OFFSET = "offset";
-
+  
   public static final String LEN = "len";
-
+  
   public static final String FILE = "file";
-
+  
   public static final String NAME = "name";
-
+  
   public static final String SIZE = "size";
-
+  
   public static final String CONF_FILE_SHORT = "cf";
-
+  
   public static final String CHECKSUM = "checksum";
-
+  
   public static final String ALIAS = "alias";
-
+  
   public static final String CONF_CHECKSUM = "confchecksum";
-
+  
   public static final String CONF_FILES = "confFiles";
-
+  
   public static final String REPLICATE_AFTER = "replicateAfter";
-
+  
   public static final String FILE_STREAM = "filestream";
-
+  
   public static final int PACKET_SZ = 1024 * 1024; // 1MB
-
+  
   public static final String RESERVE = "commitReserveDuration";
-
+  
   public static final String COMPRESSION = "compression";
-
+  
   public static final String EXTERNAL = "external";
-
+  
   public static final String INTERNAL = "internal";
-
+  
   public static final String ERR_STATUS = "ERROR";
-
+  
   public static final String OK_STATUS = "OK";
-
+  
   public static final String NEXT_EXECUTION_AT = "nextExecutionAt";
-
+  
   public static final String NUMBER_BACKUPS_TO_KEEP_REQUEST_PARAM = "numberToKeep";
-
+  
   public static final String NUMBER_BACKUPS_TO_KEEP_INIT_PARAM = "maxNumberOfBackups";
-
+  
   /**
    * Boolean param for tests that can be specified when using
    * {@link #CMD_FETCH_INDEX} to force the current request to block until the
