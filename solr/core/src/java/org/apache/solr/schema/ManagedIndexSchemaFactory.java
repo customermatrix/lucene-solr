@@ -372,8 +372,13 @@ public class ManagedIndexSchemaFactory extends IndexSchemaFactory implements Sol
           final String upgradedSchemaPath = nonManagedSchemaPath + UPGRADED_SCHEMA_EXTENSION;
           zkCmdExecutor.ensureExists(upgradedSchemaPath, zkController.getZkClient());
           zkController.getZkClient().setData(upgradedSchemaPath, bytes, true);
-          // Then delete the non-managed schema znode
-          zkController.getZkClient().delete(nonManagedSchemaPath, -1, true);
+
+          try {
+            // Then delete the non-managed schema znode
+            zkController.getZkClient().delete(nonManagedSchemaPath, -1, true);
+          } catch (Exception e) {
+            log.info("Can't find non managed schema " + nonManagedSchemaPath + ". It has already been deleted.");
+          }
 
           // Set the resource name to the managed schema so that the CoreAdminHandler returns a findable filename 
           schema.setResourceName(managedSchemaResourceName);
