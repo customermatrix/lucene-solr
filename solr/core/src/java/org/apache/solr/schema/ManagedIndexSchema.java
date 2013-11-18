@@ -213,6 +213,14 @@ public class ManagedIndexSchema extends IndexSchema {
               String msg = "Field '" + newField.getName() + "' already exists.";
               throw new FieldExistsException(ErrorCode.BAD_REQUEST, msg);
             }
+            if (newSchema.getFields().containsKey(newField.getName())) {
+              if (newField.multiValued() && !newSchema.getFields().get(newField.getName()).multiValued() ) {
+                // go
+              } else {
+                continue;
+              }
+            }
+
             newSchema.fields.put(newField.getName(), newField);
 
             if (null != newField.getDefaultValue()) {
