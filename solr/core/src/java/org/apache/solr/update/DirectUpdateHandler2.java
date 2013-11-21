@@ -196,6 +196,9 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
             addAndDelete(cmd, dbqList);
           } else {
             // normal update
+            //BEGIN SEA-879 Updating a document does not work properly when using Nested documents
+            writer.deleteDocuments(new Term("_root_",cmd.getIndexedId()));
+            //END SEA-879
             
             Term updateTerm;
             Term idTerm = new Term(cmd.isBlock() ? "_root_" : idField.getName(), cmd.getIndexedId());
