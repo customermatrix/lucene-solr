@@ -32,12 +32,12 @@ import org.apache.lucene.index.DocumentsWriterPerThreadPool.ThreadState; //javad
  */
 class ThreadAffinityDocumentsWriterThreadPool extends DocumentsWriterPerThreadPool {
   private Map<Thread, ThreadState> threadBindings = new ConcurrentHashMap<Thread, ThreadState>();
-  
+
   /**
    * Creates a new {@link ThreadAffinityDocumentsWriterThreadPool} with a given maximum of {@link ThreadState}s.
    */
-  public ThreadAffinityDocumentsWriterThreadPool(LiveIndexWriterConfig indexWriterConfig, int maxNumPerThreads) {
-    super(indexWriterConfig, maxNumPerThreads);
+  public ThreadAffinityDocumentsWriterThreadPool(int maxNumPerThreads) {
+    super(maxNumPerThreads);
     assert getMaxThreadStates() >= 1;
   }
 
@@ -70,7 +70,7 @@ class ThreadAffinityDocumentsWriterThreadPool extends DocumentsWriterPerThreadPo
       }
     }
     assert minThreadState != null: "ThreadState is null";
-    
+
     minThreadState.lock();
     return minThreadState;
   }

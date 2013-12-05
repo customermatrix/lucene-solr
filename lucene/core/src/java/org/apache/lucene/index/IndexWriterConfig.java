@@ -382,14 +382,14 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig implements Cl
    *
    * <p>Only takes effect when IndexWriter is first created. */
   public IndexWriterConfig setMaxThreadStates(int maxThreadStates) {
-    this.indexerThreadPool = new ThreadAffinityDocumentsWriterThreadPool(this, maxThreadStates);
+    this.indexerThreadPool = new ThreadAffinityDocumentsWriterThreadPool(maxThreadStates);
     return this;
   }
 
   @Override
   public int getMaxThreadStates() {
     try {
-      return indexerThreadPool.getMaxThreadStates();
+      return ((ThreadAffinityDocumentsWriterThreadPool) indexerThreadPool).getMaxThreadStates();
     } catch (ClassCastException cce) {
       throw new IllegalStateException(cce);
     }

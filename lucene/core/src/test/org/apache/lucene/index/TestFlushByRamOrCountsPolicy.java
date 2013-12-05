@@ -40,7 +40,7 @@ public class TestFlushByRamOrCountsPolicy extends LuceneTestCase {
   public static void beforeClass() throws Exception {
     lineDocFile = new LineFileDocs(random(), defaultCodecSupportsDocValues());
   }
-  
+
   @AfterClass
   public static void afterClass() throws Exception {
     lineDocFile.close();
@@ -52,14 +52,14 @@ public class TestFlushByRamOrCountsPolicy extends LuceneTestCase {
         + random().nextDouble();
     runFlushByRam(1 + random().nextInt(TEST_NIGHTLY ? 5 : 1), ramBuffer, false);
   }
-  
+
   public void testFlushByRamLargeBuffer() throws IOException, InterruptedException {
     // with a 256 mb ram buffer we should never stall
     runFlushByRam(1 + random().nextInt(TEST_NIGHTLY ? 5 : 1), 256.d, true);
   }
 
   protected void runFlushByRam(int numThreads, double maxRamMB,
-      boolean ensureNotStalled) throws IOException, InterruptedException {
+                               boolean ensureNotStalled) throws IOException, InterruptedException {
     final int numDocumentsToIndex = 10 + atLeast(30);
     AtomicInteger numDocs = new AtomicInteger(numDocumentsToIndex);
     Directory dir = newDirectory();
@@ -67,7 +67,8 @@ public class TestFlushByRamOrCountsPolicy extends LuceneTestCase {
     IndexWriterConfig iwc = newIndexWriterConfig(TEST_VERSION_CURRENT,
         new MockAnalyzer(random())).setFlushPolicy(flushPolicy);
     final int numDWPT = 1 + atLeast(2);
-    DocumentsWriterPerThreadPool threadPool = new ThreadAffinityDocumentsWriterThreadPool(iwc, numDWPT);
+    DocumentsWriterPerThreadPool threadPool = new ThreadAffinityDocumentsWriterThreadPool(
+        numDWPT);
     iwc.setIndexerThreadPool(threadPool);
     iwc.setRAMBufferSizeMB(maxRamMB);
     iwc.setMaxBufferedDocs(IndexWriterConfig.DISABLE_AUTO_FLUSH);
@@ -123,7 +124,8 @@ public class TestFlushByRamOrCountsPolicy extends LuceneTestCase {
           new MockAnalyzer(random())).setFlushPolicy(flushPolicy);
 
       final int numDWPT = 1 + atLeast(2);
-      DocumentsWriterPerThreadPool threadPool = new ThreadAffinityDocumentsWriterThreadPool(iwc, numDWPT);
+      DocumentsWriterPerThreadPool threadPool = new ThreadAffinityDocumentsWriterThreadPool(
+          numDWPT);
       iwc.setIndexerThreadPool(threadPool);
       iwc.setMaxBufferedDocs(2 + atLeast(10));
       iwc.setRAMBufferSizeMB(IndexWriterConfig.DISABLE_AUTO_FLUSH);
@@ -174,7 +176,7 @@ public class TestFlushByRamOrCountsPolicy extends LuceneTestCase {
 
     final int numDWPT = 1 + random().nextInt(8);
     DocumentsWriterPerThreadPool threadPool = new ThreadAffinityDocumentsWriterThreadPool(
-        iwc, numDWPT);
+        numDWPT);
     iwc.setIndexerThreadPool(threadPool);
 
     IndexWriter writer = new IndexWriter(dir, iwc);
@@ -238,9 +240,9 @@ public class TestFlushByRamOrCountsPolicy extends LuceneTestCase {
       iwc.setMaxBufferedDeleteTerms(IndexWriterConfig.DISABLE_AUTO_FLUSH);
       FlushPolicy flushPolicy = new FlushByRamOrCountsPolicy();
       iwc.setFlushPolicy(flushPolicy);
-      
+
       DocumentsWriterPerThreadPool threadPool = new ThreadAffinityDocumentsWriterThreadPool(
-          iwc, numThreads[i]== 1 ? 1 : 2);
+          numThreads[i]== 1 ? 1 : 2);
       iwc.setIndexerThreadPool(threadPool);
       // with such a small ram buffer we should be stalled quiet quickly
       iwc.setRAMBufferSizeMB(0.25);
@@ -295,7 +297,7 @@ public class TestFlushByRamOrCountsPolicy extends LuceneTestCase {
     private final boolean doRandomCommit;
 
     public IndexThread(AtomicInteger pendingDocs, int numThreads,
-        IndexWriter writer, LineFileDocs docs, boolean doRandomCommit) {
+                       IndexWriter writer, LineFileDocs docs, boolean doRandomCommit) {
       this.pendingDocs = pendingDocs;
       this.writer = writer;
       iwc = writer.getConfig();
@@ -345,7 +347,7 @@ public class TestFlushByRamOrCountsPolicy extends LuceneTestCase {
         toFlush = state;
       } else if (flushOnDeleteTerms()
           && state.dwpt.pendingDeletes.numTermDeletes.get() >= indexWriterConfig
-              .getMaxBufferedDeleteTerms()) {
+          .getMaxBufferedDeleteTerms()) {
         toFlush = state;
       } else {
         toFlush = null;
@@ -378,7 +380,7 @@ public class TestFlushByRamOrCountsPolicy extends LuceneTestCase {
         toFlush = state;
       } else if (flushOnDocCount()
           && state.dwpt.getNumDocsInRAM() >= indexWriterConfig
-              .getMaxBufferedDocs()) {
+          .getMaxBufferedDocs()) {
         toFlush = state;
       } else if (flushOnRAM()
           && activeBytes >= (long) (indexWriterConfig.getRAMBufferSizeMB() * 1024. * 1024.)) {
@@ -409,7 +411,7 @@ public class TestFlushByRamOrCountsPolicy extends LuceneTestCase {
   }
 
   static void findPending(DocumentsWriterFlushControl flushControl,
-      ArrayList<ThreadState> pending, ArrayList<ThreadState> notPending) {
+                          ArrayList<ThreadState> pending, ArrayList<ThreadState> notPending) {
     Iterator<ThreadState> allActiveThreads = flushControl.allActiveThreadStates();
     while (allActiveThreads.hasNext()) {
       ThreadState next = allActiveThreads.next();

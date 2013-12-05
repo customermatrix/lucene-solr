@@ -19,9 +19,9 @@ package org.apache.lucene.index;
 import java.util.Random;
 
 /**
- * 
+ *
  * A <code>DocumentsWriterPerThreadPool<code> that selects thread states at random.
- * 
+ *
  * @lucene.internal
  * @lucene.experimental
  */
@@ -30,8 +30,8 @@ class RandomDocumentsWriterPerThreadPool extends DocumentsWriterPerThreadPool {
   private final Random random;
   private final int maxRetry;
 
-  public RandomDocumentsWriterPerThreadPool(LiveIndexWriterConfig indexWriterConfig, int maxNumPerThreads, Random random) {
-    super(indexWriterConfig, maxNumPerThreads);
+  public RandomDocumentsWriterPerThreadPool(int maxNumPerThreads, Random random) {
+    super(maxNumPerThreads);
     assert getMaxThreadStates() >= 1;
     states = new ThreadState[maxNumPerThreads];
     this.random = new Random(random.nextLong());
@@ -40,7 +40,7 @@ class RandomDocumentsWriterPerThreadPool extends DocumentsWriterPerThreadPool {
 
   @Override
   ThreadState getAndLock(Thread requestingThread,
-      DocumentsWriter documentsWriter) {
+                         DocumentsWriter documentsWriter) {
     ThreadState threadState = null;
     if (getActiveThreadState() == 0) {
       synchronized (this) {

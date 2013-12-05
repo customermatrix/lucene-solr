@@ -17,14 +17,6 @@ package org.apache.lucene.index;
  * limitations under the License.
  */
 
-import java.io.IOException;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Queue;
-import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicInteger;
-
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.index.DocumentsWriterFlushQueue.SegmentFlushTicket;
 import org.apache.lucene.index.DocumentsWriterPerThread.FlushedSegment;
@@ -34,6 +26,14 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.InfoStream;
+
+import java.io.IOException;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This class accepts multiple added documents and directly
@@ -383,10 +383,17 @@ final class DocumentsWriter {
     if (state.isActive() && state.dwpt == null) {
       final FieldInfos.Builder infos = new FieldInfos.Builder(
           writer.globalFieldNumberMap);
-      state.dwpt = new DocumentsWriterPerThread(writer.newSegmentName(),
-          directory, config, infoStream, deleteQueue, infos);
+      try {
+        state.dwpt = (DocumentsWriterPerThread)Class.forName(config.documentsWriterPerThreadImpl)
+            .getConstructor(String.class, Directory.class, LiveIndexWriterConfig.class, InfoStream.class,
+                DocumentsWriterDeleteQueue.class, FieldInfos.Builder.class)
+            .newInstance(writer.newSegmentName(), directory, config, infoStream, deleteQueue, infos);
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
     }
   }
+
 
   boolean updateDocuments(final Iterable<? extends Iterable<? extends IndexableField>> docs, final Analyzer analyzer,
                           final Term delTerm) throws IOException {

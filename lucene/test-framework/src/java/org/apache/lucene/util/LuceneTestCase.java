@@ -800,10 +800,10 @@ public abstract class LuceneTestCase extends Assert {
       try {
         if (rarely(r)) {
           Class<?> clazz = Class.forName("org.apache.lucene.index.RandomDocumentsWriterPerThreadPool");
-          Constructor<?> ctor = clazz.getConstructor(LiveIndexWriterConfig.class, int.class, Random.class);
+          Constructor<?> ctor = clazz.getConstructor(int.class, Random.class);
           ctor.setAccessible(true);
           // random thread pool
-          setIndexerThreadPoolMethod.invoke(c, ctor.newInstance(c, maxNumThreadStates, r));
+          setIndexerThreadPoolMethod.invoke(c, ctor.newInstance(maxNumThreadStates, r));
         } else {
           // random thread pool
           c.setMaxThreadStates(maxNumThreadStates);

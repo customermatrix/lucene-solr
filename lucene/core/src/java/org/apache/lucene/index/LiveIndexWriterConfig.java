@@ -133,7 +133,7 @@ public class LiveIndexWriterConfig {
     mergePolicy = new TieredMergePolicy();
     flushPolicy = new FlushByRamOrCountsPolicy();
     readerPooling = IndexWriterConfig.DEFAULT_READER_POOLING;
-    indexerThreadPool = new ThreadAffinityDocumentsWriterThreadPool(this, IndexWriterConfig.DEFAULT_MAX_THREAD_STATES);
+    indexerThreadPool = new ThreadAffinityDocumentsWriterThreadPool(IndexWriterConfig.DEFAULT_MAX_THREAD_STATES);
     perThreadHardLimitMB = IndexWriterConfig.DEFAULT_RAM_PER_THREAD_HARD_LIMIT_MB;
   }
   
@@ -629,23 +629,4 @@ public class LiveIndexWriterConfig {
 
 
 
-  public DocumentsWriterPerThread newDocumentsWriterPerThread(Directory directory, DocumentsWriter documentsWriter, FieldInfos.Builder infos, IndexingChain chain) {
-    try {
-      Class<?> aClass = Class.forName(documentsWriterPerThreadImpl);
-      Constructor<?> constructor = aClass.getConstructor(Directory.class, DocumentsWriter.class, FieldInfos.Builder.class, IndexingChain.class);
-      return (DocumentsWriterPerThread)constructor.newInstance(directory, documentsWriter, infos, chain);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  public DocumentsWriterPerThread newDocumentsWriterPerThread(DocumentsWriterPerThread dwpt, FieldInfos.Builder infos) {
-    try {
-      Class<?> aClass = Class.forName(documentsWriterPerThreadImpl);
-      Constructor<?> constructor = aClass.getConstructor(DocumentsWriterPerThread.class, FieldInfos.Builder.class);
-      return (DocumentsWriterPerThread)constructor.newInstance(dwpt, infos);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
 }

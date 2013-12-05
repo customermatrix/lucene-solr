@@ -85,7 +85,7 @@ public class CoreContainer {
   protected boolean shareSchema;
 
   protected ZkContainer zkSys = new ZkContainer();
-  private ShardHandlerFactory shardHandlerFactory;
+  protected ShardHandlerFactory shardHandlerFactory;
 
   protected LogWatcher logging = null;
 
@@ -189,7 +189,7 @@ public class CoreContainer {
       loader.reloadLuceneSPI();
     }
 
-    shardHandlerFactory = ShardHandlerFactory.newInstance(cfg.getShardHandlerFactoryPluginInfo(), loader);
+    shardHandlerFactory = initShardHandlerFactory();
 
     solrCores.allocateLazyCores(cfg.getTransientCacheSize(), loader);
 
@@ -205,7 +205,7 @@ public class CoreContainer {
 
     collectionsHandler = new CollectionsHandler(this);
     infoHandler = new InfoHandler(this);
-    coreAdminHandler = createMultiCoreHandler(cfg.getCoreAdminHandlerClass());
+    coreAdminHandler = createMultiCoreHandler(initAdminHandler());
 
     containerProperties = cfg.getSolrProperties("solr");
 
@@ -235,38 +235,7 @@ public class CoreContainer {
             solrCores.putDynamicDescriptor(name, cd);
           }
           if (cd.isLoadOnStartup()) { // The normal case
-
-            Callable<SolrCore> task = new Callable<SolrCore>() {
-              @Override
-              public SolrCore call() {
-                SolrCore c = null;
-                try {
-                  if (zkSys.getZkController() != null) {
-                    preRegisterInZk(cd);
-                  }
-                  c = create(cd);
-                  registerCore(cd.isTransient(), name, c, false);
-                } catch (Throwable t) {
-                  if (isZooKeeperAware()) {
-                    try {
-                      zkSys.zkController.unregister(name, cd);
-                    } catch (InterruptedException e) {
-                      Thread.currentThread().interrupt();
-                      SolrException.log(log, null, e);
-                    } catch (KeeperException e) {
-                      SolrException.log(log, null, e);
-                    }
-                  }
-                  SolrException.log(log, null, t);
-                  if (c != null) {
-                    c.close();
-                  }
-                }
-                return c;
-              }
-            };
-            pending.add(completionService.submit(task));
-
+            doStartupCoreCreation(completionService, pending, name, cd);
           }
         } catch (Throwable ex) {
           SolrException.log(log, null, ex);
@@ -937,8 +906,55 @@ public class CoreContainer {
   String getCoreToOrigName(SolrCore core) {
     return solrCores.getCoreToOrigName(core);
   }
-  
 
+
+
+
+  protected ShardHandlerFactory initShardHandlerFactory() {
+    return ShardHandlerFactory.newInstance(cfg.getShardHandlerFactoryPluginInfo(), loader);
+  }
+
+  public IndexSchema getVirtualSchema(Collection<String> collections) {
+    return null;
+  }
+
+  protected String initAdminHandler() {
+    return cfg.getCoreAdminHandlerClass();
+  }
+
+  protected void doStartupCoreCreation(CompletionService<SolrCore> completionService, Set<Future<SolrCore>> pending, final String name, final CoreDescriptor cd) {
+
+    Callable<SolrCore> task = new Callable<SolrCore>() {
+      @Override
+      public SolrCore call() {
+        SolrCore c = null;
+        try {
+          if (zkSys.getZkController() != null) {
+            preRegisterInZk(cd);
+          }
+          c = create(cd);
+          registerCore(cd.isTransient(), name, c, false);
+        } catch (Throwable t) {
+          if (isZooKeeperAware()) {
+            try {
+              zkSys.zkController.unregister(name, cd);
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+              SolrException.log(log, null, e);
+            } catch (KeeperException e) {
+              SolrException.log(log, null, e);
+            }
+          }
+          SolrException.log(log, null, t);
+          if (c != null) {
+            c.close();
+          }
+        }
+        return c;
+      }
+    };
+    pending.add(completionService.submit(task));
+  }
 }
 
 class CloserThread extends Thread {
@@ -979,5 +995,4 @@ class CloserThread extends Thread {
       }
     }
   }
-  
 }

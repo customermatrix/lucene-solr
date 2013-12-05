@@ -85,7 +85,7 @@ public class ZkContainer {
     return StringUtils.isNotBlank(test);
   }
 
-  public void initZooKeeper(final CoreContainer cc, String solrHome, String zkHost, int zkClientTimeout, String hostPort,
+  public void initZooKeeper(final CoreContainer cc, String solrHome, String zkHost, int zkClientTimeout, String hp,
                             String hostContext, String host, int leaderVoteWait, boolean genericCoreNodeNames,
                             int distribUpdateConnTimeout, int distribUpdateSoTimeout) {
     ZkController zkController = null;
@@ -101,7 +101,7 @@ public class ZkContainer {
     String zkRun = System.getProperty("zkRun");
     
     this.zkClientTimeout = zkClientTimeout;
-    this.hostPort = hostPort;
+    this.hostPort = System.getProperty("hostPort", hp);
     this.hostContext = hostContext;
     this.host = host;
     this.leaderVoteWait = leaderVoteWait;
