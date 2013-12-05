@@ -119,6 +119,49 @@ public class SolrIndexSplitterTest extends SolrTestCaseJ4 {
       if (request != null) request.close(); // decrefs the searcher
     }
   }
+  
+  // SOLR-5144
+  public void testSplitDeletes() throws Exception {
+    LocalSolrQueryRequest request = null;
+    try {
+      // add two docs
+      String id1 = "dorothy";
+      assertU(adoc("id", id1));
+      String id2 = "kansas";
+      assertU(adoc("id", id2));
+      assertU(commit());
+      assertJQ(req("q", "*:*"), "/response/numFound==2");
+      assertU(delI(id2)); // delete id2
+      assertU(commit());
+
+
+      // find minHash/maxHash hash ranges
+      List<DocRouter.Range> ranges = getRanges(id1, id2);
+
+      request = lrf.makeRequest("q", "dummy");
+
+      SplitIndexCommand command = new SplitIndexCommand(request,
+          Lists.newArrayList(indexDir1.getAbsolutePath(), indexDir2.getAbsolutePath()), null, ranges, new PlainIdRouter());
+      new SolrIndexSplitter(command).split();
+
+      Directory directory = h.getCore().getDirectoryFactory().get(indexDir1.getAbsolutePath(),
+          DirectoryFactory.DirContext.DEFAULT, h.getCore().getSolrConfig().indexConfig.lockType);
+      DirectoryReader reader = DirectoryReader.open(directory);
+      assertEquals("id:dorothy should be present in split index1", 1, reader.docFreq(new Term("id", "dorothy")));
+      assertEquals("id:kansas should not be present in split index1", 0, reader.docFreq(new Term("id", "kansas")));
+      assertEquals("split index1 should have only one document", 1, reader.numDocs());
+      reader.close();
+      h.getCore().getDirectoryFactory().release(directory);
+      directory = h.getCore().getDirectoryFactory().get(indexDir2.getAbsolutePath(),
+          DirectoryFactory.DirContext.DEFAULT, h.getCore().getSolrConfig().indexConfig.lockType);
+      reader = DirectoryReader.open(directory);
+      assertEquals(0, reader.numDocs()); // should be empty
+      reader.close();
+      h.getCore().getDirectoryFactory().release(directory);
+    } finally {
+      if (request != null) request.close(); // decrefs the searcher
+    }
+  }
 
   @Test
   public void testSplitByCores() throws Exception {
@@ -133,21 +176,18 @@ public class SolrIndexSplitterTest extends SolrTestCaseJ4 {
 
     SolrCore core1 = null, core2 = null;
     try {
-      CoreDescriptor dcore1 = new CoreDescriptor(h.getCoreContainer(), "split1", h.getCore().getCoreDescriptor().getInstanceDir());
-      dcore1.setDataDir(indexDir1.getAbsolutePath());
-      dcore1.setSchemaName("schema12.xml");
-      
+      String instanceDir = h.getCore().getCoreDescriptor().getInstanceDir();
+
+      CoreDescriptor dcore1 = buildCoreDescriptor(h.getCoreContainer(), "split1", instanceDir)
+          .withDataDir(indexDir1.getAbsolutePath()).withSchema("schema12.xml").build();
       if (h.getCoreContainer().getZkController() != null) {
         h.getCoreContainer().preRegisterInZk(dcore1);
       }
-      
       core1 = h.getCoreContainer().create(dcore1);
       h.getCoreContainer().register(core1, false);
 
-      CoreDescriptor dcore2 = new CoreDescriptor(h.getCoreContainer(), "split2", h.getCore().getCoreDescriptor().getInstanceDir());
-      dcore2.setDataDir(indexDir2.getAbsolutePath());
-      dcore2.setSchemaName("schema12.xml");
-      
+      CoreDescriptor dcore2 = buildCoreDescriptor(h.getCoreContainer(), "split2", instanceDir)
+          .withDataDir(indexDir2.getAbsolutePath()).withSchema("schema12.xml").build();
       if (h.getCoreContainer().getZkController() != null) {
         h.getCoreContainer().preRegisterInZk(dcore2);
       }

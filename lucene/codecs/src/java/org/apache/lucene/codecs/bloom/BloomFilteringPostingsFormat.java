@@ -48,6 +48,7 @@ import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.lucene.util.automaton.CompiledAutomaton;
 
 /**
@@ -335,7 +336,7 @@ public final class BloomFilteringPostingsFormat extends PostingsFormat {
       }
       
       @Override
-      public final boolean seekExact(BytesRef text, boolean useCache)
+      public final boolean seekExact(BytesRef text)
           throws IOException {
         // The magical fail-fast speed up that is the entire point of all of
         // this code - save a disk seek if there is a match on an in-memory
@@ -345,13 +346,13 @@ public final class BloomFilteringPostingsFormat extends PostingsFormat {
         if (filter.contains(text) == ContainsResult.NO) {
           return false;
         }
-        return delegate().seekExact(text, useCache);
+        return delegate().seekExact(text);
       }
       
       @Override
-      public final SeekStatus seekCeil(BytesRef text, boolean useCache)
+      public final SeekStatus seekCeil(BytesRef text)
           throws IOException {
-        return delegate().seekCeil(text, useCache);
+        return delegate().seekCeil(text);
       }
       
       @Override
@@ -393,6 +394,16 @@ public final class BloomFilteringPostingsFormat extends PostingsFormat {
       }
       
       
+    }
+
+    @Override
+    public long ramBytesUsed() {
+      long sizeInBytes =  ((delegateFieldsProducer!=null) ? delegateFieldsProducer.ramBytesUsed() : 0);
+      for(Map.Entry<String,FuzzySet> entry: bloomsByFieldName.entrySet()) {
+        sizeInBytes += entry.getKey().length() * RamUsageEstimator.NUM_BYTES_CHAR;
+        sizeInBytes += entry.getValue().ramBytesUsed();
+      }
+      return sizeInBytes;
     }
     
   }

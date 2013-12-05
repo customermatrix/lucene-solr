@@ -17,41 +17,32 @@ package org.apache.solr.core;
  * limitations under the License.
  */
 
-import org.apache.lucene.util.IOUtils;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.util.PropertiesUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
 
 
 /**
  *
  */
 public class ConfigSolrXml extends ConfigSolr {
+
   protected static Logger log = LoggerFactory.getLogger(ConfigSolrXml.class);
 
-  private SolrCoreDiscoverer solrCoreDiscoverer = new SolrCoreDiscoverer();
-  private final Map<String, CoreDescriptor> coreDescriptorMap;
+  private final CoresLocator coresLocator;
 
-  public ConfigSolrXml(Config config, CoreContainer container) {
+  public ConfigSolrXml(Config config) {
     super(config);
     try {
       checkForIllegalConfig();
       fillPropMap();
       config.substituteProperties();
-      String coreRoot = get(CfgProp.SOLR_COREROOTDIRECTORY, (container == null ? config.getResourceLoader().getInstanceDir() : container.getSolrHome()));
-      coreDescriptorMap = solrCoreDiscoverer.discover(container, new File(coreRoot));
+      log.info("Config-defined core root directory: {}", get(CfgProp.SOLR_COREROOTDIRECTORY, ""));
+      String coreRoot = get(CfgProp.SOLR_COREROOTDIRECTORY, config.getResourceLoader().getInstanceDir());
+      coresLocator = new CorePropertiesLocator(coreRoot);
     }
     catch (IOException e) {
       throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, e);
@@ -134,58 +125,14 @@ public class ConfigSolrXml extends ConfigSolr {
     propMap.put(CfgProp.SOLR_LOGGING_WATCHER_THRESHOLD, doSub("solr/logging/watcher/int[@name='threshold']"));
   }
 
-
-
   @Override
-  public Map<String,String> readCoreAttributes(String coreName) {
-    Map<String,String> attrs = new HashMap<String,String>();
-    
-    return attrs; // this is a no-op.... intentionally
+  public String getDefaultCoreName() {
+    return "collection1";
   }
 
   @Override
-  public List<String> getAllCoreNames() {
-    List<String> ret = new ArrayList<String>(coreDescriptorMap.keySet());
-    
-    return ret;
-  }
-  
-  @Override
-  public String getProperty(String coreName, String property, String defaultVal) {
-    CoreDescriptor cd = coreDescriptorMap.get(coreName);
-    if (cd == null) return defaultVal;
-
-    return cd.getProperty(property, defaultVal);
-  }
-
-  @Override
-  public Properties readCoreProperties(String coreName) {
-    CoreDescriptor cd = coreDescriptorMap.get(coreName);
-    if (cd == null) return null;
-    return new Properties(cd.getCoreProperties());
-  }
-
-  static Properties getCoreProperties(String instanceDir, CoreDescriptor dcore) {
-    String file = dcore.getPropertiesName();
-    if (file == null) file = "conf" + File.separator + "solrcore.properties";
-    File corePropsFile = new File(file);
-    if (!corePropsFile.isAbsolute()) {
-      corePropsFile = new File(instanceDir, file);
-    }
-    Properties p = dcore.getCoreProperties();
-    if (corePropsFile.exists() && corePropsFile.isFile()) {
-      p = new Properties(dcore.getCoreProperties());
-      InputStream is = null;
-      try {
-        is = new FileInputStream(corePropsFile);
-        p.load(new InputStreamReader(is, IOUtils.CHARSET_UTF_8));
-      } catch (IOException e) {
-        log.warn("Error loading properties ", e);
-      } finally {
-        IOUtils.closeWhileHandlingException(is);
-      }
-    }
-    return p;
+  public boolean isPersistent() {
+    return true;
   }
 
   @Override
@@ -194,8 +141,13 @@ public class ConfigSolrXml extends ConfigSolr {
   }
 
   @Override
-  public void substituteProperties() {
-    config.substituteProperties();
+  public String getAdminPath() {
+    return DEFAULT_CORE_ADMIN_PATH;
+  }
+
+  @Override
+  public CoresLocator getCoresLocator() {
+    return coresLocator;
   }
 
 }

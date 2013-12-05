@@ -26,7 +26,6 @@ import java.util.Random;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
-
 import java.net.URL;
 import java.net.MalformedURLException;
 
@@ -357,37 +356,40 @@ public class JettySolrRunner {
       startedBefore = true;
     }
     
-    if( dataDir != null) {
+    if (dataDir != null) {
       System.setProperty("solr.data.dir", dataDir);
     }
-    if( solrUlogDir != null) {
+    if (solrUlogDir != null) {
       System.setProperty("solr.ulog.dir", solrUlogDir);
     }
-    if(shards != null) {
+    if (shards != null) {
       System.setProperty("shard", shards);
     }
     if (coreNodeName != null) {
       System.setProperty("coreNodeName", coreNodeName);
     }
-    
-    if (!server.isRunning()) {
-      server.start();
-    }
-    synchronized (JettySolrRunner.this) {
-      int cnt = 0;
-      while (!waitOnSolr) {
-        this.wait(100);
-        if (cnt++ == 5) {
-          throw new RuntimeException("Jetty/Solr unresponsive");
+    try {
+      
+      if (!server.isRunning()) {
+        server.start();
+      }
+      synchronized (JettySolrRunner.this) {
+        int cnt = 0;
+        while (!waitOnSolr) {
+          this.wait(100);
+          if (cnt++ == 5) {
+            throw new RuntimeException("Jetty/Solr unresponsive");
+          }
         }
       }
+    } finally {
+      
+      System.clearProperty("shard");
+      System.clearProperty("solr.data.dir");
+      System.clearProperty("coreNodeName");
+      System.clearProperty("solr.ulog.dir");
     }
     
-    System.clearProperty("shard");
-    System.clearProperty("solr.data.dir");
-    System.clearProperty("coreNodeName");
-    System.clearProperty("solr.ulog.dir");
-
   }
 
   public void stop() throws Exception {
@@ -498,6 +500,10 @@ public class JettySolrRunner {
 
   public void setCoreNodeName(String coreNodeName) {
     this.coreNodeName = coreNodeName;
+  }
+
+  public String getSolrHome() {
+    return solrHome;
   }
 }
 

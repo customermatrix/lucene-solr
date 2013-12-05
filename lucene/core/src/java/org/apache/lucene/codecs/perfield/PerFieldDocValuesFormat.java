@@ -36,8 +36,10 @@ import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
 import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.index.SortedSetDocValues;
+import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.util.RamUsageEstimator;
 
 /**
  * Enables per field docvalues support.
@@ -265,6 +267,12 @@ public abstract class PerFieldDocValuesFormat extends DocValuesFormat {
       DocValuesProducer producer = fields.get(field.name);
       return producer == null ? null : producer.getSortedSet(field);
     }
+    
+    @Override
+    public Bits getDocsWithField(FieldInfo field) throws IOException {
+      DocValuesProducer producer = fields.get(field.name);
+      return producer == null ? null : producer.getDocsWithField(field);
+    }
 
     @Override
     public void close() throws IOException {
@@ -274,6 +282,16 @@ public abstract class PerFieldDocValuesFormat extends DocValuesFormat {
     @Override
     public DocValuesProducer clone() {
       return new FieldsReader(this);
+    }
+
+    @Override
+    public long ramBytesUsed() {
+      long size = 0;
+      for (Map.Entry<String,DocValuesProducer> entry : formats.entrySet()) {
+        size += (entry.getKey().length() * RamUsageEstimator.NUM_BYTES_CHAR) + 
+            entry.getValue().ramBytesUsed();
+      }
+      return size;
     }
   }
 

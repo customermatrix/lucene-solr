@@ -157,8 +157,8 @@ public class FilterAtomicReader extends AtomicReader {
     }
 
     @Override
-    public SeekStatus seekCeil(BytesRef text, boolean useCache) throws IOException {
-      return in.seekCeil(text, useCache);
+    public SeekStatus seekCeil(BytesRef text) throws IOException {
+      return in.seekCeil(text);
     }
 
     @Override
@@ -412,6 +412,12 @@ public class FilterAtomicReader extends AtomicReader {
   public NumericDocValues getNormValues(String field) throws IOException {
     ensureOpen();
     return in.getNormValues(field);
+  }
+
+  @Override
+  public Bits getDocsWithField(String field) throws IOException {
+    ensureOpen();
+    return in.getDocsWithField(field);
   }
 
 }

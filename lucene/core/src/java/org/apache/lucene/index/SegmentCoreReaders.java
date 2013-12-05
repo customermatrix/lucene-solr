@@ -36,6 +36,7 @@ import org.apache.lucene.index.SegmentReader.CoreClosedListener;
 import org.apache.lucene.store.CompoundFileDirectory;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
+import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.CloseableThreadLocal;
 import org.apache.lucene.util.IOUtils;
 
@@ -58,9 +59,7 @@ final class SegmentCoreReaders {
   final DocValuesProducer normsProducer;
 
   final int termsIndexDivisor;
-  
-  private final SegmentReader owner;
-  
+
   final StoredFieldsReader fieldsReaderOrig;
   final TermVectorsReader termVectorsReaderOrig;
   final CompoundFileDirectory cfsReader;
@@ -89,6 +88,13 @@ final class SegmentCoreReaders {
       return new HashMap<String,Object>();
     }
   };
+  
+  final CloseableThreadLocal<Map<String,Bits>> docsWithFieldLocal = new CloseableThreadLocal<Map<String,Bits>>() {
+    @Override
+    protected Map<String,Bits> initialValue() {
+      return new HashMap<String,Bits>();
+    }
+  };
 
   final CloseableThreadLocal<Map<String,Object>> normsLocal = new CloseableThreadLocal<Map<String,Object>>() {
     @Override
@@ -101,7 +107,7 @@ final class SegmentCoreReaders {
       Collections.synchronizedSet(new LinkedHashSet<CoreClosedListener>());
   
   SegmentCoreReaders(SegmentReader owner, Directory dir, SegmentInfoPerCommit si, IOContext context, int termsIndexDivisor) throws IOException {
-    
+
     if (termsIndexDivisor == 0) {
       throw new IllegalArgumentException("indexDivisor must be < 0 (don't load terms index) or greater than 0 (got 0)");
     }
@@ -158,12 +164,6 @@ final class SegmentCoreReaders {
         decRef();
       }
     }
-    
-    // Must assign this at the end -- if we hit an
-    // exception above core, we don't want to attempt to
-    // purge the FieldCache (will hit NPE because core is
-    // not assigned yet).
-    this.owner = owner;
   }
   
   void incRef() {
@@ -281,6 +281,30 @@ final class SegmentCoreReaders {
 
     return dvs;
   }
+  
+  Bits getDocsWithField(String field) throws IOException {
+    FieldInfo fi = fieldInfos.fieldInfo(field);
+    if (fi == null) {
+      // Field does not exist
+      return null;
+    }
+    if (fi.getDocValuesType() == null) {
+      // Field was not indexed with doc values
+      return null;
+    }
+
+    assert dvProducer != null;
+
+    Map<String,Bits> dvFields = docsWithFieldLocal.get();
+
+    Bits dvs = dvFields.get(field);
+    if (dvs == null) {
+      dvs = dvProducer.getDocsWithField(fi);
+      dvFields.put(field, dvs);
+    }
+
+    return dvs;
+  }
 
   NumericDocValues getNormValues(String field) throws IOException {
     FieldInfo fi = fieldInfos.fieldInfo(field);
@@ -307,8 +331,8 @@ final class SegmentCoreReaders {
 
   void decRef() throws IOException {
     if (ref.decrementAndGet() == 0) {
-      IOUtils.close(termVectorsLocal, fieldsReaderLocal, docValuesLocal, normsLocal, fields, dvProducer,
-                    termVectorsReaderOrig, fieldsReaderOrig, cfsReader, normsProducer);
+      IOUtils.close(termVectorsLocal, fieldsReaderLocal, docValuesLocal, normsLocal, docsWithFieldLocal, fields, 
+                    dvProducer, termVectorsReaderOrig, fieldsReaderOrig, cfsReader, normsProducer);
       notifyCoreClosedListeners();
     }
   }
@@ -316,7 +340,9 @@ final class SegmentCoreReaders {
   private void notifyCoreClosedListeners() {
     synchronized(coreClosedListeners) {
       for (CoreClosedListener listener : coreClosedListeners) {
-        listener.onClose(owner);
+        // SegmentReader uses our instance as its
+        // coreCacheKey:
+        listener.onClose(this);
       }
     }
   }
@@ -329,8 +355,12 @@ final class SegmentCoreReaders {
     coreClosedListeners.remove(listener);
   }
 
-  @Override
-  public String toString() {
-    return "SegmentCoreReader(owner=" + owner + ")";
+  /** Returns approximate RAM bytes used */
+  public long ramBytesUsed() {
+    return ((dvProducer!=null) ? dvProducer.ramBytesUsed() : 0) + 
+        ((normsProducer!=null) ? normsProducer.ramBytesUsed() : 0) +
+        ((fields!=null) ? fields.ramBytesUsed() : 0) + 
+        ((fieldsReaderOrig!=null)? fieldsReaderOrig.ramBytesUsed() : 0) + 
+        ((termVectorsReaderOrig!=null) ? termVectorsReaderOrig.ramBytesUsed() : 0);
   }
 }

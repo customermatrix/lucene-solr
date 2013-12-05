@@ -17,39 +17,36 @@
 
 package org.apache.solr.request;
 
+import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
+
 import org.apache.lucene.index.AtomicReader;
-import org.apache.lucene.index.SortedDocValues;
-import org.apache.lucene.search.FieldCache;
 import org.apache.lucene.index.DocTermOrds;
+import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.TermsEnum;
+import org.apache.lucene.search.FieldCache;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TermRangeQuery;
+import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.CharsRef;
+import org.apache.lucene.util.OpenBitSet;
+import org.apache.lucene.util.UnicodeUtil;
+import org.apache.solr.common.SolrException;
 import org.apache.solr.common.params.FacetParams;
 import org.apache.solr.common.util.NamedList;
-import org.apache.solr.common.SolrException;
 import org.apache.solr.core.SolrCore;
-
+import org.apache.solr.handler.component.FieldFacetStats;
+import org.apache.solr.handler.component.StatsValues;
+import org.apache.solr.handler.component.StatsValuesFactory;
 import org.apache.solr.schema.FieldType;
 import org.apache.solr.schema.SchemaField;
 import org.apache.solr.schema.TrieField;
 import org.apache.solr.search.*;
 import org.apache.solr.util.LongPriorityQueue;
 import org.apache.solr.util.PrimUtils;
-import org.apache.solr.handler.component.StatsValues;
-import org.apache.solr.handler.component.StatsValuesFactory;
-import org.apache.solr.handler.component.FieldFacetStats;
-import org.apache.lucene.util.CharsRef;
-import org.apache.lucene.util.OpenBitSet;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.UnicodeUtil;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
-
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  *
@@ -83,7 +80,6 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class UnInvertedField extends DocTermOrds {
   private static int TNUM_OFFSET=2;
-  private String field;
 
   static class TopTerm {
     BytesRef term;
@@ -105,6 +101,15 @@ public class UnInvertedField extends DocTermOrds {
 
   private SolrIndexSearcher.DocsEnumState deState;
   private final SolrIndexSearcher searcher;
+  private final boolean isPlaceholder;
+
+  private static UnInvertedField uifPlaceholder = new UnInvertedField();
+
+  private UnInvertedField() { // Dummy for synchronization.
+    super("fake", 0, 0); // cheapest initialization I can find.
+    isPlaceholder = true;
+    searcher = null;
+   }
 
   @Override
   protected void visitTerm(TermsEnum te, int termNum) throws IOException {
@@ -173,9 +178,9 @@ public class UnInvertedField extends DocTermOrds {
           // small.
           searcher.maxDoc()/20 + 2,
           DEFAULT_INDEX_INTERVAL_BITS);
-    this.field = field;
     //System.out.println("maxTermDocFreq=" + maxTermDocFreq + " maxDoc=" + searcher.maxDoc());
 
+    isPlaceholder = false;
     final String prefix = TrieField.getMainValuePrefix(searcher.getSchema().getFieldType(field));
     this.searcher = searcher;
     try {
@@ -207,9 +212,7 @@ public class UnInvertedField extends DocTermOrds {
     return numTermsInField;
   }
 
-  public NamedList<Integer> getCounts(TermValidator termValidator, SolrIndexSearcher searcher, DocSet baseDocs,
-                                      int offset, int limit, Integer mincount, boolean missing, String sort,
-                                      String prefix) throws IOException {
+  public NamedList<Integer> getCounts(SolrIndexSearcher searcher, DocSet baseDocs, int offset, int limit, Integer mincount, boolean missing, String sort, String prefix) throws IOException {
     use.incrementAndGet();
 
     FieldType ft = searcher.getSchema().getFieldType(field);
@@ -237,13 +240,13 @@ public class UnInvertedField extends DocTermOrds {
       TermsEnum te = getOrdTermsEnum(searcher.getAtomicReader());
       if (te != null && prefix != null && prefix.length() > 0) {
         final BytesRef prefixBr = new BytesRef(prefix);
-        if (te.seekCeil(prefixBr, true) == TermsEnum.SeekStatus.END) {
+        if (te.seekCeil(prefixBr) == TermsEnum.SeekStatus.END) {
           startTerm = numTermsInField;
         } else {
           startTerm = (int) te.ord();
         }
         prefixBr.append(UnicodeUtil.BIG_TERM);
-        if (te.seekCeil(prefixBr, true) == TermsEnum.SeekStatus.END) {
+        if (te.seekCeil(prefixBr) == TermsEnum.SeekStatus.END) {
           endTerm = numTermsInField;
         } else {
           endTerm = (int) te.ord();
@@ -417,10 +420,8 @@ public class UnInvertedField extends DocTermOrds {
           int idx = indirect[i];
           int tnum = (int)sorted[idx];
           final String label = getReadableValue(getTermValue(te, tnum), ft, charsRef);
-          if (termValidator.validate(field, label)) {
-            //System.out.println("  label=" + label);
-            res.setName(idx - sortedIdxStart, label);
-          }
+          //System.out.println("  label=" + label);
+          res.setName(idx - sortedIdxStart, label);
         }
 
       } else {
@@ -439,9 +440,7 @@ public class UnInvertedField extends DocTermOrds {
           if (--lim<0) break;
 
           final String label = getReadableValue(getTermValue(te, i), ft, charsRef);
-          if (termValidator.validate(field, label)) {
-            res.add(label, c);
-          }
+          res.add(label, c);
         }
       }
     }
@@ -458,7 +457,7 @@ public class UnInvertedField extends DocTermOrds {
   }
 
   /**
-   * Collect statistics about the UninvertedField.  Code is very similar to {@link #getCounts(TermValidator, org.apache.solr.search.SolrIndexSearcher, org.apache.solr.search.DocSet, int, int, Integer, boolean, String, String)}
+   * Collect statistics about the UninvertedField.  Code is very similar to {@link #getCounts(org.apache.solr.search.SolrIndexSearcher, org.apache.solr.search.DocSet, int, int, Integer, boolean, String, String)}
    * It can be used to calculate stats on multivalued fields.
    * <p/>
    * This method is mainly used by the {@link org.apache.solr.handler.component.StatsComponent}.
@@ -492,7 +491,7 @@ public class UnInvertedField extends DocTermOrds {
     int i = 0;
     final FieldFacetStats[] finfo = new FieldFacetStats[facet.length];
     //Initialize facetstats, if facets have been passed in
-
+    SortedDocValues si;
     for (String f : facet) {
       SchemaField facet_sf = searcher.getSchema().getField(f);
       finfo[i] = new FieldFacetStats(searcher, f, sf, facet_sf);
@@ -660,21 +659,43 @@ public class UnInvertedField extends DocTermOrds {
   //////////////////////////////////////////////////////////////////
   //////////////////////////// caching /////////////////////////////
   //////////////////////////////////////////////////////////////////
+
   public static UnInvertedField getUnInvertedField(String field, SolrIndexSearcher searcher) throws IOException {
     SolrCache<String,UnInvertedField> cache = searcher.getFieldValueCache();
     if (cache == null) {
       return new UnInvertedField(field, searcher);
     }
-
-    UnInvertedField uif = cache.get(field);
-    if (uif == null) {
-      synchronized (cache) {
-        uif = cache.get(field);
-        if (uif == null) {
-          uif = new UnInvertedField(field, searcher);
-          cache.put(field, uif);
+    UnInvertedField uif = null;
+    Boolean doWait = false;
+    synchronized (cache) {
+      uif = cache.get(field);
+      if (uif == null) {
+        cache.put(field, uifPlaceholder); // This thread will load this field, don't let other threads try.
+      } else {
+        if (uif.isPlaceholder == false) {
+          return uif;
         }
+        doWait = true; // Someone else has put the place holder in, wait for that to complete.
       }
+    }
+    while (doWait) {
+      try {
+        synchronized (cache) {
+          uif = cache.get(field); // Should at least return the placeholder, NPE if not is OK.
+          if (uif.isPlaceholder == false) { // OK, another thread put this in the cache we should be good.
+            return uif;
+          }
+          cache.wait();
+        }
+      } catch (InterruptedException e) {
+        throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, "Thread interrupted in getUninvertedField.");
+      }
+    }
+
+    uif = new UnInvertedField(field, searcher);
+    synchronized (cache) {
+      cache.put(field, uif); // Note, this cleverly replaces the placeholder.
+      cache.notifyAll();
     }
 
     return uif;

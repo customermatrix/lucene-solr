@@ -331,7 +331,7 @@ public class SimpleTextTermVectorsReader extends TermVectorsReader {
     }
     
     @Override
-    public SeekStatus seekCeil(BytesRef text, boolean useCache) throws IOException {
+    public SeekStatus seekCeil(BytesRef text) throws IOException {
       iterator = terms.tailMap(text).entrySet().iterator();
       if (!iterator.hasNext()) {
         return SeekStatus.END;
@@ -537,5 +537,10 @@ public class SimpleTextTermVectorsReader extends TermVectorsReader {
     public long cost() {
       return 1;
     }
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    return 0;
   }
 }

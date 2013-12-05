@@ -24,6 +24,8 @@ import org.apache.lucene.index.IndexWriter.IndexReaderWarmer;
 import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.util.InfoStream;
 import org.apache.lucene.util.PrintStreamInfoStream;
+import org.apache.lucene.util.SetOnce;
+import org.apache.lucene.util.SetOnce.AlreadySetException;
 import org.apache.lucene.util.Version;
 
 import java.io.PrintStream;
@@ -134,6 +136,21 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig implements Cl
     return WRITE_LOCK_TIMEOUT;
   }
 
+  // indicates whether this config instance is already attached to a writer.
+  // not final so that it can be cloned properly.
+  private SetOnce<IndexWriter> writer = new SetOnce<IndexWriter>();
+  
+  /**
+   * Sets the {@link IndexWriter} this config is attached to.
+   * 
+   * @throws AlreadySetException
+   *           if this config is already attached to a writer.
+   */
+  IndexWriterConfig setIndexWriter(IndexWriter writer) {
+    this.writer.set(writer);
+    return this;
+  }
+  
   /**
    * Creates a new config that with defaults that match the specified
    * {@link Version} as well as the default {@link
@@ -154,6 +171,8 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig implements Cl
   public IndexWriterConfig clone() {
     try {
       IndexWriterConfig clone = (IndexWriterConfig) super.clone();
+      
+      clone.writer = writer.clone();
       
       // Mostly shallow clone, but do a deepish clone of
       // certain objects that have state that cannot be shared
@@ -497,9 +516,11 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig implements Cl
     return super.getTermIndexInterval();
   }
   
-  /** If non-null, information about merges, deletes and a
+  /** 
+   * Information about merges, deletes and a
    * message when maxFieldLength is reached will be printed
-   * to this.
+   * to this. Must not be null, but {@link InfoStream#NO_OUTPUT} 
+   * may be used to supress output.
    */
   public IndexWriterConfig setInfoStream(InfoStream infoStream) {
     if (infoStream == null) {
@@ -510,7 +531,9 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig implements Cl
     return this;
   }
   
-  /** Convenience method that uses {@link PrintStreamInfoStream} */
+  /** 
+   * Convenience method that uses {@link PrintStreamInfoStream}.  Must not be null.
+   */
   public IndexWriterConfig setInfoStream(PrintStream printStream) {
     if (printStream == null) {
       throw new IllegalArgumentException("printStream must not be null");
@@ -548,6 +571,7 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig implements Cl
     return (IndexWriterConfig) super.setTermIndexInterval(interval);
   }
   
+  @Override
   public IndexWriterConfig setUseCompoundFile(boolean useCompoundFile) {
     return (IndexWriterConfig) super.setUseCompoundFile(useCompoundFile);
   }
@@ -557,4 +581,11 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig implements Cl
     return (IndexWriterConfig) super.setDocumentsWriterPerThreadImpl(impl);
   }
 
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder(super.toString());
+    sb.append("writer=").append(writer).append("\n");
+    return sb.toString();
+  }
+  
 }

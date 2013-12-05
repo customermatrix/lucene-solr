@@ -18,10 +18,13 @@ package org.apache.lucene.util;
  */
 
 import java.io.PrintStream;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
@@ -40,6 +43,8 @@ import org.apache.lucene.codecs.lucene40.Lucene40RWCodec;
 import org.apache.lucene.codecs.lucene40.Lucene40RWPostingsFormat;
 import org.apache.lucene.codecs.lucene41.Lucene41RWCodec;
 import org.apache.lucene.codecs.lucene42.Lucene42Codec;
+import org.apache.lucene.codecs.lucene42.Lucene42RWCodec;
+import org.apache.lucene.codecs.lucene45.Lucene45Codec;
 import org.apache.lucene.codecs.simpletext.SimpleTextCodec;
 import org.apache.lucene.index.RandomCodec;
 import org.apache.lucene.search.RandomSimilarityProvider;
@@ -150,14 +155,14 @@ final class TestRuleSetupAndRestoreClassEnv extends AbstractBeforeAfterRule {
     if ("Lucene3x".equals(TEST_CODEC) || ("random".equals(TEST_CODEC) &&
                                           "random".equals(TEST_POSTINGSFORMAT) &&
                                           "random".equals(TEST_DOCVALUESFORMAT) &&
-                                          randomVal == 0 &&
+                                          randomVal == 3 &&
                                           !shouldAvoidCodec("Lucene3x"))) { // preflex-only setup
       codec = Codec.forName("Lucene3x");
       assert (codec instanceof PreFlexRWCodec) : "fix your classpath to have tests-framework.jar before lucene-core.jar";
       PREFLEX_IMPERSONATION_IS_ACTIVE = true;
     } else if ("Lucene40".equals(TEST_CODEC) || ("random".equals(TEST_CODEC) &&
                                                  "random".equals(TEST_POSTINGSFORMAT) &&
-                                                  randomVal == 2 &&
+                                                  randomVal == 0 &&
                                                   !shouldAvoidCodec("Lucene40"))) { // 4.0 setup
       codec = Codec.forName("Lucene40");
       assert codec instanceof Lucene40RWCodec : "fix your classpath to have tests-framework.jar before lucene-core.jar";
@@ -169,6 +174,13 @@ final class TestRuleSetupAndRestoreClassEnv extends AbstractBeforeAfterRule {
                                                  !shouldAvoidCodec("Lucene41"))) { 
       codec = Codec.forName("Lucene41");
       assert codec instanceof Lucene41RWCodec : "fix your classpath to have tests-framework.jar before lucene-core.jar";
+    } else if ("Lucene42".equals(TEST_CODEC) || ("random".equals(TEST_CODEC) &&
+                                                 "random".equals(TEST_POSTINGSFORMAT) &&
+                                                 "random".equals(TEST_DOCVALUESFORMAT) &&
+                                                  randomVal == 2 &&
+                                                  !shouldAvoidCodec("Lucene42"))) { 
+      codec = Codec.forName("Lucene42");
+      assert codec instanceof Lucene42RWCodec : "fix your classpath to have tests-framework.jar before lucene-core.jar";
     } else if (("random".equals(TEST_POSTINGSFORMAT) == false) || ("random".equals(TEST_DOCVALUESFORMAT) == false)) {
       // the user wired postings or DV: this is messy
       // refactor into RandomCodec....
@@ -182,14 +194,12 @@ final class TestRuleSetupAndRestoreClassEnv extends AbstractBeforeAfterRule {
       
       final DocValuesFormat dvFormat;
       if ("random".equals(TEST_DOCVALUESFORMAT)) {
-        // pick one from SPI
-        String formats[] = DocValuesFormat.availableDocValuesFormats().toArray(new String[0]);
-        dvFormat = DocValuesFormat.forName(formats[random.nextInt(formats.length)]);
+        dvFormat = DocValuesFormat.forName("Lucene45");
       } else {
         dvFormat = DocValuesFormat.forName(TEST_DOCVALUESFORMAT);
       }
       
-      codec = new Lucene42Codec() {       
+      codec = new Lucene45Codec() {       
         @Override
         public PostingsFormat getPostingsFormatForField(String field) {
           return format;

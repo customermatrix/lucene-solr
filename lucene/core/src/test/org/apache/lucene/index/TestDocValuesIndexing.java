@@ -26,9 +26,11 @@ import org.apache.lucene.analysis.MockAnalyzer;
 import org.apache.lucene.document.BinaryDocValuesField;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.Field.Store;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.SortedDocValuesField;
 import org.apache.lucene.document.SortedSetDocValuesField;
+import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.search.FieldCache;
 import org.apache.lucene.store.Directory;
@@ -182,7 +184,7 @@ public class TestDocValuesIndexing extends LuceneTestCase {
     w.addDocument(doc);
     w.forceMerge(1);
     DirectoryReader r = w.getReader();
-    BinaryDocValues s = FieldCache.DEFAULT.getTerms(getOnlySegmentReader(r), "field");
+    BinaryDocValues s = FieldCache.DEFAULT.getTerms(getOnlySegmentReader(r), "field", false);
 
     BytesRef bytes1 = new BytesRef();
     s.get(0, bytes1);
@@ -211,7 +213,7 @@ public class TestDocValuesIndexing extends LuceneTestCase {
       writer.addDocument(doc);
     }
     DirectoryReader r = writer.getReader();
-    SlowCompositeReaderWrapper slow = new SlowCompositeReaderWrapper(r);
+    AtomicReader slow = SlowCompositeReaderWrapper.wrap(r);
     FieldInfos fi = slow.getFieldInfos();
     FieldInfo dvInfo = fi.fieldInfo("dv");
     assertTrue(dvInfo.hasDocValues());
@@ -328,31 +330,7 @@ public class TestDocValuesIndexing extends LuceneTestCase {
     iwriter.close();
     directory.close();
   }
-  
-  public void testTooLargeBytes() throws IOException {
-    Analyzer analyzer = new MockAnalyzer(random());
 
-    Directory directory = newDirectory();
-    // we don't use RandomIndexWriter because it might add more docvalues than we expect !!!!1
-    IndexWriterConfig iwc = newIndexWriterConfig(TEST_VERSION_CURRENT, analyzer);
-    iwc.setMergePolicy(newLogMergePolicy());
-    IndexWriter iwriter = new IndexWriter(directory, iwc);
-    Document doc = new Document();
-    byte bytes[] = new byte[100000];
-    BytesRef b = new BytesRef(bytes);
-    random().nextBytes(bytes);
-    doc.add(new BinaryDocValuesField("dv", b));
-    try {
-      iwriter.addDocument(doc);
-      fail("did not get expected exception");
-    } catch (IllegalArgumentException expected) {
-      // expected
-    }
-    iwriter.close();
-
-    directory.close();
-  }
-  
   public void testTooLargeSortedBytes() throws IOException {
     Analyzer analyzer = new MockAnalyzer(random());
 
@@ -560,13 +538,13 @@ public class TestDocValuesIndexing extends LuceneTestCase {
   public void testIllegalTypeChangeAcrossSegments() throws Exception {
     Directory dir = newDirectory();
     IndexWriterConfig conf = newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()));
-    IndexWriter writer = new IndexWriter(dir, conf);
+    IndexWriter writer = new IndexWriter(dir, conf.clone());
     Document doc = new Document();
     doc.add(new NumericDocValuesField("dv", 0L));
     writer.addDocument(doc);
     writer.close();
 
-    writer = new IndexWriter(dir, conf);
+    writer = new IndexWriter(dir, conf.clone());
     doc = new Document();
     doc.add(new SortedDocValuesField("dv", new BytesRef("foo")));
     try {
@@ -582,13 +560,13 @@ public class TestDocValuesIndexing extends LuceneTestCase {
   public void testTypeChangeAfterCloseAndDeleteAll() throws Exception {
     Directory dir = newDirectory();
     IndexWriterConfig conf = newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()));
-    IndexWriter writer = new IndexWriter(dir, conf);
+    IndexWriter writer = new IndexWriter(dir, conf.clone());
     Document doc = new Document();
     doc.add(new NumericDocValuesField("dv", 0L));
     writer.addDocument(doc);
     writer.close();
 
-    writer = new IndexWriter(dir, conf);
+    writer = new IndexWriter(dir, conf.clone());
     writer.deleteAll();
     doc = new Document();
     doc.add(new SortedDocValuesField("dv", new BytesRef("foo")));
@@ -631,13 +609,13 @@ public class TestDocValuesIndexing extends LuceneTestCase {
   public void testTypeChangeAfterOpenCreate() throws Exception {
     Directory dir = newDirectory();
     IndexWriterConfig conf = newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()));
-    IndexWriter writer = new IndexWriter(dir, conf);
+    IndexWriter writer = new IndexWriter(dir, conf.clone());
     Document doc = new Document();
     doc.add(new NumericDocValuesField("dv", 0L));
     writer.addDocument(doc);
     writer.close();
     conf.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
-    writer = new IndexWriter(dir, conf);
+    writer = new IndexWriter(dir, conf.clone());
     doc = new Document();
     doc.add(new SortedDocValuesField("dv", new BytesRef("foo")));
     writer.addDocument(doc);
@@ -648,14 +626,14 @@ public class TestDocValuesIndexing extends LuceneTestCase {
   public void testTypeChangeViaAddIndexes() throws Exception {
     Directory dir = newDirectory();
     IndexWriterConfig conf = newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()));
-    IndexWriter writer = new IndexWriter(dir, conf);
+    IndexWriter writer = new IndexWriter(dir, conf.clone());
     Document doc = new Document();
     doc.add(new NumericDocValuesField("dv", 0L));
     writer.addDocument(doc);
     writer.close();
 
     Directory dir2 = newDirectory();
-    writer = new IndexWriter(dir2, conf);
+    writer = new IndexWriter(dir2, conf.clone());
     doc = new Document();
     doc.add(new SortedDocValuesField("dv", new BytesRef("foo")));
     writer.addDocument(doc);
@@ -674,14 +652,14 @@ public class TestDocValuesIndexing extends LuceneTestCase {
   public void testTypeChangeViaAddIndexesIR() throws Exception {
     Directory dir = newDirectory();
     IndexWriterConfig conf = newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()));
-    IndexWriter writer = new IndexWriter(dir, conf);
+    IndexWriter writer = new IndexWriter(dir, conf.clone());
     Document doc = new Document();
     doc.add(new NumericDocValuesField("dv", 0L));
     writer.addDocument(doc);
     writer.close();
 
     Directory dir2 = newDirectory();
-    writer = new IndexWriter(dir2, conf);
+    writer = new IndexWriter(dir2, conf.clone());
     doc = new Document();
     doc.add(new SortedDocValuesField("dv", new BytesRef("foo")));
     writer.addDocument(doc);
@@ -702,14 +680,14 @@ public class TestDocValuesIndexing extends LuceneTestCase {
   public void testTypeChangeViaAddIndexes2() throws Exception {
     Directory dir = newDirectory();
     IndexWriterConfig conf = newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()));
-    IndexWriter writer = new IndexWriter(dir, conf);
+    IndexWriter writer = new IndexWriter(dir, conf.clone());
     Document doc = new Document();
     doc.add(new NumericDocValuesField("dv", 0L));
     writer.addDocument(doc);
     writer.close();
 
     Directory dir2 = newDirectory();
-    writer = new IndexWriter(dir2, conf);
+    writer = new IndexWriter(dir2, conf.clone());
     writer.addIndexes(dir);
     doc = new Document();
     doc.add(new SortedDocValuesField("dv", new BytesRef("foo")));
@@ -727,14 +705,14 @@ public class TestDocValuesIndexing extends LuceneTestCase {
   public void testTypeChangeViaAddIndexesIR2() throws Exception {
     Directory dir = newDirectory();
     IndexWriterConfig conf = newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()));
-    IndexWriter writer = new IndexWriter(dir, conf);
+    IndexWriter writer = new IndexWriter(dir, conf.clone());
     Document doc = new Document();
     doc.add(new NumericDocValuesField("dv", 0L));
     writer.addDocument(doc);
     writer.close();
 
     Directory dir2 = newDirectory();
-    writer = new IndexWriter(dir2, conf);
+    writer = new IndexWriter(dir2, conf.clone());
     IndexReader[] readers = new IndexReader[] {DirectoryReader.open(dir)};
     writer.addIndexes(readers);
     readers[0].close();
@@ -774,6 +752,32 @@ public class TestDocValuesIndexing extends LuceneTestCase {
     assertTrue(bits.get(0));
     assertTrue(bits.get(1));
     r.close();
+    dir.close();
+  }
+
+  public void testSameFieldNameForPostingAndDocValue() throws Exception {
+    // LUCENE-5192: FieldInfos.Builder neglected to update
+    // globalFieldNumbers.docValuesType map if the field existed, resulting in
+    // potentially adding the same field with different DV types.
+    Directory dir = newDirectory();
+    IndexWriterConfig conf = newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()));
+    IndexWriter writer = new IndexWriter(dir, conf);
+    
+    Document doc = new Document();
+    doc.add(new StringField("f", "mock-value", Store.NO));
+    doc.add(new NumericDocValuesField("f", 5));
+    writer.addDocument(doc);
+    writer.commit();
+    
+    doc = new Document();
+    doc.add(new BinaryDocValuesField("f", new BytesRef("mock")));
+    try {
+      writer.addDocument(doc);
+      fail("should not have succeeded to add a field with different DV type than what already exists");
+    } catch (IllegalArgumentException e) {
+      writer.rollback();
+    }
+    
     dir.close();
   }
 

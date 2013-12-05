@@ -717,7 +717,7 @@ public class SolrIndexSearcher extends IndexSearcher implements Closeable,SolrIn
     if (terms == null) return -1;
     BytesRef termBytes = t.bytes();
     final TermsEnum termsEnum = terms.iterator(null);
-    if (!termsEnum.seekExact(termBytes, false)) {
+    if (!termsEnum.seekExact(termBytes)) {
       return -1;
     }
     DocsEnum docs = termsEnum.docs(atomicReader.getLiveDocs(), null, DocsEnum.FLAG_NONE);
@@ -741,7 +741,7 @@ public class SolrIndexSearcher extends IndexSearcher implements Closeable,SolrIn
       if (terms == null) continue;
       
       TermsEnum te = terms.iterator(null);
-      if (te.seekExact(idBytes, true)) {
+      if (te.seekExact(idBytes)) {
         DocsEnum docs = te.docs(reader.getLiveDocs(), null, DocsEnum.FLAG_NONE);
         int id = docs.nextDoc();
         if (id == DocIdSetIterator.NO_MORE_DOCS) continue;
@@ -910,6 +910,10 @@ public class SolrIndexSearcher extends IndexSearcher implements Closeable,SolrIn
           collector.collect(docid);
         }
       }
+    }
+
+    if(collector instanceof DelegatingCollector) {
+      ((DelegatingCollector) collector).finish();
     }
 
     return setCollector.getDocSet();
@@ -1456,6 +1460,9 @@ public class SolrIndexSearcher extends IndexSearcher implements Closeable,SolrIn
 
       try {
         super.search(query, luceneFilter, collector);
+        if(collector instanceof DelegatingCollector) {
+          ((DelegatingCollector)collector).finish();
+        }
       }
       catch( TimeLimitingCollector.TimeExceededException x ) {
         log.warn( "Query: " + query + "; " + x.getMessage() );
@@ -1492,6 +1499,9 @@ public class SolrIndexSearcher extends IndexSearcher implements Closeable,SolrIn
       }
       try {
         super.search(query, luceneFilter, collector);
+        if(collector instanceof DelegatingCollector) {
+          ((DelegatingCollector)collector).finish();
+        }
       }
       catch( TimeLimitingCollector.TimeExceededException x ) {
         log.warn( "Query: " + query + "; " + x.getMessage() );
@@ -1584,6 +1594,9 @@ public class SolrIndexSearcher extends IndexSearcher implements Closeable,SolrIn
 
        try {
          super.search(query, luceneFilter, collector);
+         if(collector instanceof DelegatingCollector) {
+           ((DelegatingCollector)collector).finish();
+         }
        }
        catch( TimeLimitingCollector.TimeExceededException x ) {
          log.warn( "Query: " + query + "; " + x.getMessage() );
@@ -1621,6 +1634,9 @@ public class SolrIndexSearcher extends IndexSearcher implements Closeable,SolrIn
       }
       try {
         super.search(query, luceneFilter, collector);
+        if(collector instanceof DelegatingCollector) {
+          ((DelegatingCollector)collector).finish();
+        }
       }
       catch( TimeLimitingCollector.TimeExceededException x ) {
         log.warn( "Query: " + query + "; " + x.getMessage() );

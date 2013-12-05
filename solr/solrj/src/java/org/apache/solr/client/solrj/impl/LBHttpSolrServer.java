@@ -18,6 +18,8 @@ package org.apache.solr.client.solrj.impl;
 
 import org.apache.http.client.HttpClient;
 import org.apache.solr.client.solrj.*;
+import org.apache.solr.client.solrj.request.RequestWriter;
+import org.apache.solr.client.solrj.request.RequestWriter;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.util.NamedList;
@@ -92,14 +94,8 @@ public class LBHttpSolrServer extends SolrServer {
   private final boolean clientIsInternal;
   private final AtomicInteger counter = new AtomicInteger(-1);
 
-  private final ResponseParser parser;
-
-
-  protected SolrQuery newPingQuery() {
-    SolrQuery solrQuery = new SolrQuery("*:*");
-    solrQuery.setRows(0);
-    return solrQuery;
-  }
+  private volatile ResponseParser parser;
+  private volatile RequestWriter requestWriter;
 
   public static class ServerWrapper {
     public final HttpSolrServer solrServer;
@@ -221,10 +217,12 @@ public class LBHttpSolrServer extends SolrServer {
   }
 
   protected HttpSolrServer makeServer(String server) throws MalformedURLException {
-    return new HttpSolrServer(server, httpClient, parser);
+    HttpSolrServer s = new HttpSolrServer(server, httpClient, parser);
+    if (requestWriter != null) {
+      s.setRequestWriter(requestWriter);
+    }
+    return s;
   }
-
-
 
   /**
    * Tries to query a live server from the list provided in Req. Servers in the dead pool are skipped.
@@ -534,10 +532,6 @@ public class LBHttpSolrServer extends SolrServer {
     }
   }
 
-  protected QueryResponse newPingQuery(ServerWrapper zombieServer) throws SolrServerException {
-    return zombieServer.solrServer.query(newPingQuery());
-  }
-
   protected void moveAliveToDead(ServerWrapper wrapper) {
     wrapper = removeFromAlive(wrapper.getKey());
     if (wrapper == null)
@@ -596,6 +590,18 @@ public class LBHttpSolrServer extends SolrServer {
     return httpClient;
   }
 
+  public ResponseParser getParser() {
+    return parser;
+  }
+  
+  public void setParser(ResponseParser parser) {
+    this.parser = parser;
+  }
+  
+  public void setRequestWriter(RequestWriter requestWriter) {
+    this.requestWriter = requestWriter;
+  }
+  
   @Override
   protected void finalize() throws Throwable {
     try {
@@ -609,4 +615,15 @@ public class LBHttpSolrServer extends SolrServer {
   // defaults
   private static final int CHECK_INTERVAL = 60 * 1000; //1 minute between checks
   private static final int NONSTANDARD_PING_LIMIT = 5;  // number of times we'll ping dead servers not in the server list
+
+
+  protected QueryResponse newPingQuery(ServerWrapper zombieServer) throws SolrServerException {
+    return zombieServer.solrServer.query(newPingQuery());
+  }
+
+  protected SolrQuery newPingQuery() {
+    SolrQuery solrQuery = new SolrQuery("*:*");
+    solrQuery.setRows(0);
+    return solrQuery;
+  }
 }

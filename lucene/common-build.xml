@@ -50,8 +50,8 @@
   <property name="Name" value="Lucene"/>
   
   <property name="name" value="${ant.project.name}"/>
-  <property name="tests.luceneMatchVersion" value="4.4"/>
-  <property name="dev.version.base" value="4.4"/>
+  <property name="tests.luceneMatchVersion" value="4.5"/>
+  <property name="dev.version.base" value="4.5.1"/>
   <property name="dev.version.suffix" value="SNAPSHOT"/>
   <property name="dev.version" value="${dev.version.base}-${dev.version.suffix}"/>
   <property name="version" value="${dev.version}"/>
@@ -230,9 +230,6 @@
   <property name="svn.exe" value="svn" />
   <property name="perl.exe" value="perl" />
   
-  <property name="hg.exe" value="hg" />
-  <property name="moman.url" value="https://bitbucket.org/jpbarrette/moman" />
-  <property name="moman.rev" value="120" />
   <property name="python.exe" value="python" />
   <property name="python32.exe" value="python3.2" />
 
@@ -448,20 +445,6 @@
     </sequential>
   </macrodef>
 
-  <target name="jflex-uptodate-check">
-    <uptodate property="jflex.files.uptodate">
-      <srcfiles dir="${src.dir}" includes="**/*.jflex" />
-      <mapper type="glob" from="*.jflex" to="*.java"/>
-    </uptodate>
-  </target>
- 
-  <target name="jflex-notice" depends="jflex-uptodate-check" unless="jflex.files.uptodate">
-    <echo>
-      One or more of the JFlex .jflex files is newer than its corresponding
-      .java file.  Run the "jflex" target to regenerate the artifacts.
-    </echo>
-  </target>
-
   <target name="jflex-check">
     <available property="jflex.present" classname="jflex.anttask.JFlexTask">
       <classpath refid="jflex.classpath"/>
@@ -474,7 +457,7 @@
       Please install the jFlex 1.5 version (currently not released)
       from its SVN repository:
 
-       svn co http://jflex.svn.sourceforge.net/svnroot/jflex/trunk jflex
+       svn co -r 623 http://jflex.svn.sourceforge.net/svnroot/jflex/trunk jflex
        cd jflex
        mvn install
 
@@ -1518,7 +1501,7 @@ ${tests-output}/junit4-*.suites     - per-JVM executed suites
   </target>
 
   <target name="rat-sources-typedef" unless="rat.loaded">
-    <ivy:cachepath organisation="org.apache.rat" module="apache-rat" revision="0.9" transitive="false" inline="true" conf="master" type="jar" pathid="rat.classpath"/>
+    <ivy:cachepath organisation="org.apache.rat" module="apache-rat" revision="0.10" transitive="false" inline="true" conf="master" type="jar" pathid="rat.classpath"/>
     <typedef resource="org/apache/rat/anttasks/antlib.xml" uri="antlib:org.apache.rat.anttasks" classpathref="rat.classpath"/>
     <property name="rat.loaded" value="true"/>
   </target>
@@ -2102,6 +2085,8 @@ ${tests-output}/junit4-*.suites     - per-JVM executed suites
     <property name="pegdown.loaded" value="true"/>
   </target>
   
+  <target name="regenerate"/>
+	
   <macrodef name="pegdown">
     <attribute name="todir"/>
     <attribute name="flatten" default="false"/>

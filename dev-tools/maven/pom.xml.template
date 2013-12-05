@@ -41,7 +41,7 @@
     <vc-anonymous-base-url>http://svn.apache.org/repos/asf/lucene/dev/branches/branch_4x</vc-anonymous-base-url>
     <vc-dev-base-url>https://svn.apache.org/repos/asf/lucene/dev/branches/branch_4x</vc-dev-base-url>
     <vc-browse-base-url>http://svn.apache.org/viewvc/lucene/dev/branches/branch_4x</vc-browse-base-url>
-    <base.specification.version>4.4.0</base.specification.version>
+    <base.specification.version>4.5.1</base.specification.version>
     <maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss</maven.build.timestamp.format>
     <java.compat.version>1.6</java.compat.version>
     <jetty.version>8.1.10.v20130312</jetty.version>
@@ -65,7 +65,7 @@
     <tests.codec>random</tests.codec>
     <tests.directory>random</tests.directory>
     <tests.locale>random</tests.locale>
-    <tests.luceneMatchVersion>4.4</tests.luceneMatchVersion>
+    <tests.luceneMatchVersion>4.5</tests.luceneMatchVersion>
     <tests.multiplier>1</tests.multiplier>
     <tests.nightly>false</tests.nightly>
     <tests.postingsformat>random</tests.postingsformat>
@@ -407,12 +407,12 @@
       <dependency>
         <groupId>org.carrot2</groupId>
         <artifactId>carrot2-mini</artifactId>
-        <version>3.6.2</version>
+        <version>3.8.0</version>
       </dependency>
       <dependency>
         <groupId>org.carrot2</groupId>
         <artifactId>morfologik-polish</artifactId>
-        <version>1.5.5</version>
+        <version>1.7.1</version>
       </dependency>
       <dependency>
         <groupId>org.codehaus.woodstox</groupId>
@@ -600,23 +600,10 @@
           <version>2.4</version>
           <configuration>
             <archive>
-              <!-- This section should be *exactly* the same under -->
-              <!-- maven-jar-plugin and maven-war-plugin.          -->
-              <!-- If you make changes here, make the same changes -->
-              <!-- in the other location as well.                  -->
-              <manifestEntries>
-                <Extension-Name>${project.groupId}</Extension-Name>
-                <Implementation-Title>${project.groupId}</Implementation-Title>
-                <Specification-Title>${project.name}</Specification-Title>
-                <!-- spec version must match "digit+{.digit+}*" -->
-                <Specification-Version>${base.specification.version}.${now.version}</Specification-Version>
-                <Specification-Vendor>The Apache Software Foundation</Specification-Vendor>
-                <!-- impl version can be any string -->
-                <Implementation-Version>${project.version} ${svn.revision} - ${user.name} - ${now.timestamp}</Implementation-Version>
-                <Implementation-Vendor>The Apache Software Foundation</Implementation-Vendor>
-                <X-Compile-Source-JDK>${java.compat.version}</X-Compile-Source-JDK>
-                <X-Compile-Target-JDK>${java.compat.version}</X-Compile-Target-JDK>
-              </manifestEntries>
+              <manifest>
+                <addDefaultSpecificationEntries>false</addDefaultSpecificationEntries>
+                <addDefaultImplementationEntries>false</addDefaultImplementationEntries>
+              </manifest>
             </archive>
           </configuration>
         </plugin>
@@ -681,7 +668,7 @@
           <configuration>
             <archive>
               <!-- This section should be *exactly* the same under -->
-              <!-- maven-jar-plugin and maven-war-plugin.          -->
+              <!-- maven-bundle-plugin and maven-war-plugin.          -->
               <!-- If you make changes here, make the same changes -->
               <!-- in the other location as well.                  -->
               <manifestEntries>
@@ -694,6 +681,7 @@
                 <!-- impl version can be any string -->
                 <Implementation-Version>${project.version} ${svn.revision} - ${user.name} - ${now.timestamp}</Implementation-Version>
                 <Implementation-Vendor>The Apache Software Foundation</Implementation-Vendor>
+                <Implementation-Vendor-Id>${project.groupId}</Implementation-Vendor-Id>
                 <X-Compile-Source-JDK>${java.compat.version}</X-Compile-Source-JDK>
                 <X-Compile-Target-JDK>${java.compat.version}</X-Compile-Target-JDK>
               </manifestEntries>
@@ -806,6 +794,23 @@
         <configuration>
           <instructions>
             <Export-Package>*;-split-package:=merge-first</Export-Package>
+            
+            <!-- This section should be *exactly* the same under -->
+            <!-- maven-bundle-plugin and maven-war-plugin.          -->
+            <!-- If you make changes here, make the same changes -->
+            <!-- in the other location as well.                  -->
+            <Extension-Name>${project.groupId}</Extension-Name>
+            <Implementation-Title>${project.groupId}</Implementation-Title>
+            <Specification-Title>${project.name}</Specification-Title>
+            <!-- spec version must match "digit+{.digit+}*" -->
+            <Specification-Version>${base.specification.version}.${now.version}</Specification-Version>
+            <Specification-Vendor>The Apache Software Foundation</Specification-Vendor>
+            <!-- impl version can be any string -->
+            <Implementation-Version>${project.version} ${svn.revision} - ${user.name} - ${now.timestamp}</Implementation-Version>
+            <Implementation-Vendor>The Apache Software Foundation</Implementation-Vendor>
+            <Implementation-Vendor-Id>${project.groupId}</Implementation-Vendor-Id>
+            <X-Compile-Source-JDK>${java.compat.version}</X-Compile-Source-JDK>
+            <X-Compile-Target-JDK>${java.compat.version}</X-Compile-Target-JDK>
           </instructions>
         </configuration>
         <executions>

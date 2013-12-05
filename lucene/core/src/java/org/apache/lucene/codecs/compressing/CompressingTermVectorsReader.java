@@ -57,6 +57,7 @@ import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.LongsRef;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.lucene.util.packed.BlockPackedReaderIterator;
 import org.apache.lucene.util.packed.PackedInts;
 
@@ -824,7 +825,7 @@ public final class CompressingTermVectorsReader extends TermVectorsReader implem
     }
 
     @Override
-    public SeekStatus seekCeil(BytesRef text, boolean useCache)
+    public SeekStatus seekCeil(BytesRef text)
         throws IOException {
       if (ord < numTerms && ord >= 0) {
         final int cmp = term().compareTo(text);
@@ -851,16 +852,7 @@ public final class CompressingTermVectorsReader extends TermVectorsReader implem
 
     @Override
     public void seekExact(long ord) throws IOException {
-      if (ord < -1 || ord >= numTerms) {
-        throw new IOException("ord is out of range: ord=" + ord + ", numTerms=" + numTerms);
-      }
-      if (ord < this.ord) {
-        reset();
-      }
-      for (int i = this.ord; i < ord; ++i) {
-        next();
-      }
-      assert ord == this.ord();
+      throw new UnsupportedOperationException();
     }
 
     @Override
@@ -870,7 +862,7 @@ public final class CompressingTermVectorsReader extends TermVectorsReader implem
 
     @Override
     public long ord() throws IOException {
-      return ord;
+      throw new UnsupportedOperationException();
     }
 
     @Override
@@ -1048,6 +1040,11 @@ public final class CompressingTermVectorsReader extends TermVectorsReader implem
       sum += el;
     }
     return sum;
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    return indexReader.ramBytesUsed();
   }
 
 }

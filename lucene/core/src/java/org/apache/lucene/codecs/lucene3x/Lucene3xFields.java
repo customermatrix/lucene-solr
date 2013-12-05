@@ -42,6 +42,7 @@ import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.lucene.util.UnicodeUtil;
 
 /** Exposes flex API on a pre-flex index, as a codec. 
@@ -718,7 +719,7 @@ class Lucene3xFields extends FieldsProducer {
     }
 
     @Override
-    public SeekStatus seekCeil(BytesRef term, boolean useCache) throws IOException {
+    public SeekStatus seekCeil(BytesRef term) throws IOException {
       if (DEBUG_SURROGATES) {
         System.out.println("TE.seek target=" + UnicodeUtil.toHexString(term.utf8ToString()));
       }
@@ -728,7 +729,7 @@ class Lucene3xFields extends FieldsProducer {
 
       assert termEnum != null;
 
-      tis.seekEnum(termEnum, t0, useCache);
+      tis.seekEnum(termEnum, t0, false);
 
       final Term t = termEnum.term();
 
@@ -764,7 +765,7 @@ class Lucene3xFields extends FieldsProducer {
             if (seekToNonBMP(seekTermEnum, scratchTerm, i)) {
 
               scratchTerm.copyBytes(seekTermEnum.term().bytes());
-              getTermsDict().seekEnum(termEnum, seekTermEnum.term(), useCache);
+              getTermsDict().seekEnum(termEnum, seekTermEnum.term(), false);
 
               newSuffixStart = 1+i;
 
@@ -1067,5 +1068,10 @@ class Lucene3xFields extends FieldsProducer {
     public long cost() {
       return pos.df;
     }
+  }
+  
+  @Override
+  public long ramBytesUsed() {
+    return RamUsageEstimator.sizeOf(this);
   }
 }

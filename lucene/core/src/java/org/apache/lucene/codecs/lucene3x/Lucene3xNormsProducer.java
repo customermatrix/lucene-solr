@@ -36,7 +36,9 @@ import org.apache.lucene.index.SortedSetDocValues;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
+import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.lucene.util.StringHelper;
 
 /**
@@ -211,5 +213,15 @@ class Lucene3xNormsProducer extends DocValuesProducer {
   @Override
   public SortedSetDocValues getSortedSet(FieldInfo field) throws IOException {
     throw new AssertionError();
+  }
+
+  @Override
+  public Bits getDocsWithField(FieldInfo field) throws IOException {
+    throw new AssertionError();
+  }
+  
+  @Override
+  public long ramBytesUsed() {
+    return RamUsageEstimator.sizeOf(this);
   }
 }

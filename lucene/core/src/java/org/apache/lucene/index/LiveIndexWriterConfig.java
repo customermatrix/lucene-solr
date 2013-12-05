@@ -213,7 +213,7 @@ public class LiveIndexWriterConfig {
    * <pre class="prettyprint">
    * //customize Lucene41PostingsFormat, passing minBlockSize=50, maxBlockSize=100
    * final PostingsFormat tweakedPostings = new Lucene41PostingsFormat(50, 100);
-   * iwc.setCodec(new Lucene42Codec() {
+   * iwc.setCodec(new Lucene45Codec() {
    *   &#64;Override
    *   public PostingsFormat getPostingsFormatForField(String field) {
    *     if (field.equals("fieldWithTonsOfTerms"))
@@ -242,8 +242,9 @@ public class LiveIndexWriterConfig {
   }
 
   /**
-   * Determines the minimal number of delete terms required before the buffered
-   * in-memory delete terms and queries are applied and flushed.
+   * Determines the maximum number of delete-by-term operations that will be
+   * buffered before both the buffered in-memory delete terms and queries are
+   * applied and flushed.
    * <p>
    * Disabled by default (writer flushes by RAM usage).
    * <p>
@@ -251,7 +252,8 @@ public class LiveIndexWriterConfig {
    * 
    * <p>
    * Takes effect immediately, but only the next time a document is added,
-   * updated or deleted.
+   * updated or deleted. Also, if you only delete-by-query, this setting has no
+   * effect, i.e. delete queries are buffered until the next segment is flushed.
    * 
    * @throws IllegalArgumentException
    *           if maxBufferedDeleteTerms is enabled but smaller than 1

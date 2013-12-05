@@ -20,6 +20,7 @@ package org.apache.lucene.util;
 import java.io.*;
 import java.lang.annotation.*;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.*;
@@ -29,6 +30,7 @@ import java.util.logging.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.codecs.DocValuesFormat;
 import org.apache.lucene.document.Field.Store;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
@@ -232,7 +234,7 @@ public abstract class LuceneTestCase extends Assert {
    * Use this constant when creating Analyzers and any other version-dependent stuff.
    * <p><b>NOTE:</b> Change this when development starts for new Lucene version:
    */
-  public static final Version TEST_VERSION_CURRENT = Version.LUCENE_44;
+  public static final Version TEST_VERSION_CURRENT = Version.LUCENE_45;
 
   /**
    * True if and only if tests are run in verbose mode. If this flag is false
@@ -332,10 +334,18 @@ public abstract class LuceneTestCase extends Assert {
   // -----------------------------------------------------------------
 
   /**
-   * @lucene.internal 
+   * @lucene.internal
    */
   public static boolean PREFLEX_IMPERSONATION_IS_ACTIVE;
 
+  /**
+   * When {@code true}, Codecs for old Lucene version will support writing
+   * indexes in that format. Defaults to {@code true}, can be disabled by
+   * spdecific tests on demand.
+   * 
+   * @lucene.internal
+   */
+  public static boolean OLD_FORMAT_IMPERSONATION_IS_ACTIVE = true;
 
   // -----------------------------------------------------------------
   // Class level (suite) rules.
@@ -803,15 +813,8 @@ public abstract class LuceneTestCase extends Assert {
       }
     }
 
-    if (rarely(r)) {
-      c.setMergePolicy(new MockRandomMergePolicy(r));
-    } else if (r.nextBoolean()) {
-      c.setMergePolicy(newTieredMergePolicy());
-    } else if (r.nextInt(5) == 0) { 
-      c.setMergePolicy(newAlcoholicMergePolicy());
-    } else {
-      c.setMergePolicy(newLogMergePolicy());
-    }
+    c.setMergePolicy(newMergePolicy(r));
+
     if (rarely(r)) {
       c.setMergedSegmentWarmer(new SimpleMergedSegmentWarmer(c.getInfoStream()));
     }
@@ -819,6 +822,21 @@ public abstract class LuceneTestCase extends Assert {
     c.setReaderPooling(r.nextBoolean());
     c.setReaderTermsIndexDivisor(_TestUtil.nextInt(r, 1, 4));
     return c;
+  }
+
+  public static MergePolicy newMergePolicy(Random r) {
+    if (rarely(r)) {
+      return new MockRandomMergePolicy(r);
+    } else if (r.nextBoolean()) {
+      return newTieredMergePolicy(r);
+    } else if (r.nextInt(5) == 0) { 
+      return newAlcoholicMergePolicy(r, classEnvRule.timeZone);
+    }
+    return newLogMergePolicy(r);
+  }
+
+  public static MergePolicy newMergePolicy() {
+    return newMergePolicy(random());
   }
 
   public static LogMergePolicy newLogMergePolicy() {
@@ -1143,7 +1161,7 @@ public abstract class LuceneTestCase extends Assert {
     try {
       d = CommandLineUtil.newFSDirectory(clazz, file);
     } catch (Exception e) {
-      d = FSDirectory.open(file);
+      Rethrow.rethrow(e);
     }
     return d;
   }
@@ -1373,6 +1391,19 @@ public abstract class LuceneTestCase extends Assert {
     }
     String name = Codec.getDefault().getName();
     if (name.equals("Lucene40") || name.equals("Lucene41") || name.equals("Appending")) {
+      return false;
+    }
+    return true;
+  }
+  
+  /** Returns true if the codec "supports" docsWithField 
+   * (other codecs return MatchAllBits, because you couldnt write missing values before) */
+  public static boolean defaultCodecSupportsDocsWithField() {
+    if (!defaultCodecSupportsDocValues()) {
+      return false;
+    }
+    String name = Codec.getDefault().getName();
+    if (name.equals("Appending") || name.equals("Lucene40") || name.equals("Lucene41") || name.equals("Lucene42")) {
       return false;
     }
     return true;
@@ -1759,14 +1790,13 @@ public abstract class LuceneTestCase extends Assert {
         rightEnum = rightTerms.iterator(rightEnum);
       }
 
-      final boolean useCache = random().nextBoolean();
       final boolean seekExact = random().nextBoolean();
 
       if (seekExact) {
-        assertEquals(info, leftEnum.seekExact(b, useCache), rightEnum.seekExact(b, useCache));
+        assertEquals(info, leftEnum.seekExact(b), rightEnum.seekExact(b));
       } else {
-        SeekStatus leftStatus = leftEnum.seekCeil(b, useCache);
-        SeekStatus rightStatus = rightEnum.seekCeil(b, useCache);
+        SeekStatus leftStatus = leftEnum.seekCeil(b);
+        SeekStatus rightStatus = rightEnum.seekCeil(b);
         assertEquals(info, leftStatus, rightStatus);
         if (leftStatus != SeekStatus.END) {
           assertEquals(info, leftEnum.term(), rightEnum.term());
@@ -1970,6 +2000,20 @@ public abstract class LuceneTestCase extends Assert {
         } else {
           assertNull(info, leftValues);
           assertNull(info, rightValues);
+        }
+      }
+      
+      {
+        Bits leftBits = MultiDocValues.getDocsWithField(leftReader, field);
+        Bits rightBits = MultiDocValues.getDocsWithField(rightReader, field);
+        if (leftBits != null && rightBits != null) {
+          assertEquals(info, leftBits.length(), rightBits.length());
+          for (int i = 0; i < leftBits.length(); i++) {
+            assertEquals(info, leftBits.get(i), rightBits.get(i));
+          }
+        } else {
+          assertNull(info, leftBits);
+          assertNull(info, rightBits);
         }
       }
     }

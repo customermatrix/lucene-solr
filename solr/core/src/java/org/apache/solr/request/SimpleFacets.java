@@ -17,20 +17,6 @@
 
 package org.apache.solr.request;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Date;
-import java.util.EnumSet;
-import java.util.IdentityHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.Executor;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-
 import org.apache.lucene.index.AtomicReader;
 import org.apache.lucene.index.DocsEnum;
 import org.apache.lucene.index.Fields;
@@ -93,8 +79,26 @@ import org.apache.solr.util.BoundedTreeSet;
 import org.apache.solr.util.DateMathParser;
 import org.apache.solr.util.DefaultSolrThreadFactory;
 import org.apache.solr.util.LongPriorityQueue;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Date;
+import java.util.EnumSet;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.RunnableFuture;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A class that generates simple Facet information for a request.
@@ -103,15 +107,6 @@ import org.slf4j.LoggerFactory;
  * to leverage any of it's functionality.
  */
 public class SimpleFacets {
-  private Logger logger = LoggerFactory.getLogger(SimpleFacets.class);
-
-
-  public static final TermValidator DEFAULT_TERM_VALIDATOR = new TermValidator() {
-    @Override
-    public boolean validate(String field, String term) {
-      return true;
-    }
-  };
 
   /** The main set of documents all facet counts should be relative to */
   protected DocSet docsOrig;
@@ -132,7 +127,6 @@ public class SimpleFacets {
   protected DocSet docs;            // the base docset for this particular facet
   protected String key;             // what name should the results be stored under
   protected int threads;
-  protected TermValidator termValidator;
 
   public SimpleFacets(SolrQueryRequest req,
                       DocSet docs,
@@ -150,12 +144,8 @@ public class SimpleFacets {
     this.params = orig = params;
     this.required = new RequiredSolrParams(params);
     this.rb = rb;
-    this.termValidator = DEFAULT_TERM_VALIDATOR;
   }
 
-  public void setTermValidator(TermValidator termValidator) {
-    this.termValidator = termValidator;
-  }
 
   protected void parseParams(String type, String param) throws SyntaxError, IOException {
     localParams = QueryParsing.getLocalParams(param, req.getParams());
@@ -303,31 +293,27 @@ public class SimpleFacets {
 
     String[] facetQs = params.getParams(FacetParams.FACET_QUERY);
 
-
+    
     if (null != facetQs && 0 != facetQs.length) {
       for (String q : facetQs) {
-        try {
-          parseParams(FacetParams.FACET_QUERY, q);
+        parseParams(FacetParams.FACET_QUERY, q);
 
-          // TODO: slight optimization would prevent double-parsing of any localParams
-          Query qobj = QParser.getParser(q, null, req).getQuery();
+        // TODO: slight optimization would prevent double-parsing of any localParams
+        Query qobj = QParser.getParser(q, null, req).getQuery();
 
-          if (qobj == null) {
-            res.add(key, 0);
-          } else if (params.getBool(GroupParams.GROUP_FACET, false)) {
-            res.add(key, getGroupedFacetQueryCount(qobj));
-          } else {
-            res.add(key, searcher.numDocs(qobj, docs));
-          }
-        } catch (Exception e) {
-          logger.warn("", e);
+        if (qobj == null) {
+          res.add(key, 0);
+        } else if (params.getBool(GroupParams.GROUP_FACET, false)) {
+          res.add(key, getGroupedFacetQueryCount(qobj));
+        } else {
+          res.add(key, searcher.numDocs(qobj, docs));
         }
       }
     }
 
     return res;
   }
-
+  
   /**
    * Returns a grouped facet count for the facet query
    *
@@ -342,7 +328,7 @@ public class SimpleFacets {
           "Specify the group.field as parameter or local parameter"
       );
     }
-
+    
     TermAllGroupsCollector collector = new TermAllGroupsCollector(groupField);
     Filter mainQueryFilter = docs.getTopFilter(); // This returns a filter that only matches documents matching with q param and fq params
     searcher.search(facetQuery, mainQueryFilter, collector);
@@ -354,24 +340,19 @@ public class SimpleFacets {
   }
 
   public NamedList<Integer> getTermCounts(String field) throws IOException {
-    return getTermCountsWithSpecifiedMincount(field,params.getFieldInt(field, FacetParams.FACET_MINCOUNT));
+    return getTermCounts(field, this.docs);
   }
-  
-  public NamedList<Integer> getTermCountsForPivots(String field) throws IOException {
-    Integer count = (params.getFieldInt(field, FacetParams.FACET_PIVOT_MINCOUNT)!=null) ? params.getFieldInt(field, FacetParams.FACET_PIVOT_MINCOUNT) : 1;
-    return getTermCountsWithSpecifiedMincount(field,count);
-  }
-  
-  public NamedList<Integer> getTermCountsWithSpecifiedMincount(String field, Integer incomingMinCount) throws IOException{
-    return getTermCountsWithMincountAndLimit(field,incomingMinCount,params.getFieldInt(field, FacetParams.FACET_LIMIT, 100));
-  }
-  
-  public NamedList<Integer> getTermCountsWithMincountAndLimit(String field, Integer incomingMinCount, int limit) throws IOException{  
+
+  public NamedList<Integer> getTermCounts(String field, DocSet base) throws IOException {
     int offset = params.getFieldInt(field, FacetParams.FACET_OFFSET, 0);
+    int limit = params.getFieldInt(field, FacetParams.FACET_LIMIT, 100);
     if (limit == 0) return new NamedList<Integer>();
-    if (incomingMinCount==null) {
+    Integer mincount = params.getFieldInt(field, FacetParams.FACET_MINCOUNT);
+    if (mincount==null) {
       Boolean zeros = params.getFieldBool(field, FacetParams.FACET_ZEROS);
-      incomingMinCount = (zeros!=null && !zeros) ? 1 : 0;
+      // mincount = (zeros!=null && zeros) ? 0 : 1;
+      mincount = (zeros!=null && !zeros) ? 1 : 0;
+      // current default is to include zeros.
     }
     boolean missing = params.getFieldBool(field, FacetParams.FACET_MISSING, false);
     // default to sorting if there is a limit.
@@ -380,117 +361,99 @@ public class SimpleFacets {
 
 
     NamedList<Integer> counts;
-    try {
-      SchemaField sf = getField(field);
-      if (!sf.getName().equals(field)) {
-        field = sf.getName();
-      }
+    SchemaField sf = searcher.getSchema().getField(field);
+    FieldType ft = sf.getType();
 
-      FieldType ft = sf.getType();
+    // determine what type of faceting method to use
+    final String methodStr = params.getFieldParam(field, FacetParams.FACET_METHOD);
+    FacetMethod method = null;
+    if (FacetParams.FACET_METHOD_enum.equals(methodStr)) {
+      method = FacetMethod.ENUM;
+    } else if (FacetParams.FACET_METHOD_fcs.equals(methodStr)) {
+      method = FacetMethod.FCS;
+    } else if (FacetParams.FACET_METHOD_fc.equals(methodStr)) {
+      method = FacetMethod.FC;
+    }
 
-      // determine what type of faceting method to use
-      final String methodStr = params.getFieldParam(field, FacetParams.FACET_METHOD);
-      FacetMethod method = null;
-      if (FacetParams.FACET_METHOD_enum.equals(methodStr)) {
-        method = FacetMethod.ENUM;
-      } else if (FacetParams.FACET_METHOD_fcs.equals(methodStr)) {
-        method = FacetMethod.FCS;
-      } else if (FacetParams.FACET_METHOD_fc.equals(methodStr)) {
-        method = FacetMethod.FC;
-      }
+    if (method == FacetMethod.ENUM && TrieField.getMainValuePrefix(ft) != null) {
+      // enum can't deal with trie fields that index several terms per value
+      method = sf.multiValued() ? FacetMethod.FC : FacetMethod.FCS;
+    }
 
-      if (method == FacetMethod.ENUM && TrieField.getMainValuePrefix(ft) != null) {
-        // enum can't deal with trie fields that index several terms per value
-        method = sf.multiValued() ? FacetMethod.FC : FacetMethod.FCS;
-      }
+    if (method == null && ft instanceof BoolField) {
+      // Always use filters for booleans... we know the number of values is very small.
+      method = FacetMethod.ENUM;
+    }
 
-      if (method == null && ft instanceof BoolField) {
-        // Always use filters for booleans... we know the number of values is very small.
-        method = FacetMethod.ENUM;
-      }
+    final boolean multiToken = sf.multiValued() || ft.multiValuedFieldCache();
+    
+    if (method == null && ft.getNumericType() != null && !sf.multiValued()) {
+      // the per-segment approach is optimal for numeric field types since there
+      // are no global ords to merge and no need to create an expensive
+      // top-level reader
+      method = FacetMethod.FCS;
+    }
 
-      final boolean multiToken = sf.multiValued() || ft.multiValuedFieldCache();
+    if (ft.getNumericType() != null && sf.hasDocValues()) {
+      // only fcs is able to leverage the numeric field caches
+      method = FacetMethod.FCS;
+    }
 
-      if (method == null && ft.getNumericType() != null && !sf.multiValued()) {
-        // the per-segment approach is optimal for numeric field types since there
-        // are no global ords to merge and no need to create an expensive
-        // top-level reader
-        method = FacetMethod.FCS;
-      }
+    if (method == null) {
+      // TODO: default to per-segment or not?
+      method = FacetMethod.FC;
+    }
 
-      if (ft.getNumericType() != null && sf.hasDocValues()) {
-        // only fcs is able to leverage the numeric field caches
-        method = FacetMethod.FCS;
-      }
+    if (method == FacetMethod.FCS && multiToken) {
+      // only fc knows how to deal with multi-token fields
+      method = FacetMethod.FC;
+    }
+    
+    if (method == FacetMethod.ENUM && sf.hasDocValues()) {
+      // only fc can handle docvalues types
+      method = FacetMethod.FC;
+    }
 
-      if (method == null) {
-        // TODO: default to per-segment or not?
-        method = FacetMethod.FC;
-      }
-
-      if (method == FacetMethod.FCS && multiToken) {
-        // only fc knows how to deal with multi-token fields
-        method = FacetMethod.FC;
-      }
-
-      if (method == FacetMethod.ENUM && sf.hasDocValues()) {
-        // only fc can handle docvalues types
-        method = FacetMethod.FC;
-      }
-
-      if (params.getFieldBool(field, GroupParams.GROUP_FACET, false)) {
-        counts = getGroupedCounts(searcher, docs, field, multiToken, offset, limit, incomingMinCount, missing, sort, prefix);
-      } else {
-        assert method != null;
-        switch (method) {
-          case ENUM:
-            assert TrieField.getMainValuePrefix(ft) == null;
-            counts = getFacetTermEnumCounts(searcher, docs, field, offset, limit, incomingMinCount, missing, sort, prefix);
-            break;
-          case FCS:
-            assert !multiToken;
-            if (ft.getNumericType() != null && !sf.multiValued()) {
-              // force numeric faceting
-              if (prefix != null && !prefix.isEmpty()) {
-                throw new SolrException(ErrorCode.BAD_REQUEST, FacetParams.FACET_PREFIX + " is not supported on numeric types");
-              }
-              counts = NumericFacets.getCounts(searcher, docs, field, offset, limit, incomingMinCount, missing, sort);
-            } else {
-              PerSegmentSingleValuedFaceting ps = new PerSegmentSingleValuedFaceting(termValidator, searcher, docs, field, offset, limit, incomingMinCount, missing, sort, prefix);
-              Executor executor = threads == 0 ? directExecutor : facetExecutor;
-              ps.setNumThreads(threads);
-              counts = ps.getFacetCounts(executor);
+    if (params.getFieldBool(field, GroupParams.GROUP_FACET, false)) {
+      counts = getGroupedCounts(searcher, base, field, multiToken, offset,limit, mincount, missing, sort, prefix);
+    } else {
+      assert method != null;
+      switch (method) {
+        case ENUM:
+          assert TrieField.getMainValuePrefix(ft) == null;
+          counts = getFacetTermEnumCounts(searcher, base, field, offset, limit, mincount,missing,sort,prefix);
+          break;
+        case FCS:
+          assert !multiToken;
+          if (ft.getNumericType() != null && !sf.multiValued()) {
+            // force numeric faceting
+            if (prefix != null && !prefix.isEmpty()) {
+              throw new SolrException(ErrorCode.BAD_REQUEST, FacetParams.FACET_PREFIX + " is not supported on numeric types");
             }
-            break;
-          case FC:
-            if (sf.hasDocValues()) {
-              counts = DocValuesFacets.getCounts(searcher, docs, field, offset, limit, incomingMinCount, missing, sort, prefix);
-            } else if (multiToken || TrieField.getMainValuePrefix(ft) != null) {
-              UnInvertedField uif = UnInvertedField.getUnInvertedField(field, searcher);
-              counts = uif.getCounts(termValidator, searcher, docs, offset, limit, incomingMinCount, missing, sort, prefix);
-            } else {
-              counts = getFieldCacheCounts(searcher, docs, field, offset, limit, incomingMinCount, missing, sort, prefix);
-            }
-            break;
-          default:
-            throw new AssertionError();
-        }
+            counts = NumericFacets.getCounts(searcher, base, field, offset, limit, mincount, missing, sort);
+          } else {
+            PerSegmentSingleValuedFaceting ps = new PerSegmentSingleValuedFaceting(searcher, base, field, offset,limit, mincount, missing, sort, prefix);
+            Executor executor = threads == 0 ? directExecutor : facetExecutor;
+            ps.setNumThreads(threads);
+            counts = ps.getFacetCounts(executor);
+          }
+          break;
+        case FC:
+          if (sf.hasDocValues()) {
+            counts = DocValuesFacets.getCounts(searcher, base, field, offset,limit, mincount, missing, sort, prefix);
+          } else if (multiToken || TrieField.getMainValuePrefix(ft) != null) {
+            UnInvertedField uif = UnInvertedField.getUnInvertedField(field, searcher);
+            counts = uif.getCounts(searcher, base, offset, limit, mincount,missing,sort,prefix);
+          } else {
+            counts = getFieldCacheCounts(searcher, base, field, offset,limit, mincount, missing, sort, prefix);
+          }
+          break;
+        default:
+          throw new AssertionError();
       }
-
-    } catch (Exception e) {
-      counts = new NamedList<Integer>();
     }
 
     return counts;
-  }
-
-  private SchemaField getField(String field) {
-    IndexSchema schema = searcher.getSchema();
-    SchemaField virtualField = schema.getVirtualField(field);
-    if (virtualField != null) {
-      return virtualField;
-    }
-    return schema.getField(field);
   }
 
   public NamedList<Integer> getGroupedCounts(SolrIndexSearcher searcher,
@@ -516,16 +479,16 @@ public class SimpleFacets {
     TermGroupFacetCollector collector = TermGroupFacetCollector.createTermGroupFacetCollector(groupField, field, multiToken, prefixBR, 128);
     searcher.search(new MatchAllDocsQuery(), base.getTopFilter(), collector);
     boolean orderByCount = sort.equals(FacetParams.FACET_SORT_COUNT) || sort.equals(FacetParams.FACET_SORT_COUNT_LEGACY);
-    TermGroupFacetCollector.GroupedFacetResult result
-        = collector.mergeSegmentResults(limit < 0 ? Integer.MAX_VALUE :
-        (offset + limit),
-        mincount, orderByCount);
+    TermGroupFacetCollector.GroupedFacetResult result 
+      = collector.mergeSegmentResults(limit < 0 ? Integer.MAX_VALUE : 
+                                      (offset + limit), 
+                                      mincount, orderByCount);
 
     CharsRef charsRef = new CharsRef();
     FieldType facetFieldType = searcher.getSchema().getFieldType(field);
     NamedList<Integer> facetCounts = new NamedList<Integer>();
-    List<TermGroupFacetCollector.FacetEntry> scopedEntries
-        = result.getFacetEntries(offset, limit < 0 ? Integer.MAX_VALUE : limit);
+    List<TermGroupFacetCollector.FacetEntry> scopedEntries 
+      = result.getFacetEntries(offset, limit < 0 ? Integer.MAX_VALUE : limit);
     for (TermGroupFacetCollector.FacetEntry facetEntry : scopedEntries) {
       facetFieldType.indexedToReadable(facetEntry.getValue(), charsRef);
       facetCounts.add(charsRef.toString(), facetEntry.getCount());
@@ -547,13 +510,13 @@ public class SimpleFacets {
   };
 
   static final Executor facetExecutor = new ThreadPoolExecutor(
-      0,
-      Integer.MAX_VALUE,
-      10, TimeUnit.SECONDS, // terminate idle threads after 10 sec
-      new SynchronousQueue<Runnable>()  // directly hand off tasks
-      , new DefaultSolrThreadFactory("facetExecutor")
+          0,
+          Integer.MAX_VALUE,
+          10, TimeUnit.SECONDS, // terminate idle threads after 10 sec
+          new SynchronousQueue<Runnable>()  // directly hand off tasks
+          , new DefaultSolrThreadFactory("facetExecutor")
   );
-
+  
   /**
    * Returns a list of value constraints and the associated facet counts 
    * for each facet field specified in the params.
@@ -562,66 +525,110 @@ public class SimpleFacets {
    * @see #getFieldMissingCount
    * @see #getFacetTermEnumCounts
    */
+  @SuppressWarnings("unchecked")
   public NamedList<Object> getFacetFieldCounts()
       throws IOException, SyntaxError {
 
     NamedList<Object> res = new SimpleOrderedMap<Object>();
+    String[] facetFs = params.getParams(FacetParams.FACET_FIELD);
+    if (null == facetFs) {
+      return res;
+    }
+
+    // Passing a negative number for FACET_THREADS implies an unlimited number of threads is acceptable.
+    // Also, a subtlety of directExecutor is that no matter how many times you "submit" a job, it's really
+    // just a method call in that it's run by the calling thread.
+    int maxThreads = req.getParams().getInt(FacetParams.FACET_THREADS, 0);
+    Executor executor = maxThreads == 0 ? directExecutor : facetExecutor;
+    final Semaphore semaphore = new Semaphore((maxThreads <= 0) ? Integer.MAX_VALUE : maxThreads);
+    List<Future<NamedList>> futures = new ArrayList<Future<NamedList>>(facetFs.length);
 
     try {
-      String[] facetFs = params.getParams(FacetParams.FACET_FIELD);
-      if (null != facetFs) {
-        for (String f : facetFs) {
-          parseParams(FacetParams.FACET_FIELD, f);
-          String termList = localParams == null ? null : localParams.get(CommonParams.TERMS);
-          if (termList != null) {
-            res.add(key, getListedTermCounts(facetValue, termList));
-          } else {
-            res.add(key, getTermCounts(facetValue));
+      //Loop over fields; submit to executor, keeping the future
+      for (String f : facetFs) {
+        parseParams(FacetParams.FACET_FIELD, f);
+        final String termList = localParams == null ? null : localParams.get(CommonParams.TERMS);
+        final String workerKey = key;
+        final String workerFacetValue = facetValue;
+        final DocSet workerBase = this.docs;
+        Callable<NamedList> callable = new Callable<NamedList>() {
+          @Override
+          public NamedList call() throws Exception {
+            try {
+              NamedList<Object> result = new SimpleOrderedMap<Object>();
+              if(termList != null) {
+                result.add(workerKey, getListedTermCounts(workerFacetValue, termList, workerBase));
+              } else {
+                result.add(workerKey, getTermCounts(workerFacetValue, workerBase));
+              }
+              return result;
+            } catch (SolrException se) {
+              throw se;
+            } catch (Exception e) {
+              throw new SolrException(ErrorCode.SERVER_ERROR,
+                                      "Exception during facet.field: " + workerFacetValue, e.getCause());
+            } finally {
+              semaphore.release();
+            }
           }
-        }
+        };
+
+        RunnableFuture<NamedList> runnableFuture = new FutureTask<NamedList>(callable);
+        semaphore.acquire();//may block and/or interrupt
+        executor.execute(runnableFuture);//releases semaphore when done
+        futures.add(runnableFuture);
+      }//facetFs loop
+
+      //Loop over futures to get the values. The order is the same as facetFs but shouldn't matter.
+      for (Future<NamedList> future : futures) {
+        res.addAll(future.get());
       }
-    } catch (Exception e) {
-      logger.warn("", e);
+      assert semaphore.availablePermits() >= maxThreads;
+    } catch (InterruptedException e) {
+      throw new SolrException(SolrException.ErrorCode.SERVER_ERROR,
+          "Error while processing facet fields: InterruptedException", e);
+    } catch (ExecutionException ee) {
+      Throwable e = ee.getCause();//unwrap
+      if (e instanceof RuntimeException) {
+        throw (RuntimeException) e;
+      }
+      throw new SolrException(SolrException.ErrorCode.SERVER_ERROR,
+          "Error while processing facet fields: " + e.toString(), e);
     }
+
     return res;
   }
 
 
-  public NamedList<Integer> getListedTermCounts(String field, String termList) throws IOException {
+  private NamedList<Integer> getListedTermCounts(String field, String termList) throws IOException {
+    return getListedTermCounts(field, termList, this.docs);
+  }
+
+  private NamedList getListedTermCounts(String field, String termList, DocSet base) throws IOException {
     FieldType ft = searcher.getSchema().getFieldType(field);
     List<String> terms = StrUtils.splitSmart(termList, ",", true);
     NamedList<Integer> res = new NamedList<Integer>();
     for (String term : terms) {
       String internal = ft.toInternal(term);
-      int count = searcher.numDocs(new TermQuery(new Term(field, internal)), docs);
-      if (termValidator.validate(field, term)) {
-        res.add(term, count);
-      }
+      int count = searcher.numDocs(new TermQuery(new Term(field, internal)), base);
+      res.add(term, count);
     }
-    return res;
+    return res;    
   }
 
 
   /**
-   * Returns a count of the documents in the set which do not have any
+   * Returns a count of the documents in the set which do not have any 
    * terms for for the specified field.
    *
    * @see FacetParams#FACET_MISSING
    */
   public static int getFieldMissingCount(SolrIndexSearcher searcher, DocSet docs, String fieldName)
-      throws IOException {
-    //BEGIN: SEA-821
+    throws IOException {
     SchemaField sf = searcher.getSchema().getField(fieldName);
-    if (sf == null) {
-         return searcher.getIndexReader().numDocs();
-    }
-    //END: SEA-821
-    else {
-      DocSet hasVal = searcher.getDocSet
-          (sf.getType().getRangeQuery(null, sf, null, null, false, false));
-      return docs.andNotSize(hasVal);
-    }
-
+    DocSet hasVal = searcher.getDocSet
+        (sf.getType().getRangeQuery(null, sf, null, null, false, false));
+    return docs.andNotSize(hasVal);
   }
 
 
@@ -629,7 +636,7 @@ public class SimpleFacets {
    * Use the Lucene FieldCache to get counts for each unique field value in <code>docs</code>.
    * The field must have at most one indexed token per document.
    */
-  public NamedList<Integer> getFieldCacheCounts(SolrIndexSearcher searcher, DocSet docs, String fieldName, int offset, int limit, int mincount, boolean missing, String sort, String prefix) throws IOException {
+  public static NamedList<Integer> getFieldCacheCounts(SolrIndexSearcher searcher, DocSet docs, String fieldName, int offset, int limit, int mincount, boolean missing, String sort, String prefix) throws IOException {
     // TODO: If the number of terms is high compared to docs.size(), and zeros==false,
     //  we should use an alternate strategy to avoid
     //  1) creating another huge int[] for the counts
@@ -674,7 +681,7 @@ public class SimpleFacets {
     }
 
     final int nTerms=endTermIndex-startTermIndex;
-    int missingCount = -1;
+    int missingCount = -1; 
     final CharsRef charsRef = new CharsRef(10);
     if (nTerms>0 && docs.size() >= mincount) {
 
@@ -735,11 +742,9 @@ public class SimpleFacets {
           int tnum = Integer.MAX_VALUE - (int)pair;
           si.lookupOrd(startTermIndex+tnum, br);
           ft.indexedToReadable(br, charsRef);
-          if (termValidator.validate(fieldName, charsRef.toString())) {
-            res.add(charsRef.toString(), c);
-          }
+          res.add(charsRef.toString(), c);
         }
-
+      
       } else {
         // add results in index order
         int i=(startTermIndex==-1)?1:0;
@@ -750,15 +755,13 @@ public class SimpleFacets {
           off=0;
         }
 
-        for (; i<nTerms; i++) {
+        for (; i<nTerms; i++) {          
           int c = counts[i];
           if (c<mincount || --off>=0) continue;
           if (--lim<0) break;
           si.lookupOrd(startTermIndex+i, br);
           ft.indexedToReadable(br, charsRef);
-          if (termValidator.validate(fieldName, charsRef.toString())) {
-            res.add(charsRef.toString(), c);
-          }
+          res.add(charsRef.toString(), c);
         }
       }
     }
@@ -769,7 +772,7 @@ public class SimpleFacets {
       }
       res.add(null, missingCount);
     }
-
+    
     return res;
   }
 
@@ -785,7 +788,7 @@ public class SimpleFacets {
    * @see FacetParams#FACET_MISSING
    */
   public NamedList<Integer> getFacetTermEnumCounts(SolrIndexSearcher searcher, DocSet docs, String field, int offset, int limit, int mincount, boolean missing, String sort, String prefix)
-      throws IOException {
+    throws IOException {
 
     /* :TODO: potential optimization...
     * cache the Terms with the highest docFreq and try them first
@@ -834,7 +837,7 @@ public class SimpleFacets {
       // facet.offset when sorting by index order.
 
       if (startTermBytes != null) {
-        if (termsEnum.seekCeil(startTermBytes, true) == TermsEnum.SeekStatus.END) {
+        if (termsEnum.seekCeil(startTermBytes) == TermsEnum.SeekStatus.END) {
           termsEnum = null;
         } else {
           term = termsEnum.term();
@@ -850,9 +853,6 @@ public class SimpleFacets {
 
     if (docs.size() >= mincount) {
       while (term != null) {
-        if (termValidator != null && !termValidator.validate(field, term.utf8ToString())) {
-          break;
-        }
 
         if (startTermBytes != null && !StringHelper.startsWith(term, startTermBytes))
           break;
@@ -906,7 +906,7 @@ public class SimpleFacets {
                 if (fastForRandomSet.exists(docid)) c++;
               }
             }
-
+            
 
           }
 
@@ -955,7 +955,7 @@ public class SimpleFacets {
    */
   @Deprecated
   public NamedList<Object> getFacetDateCounts()
-      throws IOException, SyntaxError {
+    throws IOException, SyntaxError {
 
     final NamedList<Object> resOuter = new SimpleOrderedMap<Object>();
     final String[] fields = params.getParams(FacetParams.FACET_DATE);
@@ -1027,12 +1027,12 @@ public class SimpleFacets {
     // Legacy support for default of [lower,upper,edge] for date faceting
     // this is not handled by FacetRangeInclude.parseParam because
     // range faceting has differnet defaults
-    final EnumSet<FacetRangeInclude> include =
-        (null == iStrs || 0 == iStrs.length ) ?
-            EnumSet.of(FacetRangeInclude.LOWER,
-                FacetRangeInclude.UPPER,
-                FacetRangeInclude.EDGE)
-            : FacetRangeInclude.parseParam(iStrs);
+    final EnumSet<FacetRangeInclude> include = 
+      (null == iStrs || 0 == iStrs.length ) ?
+      EnumSet.of(FacetRangeInclude.LOWER, 
+                 FacetRangeInclude.UPPER, 
+                 FacetRangeInclude.EDGE)
+      : FacetRangeInclude.parseParam(iStrs);
 
     try {
       Date low = start;
@@ -1055,8 +1055,8 @@ public class SimpleFacets {
         }
         if (high.equals(low)) {
           throw new SolrException
-              (SolrException.ErrorCode.BAD_REQUEST,
-                  "date facet infinite loop: gap is effectively zero");
+            (SolrException.ErrorCode.BAD_REQUEST,
+             "date facet infinite loop: gap is effectively zero");
         }
         final boolean includeLower =
             (include.contains(FacetRangeInclude.LOWER) ||
@@ -1128,7 +1128,7 @@ public class SimpleFacets {
     }
   }
 
-
+  
   /**
    * Returns a list of value constraints and the associated facet
    * counts for each facet numerical field, range, and interval
@@ -1203,9 +1203,10 @@ public class SimpleFacets {
     resOuter.add(key, getFacetRangeCounts(sf, calc));
   }
 
-  private <T extends Comparable<T>> NamedList getFacetRangeCounts(final SchemaField sf,
-       final RangeEndpointCalculator<T> calc) throws IOException {
-
+  private <T extends Comparable<T>> NamedList getFacetRangeCounts
+    (final SchemaField sf,
+     final RangeEndpointCalculator<T> calc) throws IOException {
+    
     final String f = sf.getName();
     final NamedList<Object> res = new SimpleOrderedMap<Object>();
     final NamedList<Integer> counts = new NamedList<Integer>();
@@ -1216,22 +1217,22 @@ public class SimpleFacets {
     T end = calc.getValue(required.getFieldParam(f,FacetParams.FACET_RANGE_END));
     if (end.compareTo(start) < 0) {
       throw new SolrException
-          (SolrException.ErrorCode.BAD_REQUEST,
-              "range facet 'end' comes before 'start': "+end+" < "+start);
+        (SolrException.ErrorCode.BAD_REQUEST,
+         "range facet 'end' comes before 'start': "+end+" < "+start);
     }
-
+    
     final String gap = required.getFieldParam(f, FacetParams.FACET_RANGE_GAP);
     // explicitly return the gap.  compute this early so we are more 
     // likely to catch parse errors before attempting math
     res.add("gap", calc.getGap(gap));
-
+    
     final int minCount = params.getFieldInt(f,FacetParams.FACET_MINCOUNT, 0);
-
+    
     final EnumSet<FacetRangeInclude> include = FacetRangeInclude.parseParam
-        (params.getFieldParams(f,FacetParams.FACET_RANGE_INCLUDE));
-
+      (params.getFieldParams(f,FacetParams.FACET_RANGE_INCLUDE));
+    
     T low = start;
-
+    
     while (low.compareTo(end) < 0) {
       T high = calc.addGap(low, gap);
       if (end.compareTo(high) < 0) {
@@ -1243,55 +1244,55 @@ public class SimpleFacets {
       }
       if (high.compareTo(low) < 0) {
         throw new SolrException
-            (SolrException.ErrorCode.BAD_REQUEST,
-                "range facet infinite loop (is gap negative? did the math overflow?)");
+          (SolrException.ErrorCode.BAD_REQUEST,
+           "range facet infinite loop (is gap negative? did the math overflow?)");
       }
       if (high.compareTo(low) == 0) {
         throw new SolrException
-            (SolrException.ErrorCode.BAD_REQUEST,
-                "range facet infinite loop: gap is either zero, or too small relative start/end and caused underflow: " + low + " + " + gap + " = " + high );
+          (SolrException.ErrorCode.BAD_REQUEST,
+           "range facet infinite loop: gap is either zero, or too small relative start/end and caused underflow: " + low + " + " + gap + " = " + high );
       }
-
-      final boolean includeLower =
-          (include.contains(FacetRangeInclude.LOWER) ||
-              (include.contains(FacetRangeInclude.EDGE) &&
-                  0 == low.compareTo(start)));
-      final boolean includeUpper =
-          (include.contains(FacetRangeInclude.UPPER) ||
-              (include.contains(FacetRangeInclude.EDGE) &&
-                  0 == high.compareTo(end)));
-
+      
+      final boolean includeLower = 
+        (include.contains(FacetRangeInclude.LOWER) ||
+         (include.contains(FacetRangeInclude.EDGE) && 
+          0 == low.compareTo(start)));
+      final boolean includeUpper = 
+        (include.contains(FacetRangeInclude.UPPER) ||
+         (include.contains(FacetRangeInclude.EDGE) && 
+          0 == high.compareTo(end)));
+      
       final String lowS = calc.formatValue(low);
       final String highS = calc.formatValue(high);
 
       final int count = rangeCount(sf, lowS, highS,
-          includeLower,includeUpper);
+                                   includeLower,includeUpper);
       if (count >= minCount) {
         counts.add(lowS, count);
       }
-
+      
       low = high;
     }
-
+    
     // explicitly return the start and end so all the counts 
     // (including before/after/between) are meaningful - even if mincount
     // has removed the neighboring ranges
     res.add("start", start);
     res.add("end", end);
-
+    
     final String[] othersP =
-        params.getFieldParams(f,FacetParams.FACET_RANGE_OTHER);
+      params.getFieldParams(f,FacetParams.FACET_RANGE_OTHER);
     if (null != othersP && 0 < othersP.length ) {
       Set<FacetRangeOther> others = EnumSet.noneOf(FacetRangeOther.class);
-
+      
       for (final String o : othersP) {
         others.add(FacetRangeOther.get(o));
       }
-
+      
       // no matter what other values are listed, we don't do
       // anything if "none" is specified.
       if (! others.contains(FacetRangeOther.NONE) ) {
-
+        
         boolean all = others.contains(FacetRangeOther.ALL);
         final String startS = calc.formatValue(start);
         final String endS = calc.formatValue(end);
@@ -1299,36 +1300,36 @@ public class SimpleFacets {
         if (all || others.contains(FacetRangeOther.BEFORE)) {
           // include upper bound if "outer" or if first gap doesn't already include it
           res.add(FacetRangeOther.BEFORE.toString(),
-              rangeCount(sf,null,startS,
-                  false,
-                  (include.contains(FacetRangeInclude.OUTER) ||
-                      (! (include.contains(FacetRangeInclude.LOWER) ||
-                          include.contains(FacetRangeInclude.EDGE))))));
-
+                  rangeCount(sf,null,startS,
+                             false,
+                             (include.contains(FacetRangeInclude.OUTER) ||
+                              (! (include.contains(FacetRangeInclude.LOWER) ||
+                                  include.contains(FacetRangeInclude.EDGE))))));
+          
         }
         if (all || others.contains(FacetRangeOther.AFTER)) {
           // include lower bound if "outer" or if last gap doesn't already include it
           res.add(FacetRangeOther.AFTER.toString(),
-              rangeCount(sf,endS,null,
-                  (include.contains(FacetRangeInclude.OUTER) ||
-                      (! (include.contains(FacetRangeInclude.UPPER) ||
-                          include.contains(FacetRangeInclude.EDGE)))),
-                  false));
+                  rangeCount(sf,endS,null,
+                             (include.contains(FacetRangeInclude.OUTER) ||
+                              (! (include.contains(FacetRangeInclude.UPPER) ||
+                                  include.contains(FacetRangeInclude.EDGE)))),  
+                             false));
         }
         if (all || others.contains(FacetRangeOther.BETWEEN)) {
-          res.add(FacetRangeOther.BETWEEN.toString(),
-              rangeCount(sf,startS,endS,
-                  (include.contains(FacetRangeInclude.LOWER) ||
-                      include.contains(FacetRangeInclude.EDGE)),
-                  (include.contains(FacetRangeInclude.UPPER) ||
-                      include.contains(FacetRangeInclude.EDGE))));
-
+         res.add(FacetRangeOther.BETWEEN.toString(),
+                 rangeCount(sf,startS,endS,
+                            (include.contains(FacetRangeInclude.LOWER) ||
+                             include.contains(FacetRangeInclude.EDGE)),
+                            (include.contains(FacetRangeInclude.UPPER) ||
+                             include.contains(FacetRangeInclude.EDGE))));
+         
         }
       }
     }
     return res;
-  }
-
+  }  
+  
   /**
    * Macro for getting the numDocs of range over docs
    * @see SolrIndexSearcher#numDocs
@@ -1336,7 +1337,7 @@ public class SimpleFacets {
    */
   protected int rangeCount(SchemaField sf, String low, String high,
                            boolean iLow, boolean iHigh) throws IOException {
-    Query rangeQ = sf.getType().getRangeQuery(null, sf,low,high,iLow,iHigh);
+    Query rangeQ = sf.getType().getRangeQuery(null, sf, low, high, iLow, iHigh);
     if (params.getBool(GroupParams.GROUP_FACET, false)) {
       return getGroupedFacetQueryCount(rangeQ);
     } else {
@@ -1350,17 +1351,17 @@ public class SimpleFacets {
   @Deprecated
   protected int rangeCount(SchemaField sf, Date low, Date high,
                            boolean iLow, boolean iHigh) throws IOException {
-    Query rangeQ = ((DateField)(sf.getType())).getRangeQuery(null, sf,low,high,iLow,iHigh);
-    return searcher.numDocs(rangeQ , docs);
+    Query rangeQ = ((DateField)(sf.getType())).getRangeQuery(null, sf, low, high, iLow, iHigh);
+    return searcher.numDocs(rangeQ, docs);
   }
-
+  
   /**
    * A simple key=>val pair whose natural order is such that 
    * <b>higher</b> vals come before lower vals.
    * In case of tie vals, then <b>lower</b> keys come before higher keys.
    */
   public static class CountPair<K extends Comparable<? super K>, V extends Comparable<? super V>>
-      implements Comparable<CountPair<K,V>> {
+    implements Comparable<CountPair<K,V>> {
 
     public CountPair(K k, V v) {
       key = k; val = v;
@@ -1414,18 +1415,18 @@ public class SimpleFacets {
         return parseVal(rawval);
       } catch (Exception e) {
         throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,
-            "Can't parse value "+rawval+" for field: " +
-                field.getName(), e);
+                                "Can't parse value "+rawval+" for field: " + 
+                                field.getName(), e);
       }
     }
     /**
      * Parses a String param into an Range endpoint. 
      * Can throw a low level format exception as needed.
      */
-    protected abstract T parseVal(final String rawval)
-        throws java.text.ParseException;
+    protected abstract T parseVal(final String rawval) 
+      throws java.text.ParseException;
 
-    /**
+    /** 
      * Parses a String param into a value that represents the gap and 
      * can be included in the response, throwing 
      * a useful exception if not possible.
@@ -1438,8 +1439,8 @@ public class SimpleFacets {
         return parseGap(gap);
       } catch (Exception e) {
         throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,
-            "Can't parse gap "+gap+" for field: " +
-                field.getName(), e);
+                                "Can't parse gap "+gap+" for field: " + 
+                                field.getName(), e);
       }
     }
 
@@ -1450,8 +1451,8 @@ public class SimpleFacets {
      *
      * Default Impl calls parseVal
      */
-    protected Object parseGap(final String rawval)
-        throws java.text.ParseException {
+    protected Object parseGap(final String rawval) 
+      throws java.text.ParseException {
       return parseVal(rawval);
     }
 
@@ -1465,8 +1466,8 @@ public class SimpleFacets {
         return parseAndAddGap(value, gap);
       } catch (Exception e) {
         throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,
-            "Can't add gap "+gap+" to value " + value +
-                " for field: " + field.getName(), e);
+                                "Can't add gap "+gap+" to value " + value +
+                                " for field: " + field.getName(), e);
       }
     }
     /**
@@ -1474,13 +1475,13 @@ public class SimpleFacets {
      * the corrisponding high Range endpoint value.
      * Can throw a low level format exception as needed.
      */
-    protected abstract T parseAndAddGap(T value, String gap)
-        throws java.text.ParseException;
+    protected abstract T parseAndAddGap(T value, String gap) 
+      throws java.text.ParseException;
 
   }
 
-  private static class FloatRangeEndpointCalculator
-      extends RangeEndpointCalculator<Float> {
+  private static class FloatRangeEndpointCalculator 
+    extends RangeEndpointCalculator<Float> {
 
     public FloatRangeEndpointCalculator(final SchemaField f) { super(f); }
     @Override
@@ -1492,8 +1493,8 @@ public class SimpleFacets {
       return new Float(value.floatValue() + Float.valueOf(gap).floatValue());
     }
   }
-  private static class DoubleRangeEndpointCalculator
-      extends RangeEndpointCalculator<Double> {
+  private static class DoubleRangeEndpointCalculator 
+    extends RangeEndpointCalculator<Double> {
 
     public DoubleRangeEndpointCalculator(final SchemaField f) { super(f); }
     @Override
@@ -1505,8 +1506,8 @@ public class SimpleFacets {
       return new Double(value.doubleValue() + Double.valueOf(gap).doubleValue());
     }
   }
-  private static class IntegerRangeEndpointCalculator
-      extends RangeEndpointCalculator<Integer> {
+  private static class IntegerRangeEndpointCalculator 
+    extends RangeEndpointCalculator<Integer> {
 
     public IntegerRangeEndpointCalculator(final SchemaField f) { super(f); }
     @Override
@@ -1518,8 +1519,8 @@ public class SimpleFacets {
       return new Integer(value.intValue() + Integer.valueOf(gap).intValue());
     }
   }
-  private static class LongRangeEndpointCalculator
-      extends RangeEndpointCalculator<Long> {
+  private static class LongRangeEndpointCalculator 
+    extends RangeEndpointCalculator<Long> {
 
     public LongRangeEndpointCalculator(final SchemaField f) { super(f); }
     @Override
@@ -1531,16 +1532,16 @@ public class SimpleFacets {
       return new Long(value.longValue() + Long.valueOf(gap).longValue());
     }
   }
-  private static class DateRangeEndpointCalculator
-      extends RangeEndpointCalculator<Date> {
+  private static class DateRangeEndpointCalculator 
+    extends RangeEndpointCalculator<Date> {
     private final Date now;
-    public DateRangeEndpointCalculator(final SchemaField f,
-                                       final Date now) {
-      super(f);
+    public DateRangeEndpointCalculator(final SchemaField f, 
+                                       final Date now) { 
+      super(f); 
       this.now = now;
       if (! (field.getType() instanceof DateField) ) {
         throw new IllegalArgumentException
-            ("SchemaField must use filed type extending DateField");
+          ("SchemaField must use filed type extending DateField");
       }
     }
     @Override
@@ -1562,6 +1563,6 @@ public class SimpleFacets {
       return dmp.parseMath(gap);
     }
   }
-
+  
 }
 

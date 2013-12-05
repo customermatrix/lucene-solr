@@ -17,45 +17,9 @@
 
 package org.apache.solr.core;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
-import java.lang.reflect.Constructor;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.StringTokenizer;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.ReentrantLock;
-
-import javax.xml.parsers.ParserConfigurationException;
-
+import org.apache.commons.io.IOUtils;
 import org.apache.lucene.codecs.Codec;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexDeletionPolicy;
 import org.apache.lucene.index.IndexWriter;
@@ -64,10 +28,8 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.LockObtainFailedException;
-import org.apache.lucene.util.IOUtils;
 import org.apache.solr.cloud.CloudDescriptor;
 import org.apache.solr.common.SolrException;
-import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.cloud.Slice;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.CommonParams.EchoParamStyle;
@@ -131,11 +93,44 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.SAXException;
 
+import javax.xml.parsers.ParserConfigurationException;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Writer;
+import java.lang.reflect.Constructor;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.StringTokenizer;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
+
 
 /**
  *
  */
-public class SolrCore implements SolrInfoMBean {
+public final class SolrCore implements SolrInfoMBean {
   public static final String version="1.0";  
 
   // These should *only* be used for debugging or monitoring purposes
@@ -148,7 +143,7 @@ public class SolrCore implements SolrInfoMBean {
 
   private String name;
   private String logid; // used to show what name is set
-  private final CoreDescriptor coreDescriptor;
+  private CoreDescriptor coreDescriptor;
 
   private boolean isReloaded = false;
 
@@ -269,7 +264,7 @@ public class SolrCore implements SolrInfoMBean {
         } catch (Exception e) {
           log.error("Unable to load " + SnapPuller.INDEX_PROPERTIES, e);
         } finally {
-          IOUtils.closeWhileHandlingException(is);
+          IOUtils.closeQuietly(is);
         }
       }
     } catch (IOException e) {
@@ -308,6 +303,7 @@ public class SolrCore implements SolrInfoMBean {
   public void setName(String v) {
     this.name = v;
     this.logid = (v==null)?"":("["+v+"] ");
+    this.coreDescriptor = new CoreDescriptor(v, this.coreDescriptor);
   }
 
   public String getLogId()
@@ -791,26 +787,22 @@ public class SolrCore implements SolrInfoMBean {
         iwRef = prev.getUpdateHandler().getSolrCoreState().getIndexWriter(null);
         if (iwRef != null) {
           final IndexWriter iw = iwRef.get();
+          final SolrCore core = this;
           newReaderCreator = new Callable<DirectoryReader>() {
+            // this is used during a core reload
+
             @Override
             public DirectoryReader call() throws Exception {
-              return DirectoryReader.open(iw, true);
+              if(getSolrConfig().nrtMode) {
+                // if in NRT mode, need to open from the previous writer
+                return indexReaderFactory.newReader(iw, core);
+              } else {
+                // if not NRT, need to create a new reader from the directory
+                return indexReaderFactory.newReader(iw.getDirectory(), core);
+              }
             }
           };
         }
-      }
-      
-      // Open the searcher *before* the update handler so we don't end up
-      // opening
-      // one in the middle.
-      // With lockless commits in Lucene now, this probably shouldn't be an
-      // issue anymore
-      
-      try {
-        getSearcher(false, false, null, true);
-      } finally {
-        newReaderCreator = null;
-        if (iwRef != null) iwRef.decref();
       }
       
       String updateHandlerClass = solrConfig.getUpdateHandlerInfo().className;
@@ -824,6 +816,13 @@ public class SolrCore implements SolrInfoMBean {
                 : updateHandlerClass, updateHandler);
       }
       infoRegistry.put("updateHandler", this.updateHandler);
+
+      try {
+        getSearcher(false, false, null, true);
+      } finally {
+        newReaderCreator = null;
+        if (iwRef != null) iwRef.decref();
+      }
       
       // Finally tell anyone who wants to know
       resourceLoader.inform(resourceLoader);
@@ -850,12 +849,6 @@ public class SolrCore implements SolrInfoMBean {
     resourceLoader.inform(infoRegistry);
     
     CoreContainer cc = cd.getCoreContainer();
-    
-    if (cc != null) {
-      if (cc.cfg != null && cc.cfg instanceof ConfigSolrXml) {
-        writePropFile(cd, cc);
-      }
-    }
 
     if (cc != null && cc.isZooKeeperAware() && Slice.CONSTRUCTION.equals(cd.getCloudDescriptor().getShardState())) {
       // set update log to buffer before publishing the core
@@ -868,54 +861,6 @@ public class SolrCore implements SolrInfoMBean {
     // For debugging   
 //    numOpens.incrementAndGet();
 //    openHandles.put(this, new RuntimeException("unclosed core - name:" + getName() + " refs: " + refCount.get()));
-  }
-
-  private void writePropFile(CoreDescriptor cd, CoreContainer cc) {
-    File propFile = new File(cd.getInstanceDir(), "core.properties");
-    if (!propFile.exists()) {
-      propFile.getParentFile().mkdirs();
-      Properties props = new Properties();
-      props.put("name", cd.getName());
-
-      // This must be being created since there's no file here already. So write out all of the params we were
-      // created with. This _may_ overwrite the name above, but that's OK.
-      Collection<String> stds = new HashSet(Arrays.asList(CoreDescriptor.standardPropNames));
-      for (String prop : cd.getCreatedProperties().stringPropertyNames()) {
-        // Only preserve things that are legal, and let's just keep instDir right out of the persisted file even
-        // though it's part of the create properties on the URL.
-        if (! CoreDescriptor.CORE_INSTDIR.equals(prop) && stds.contains(prop)) {
-          props.put(prop, cd.getCreatedProperties().getProperty(prop));
-        }
-      }
-
-      if (cc.isZooKeeperAware()) {
-        String collection = cd.getCloudDescriptor().getCollectionName();
-        if (collection != null) {
-          props.put("collection", collection);
-        }
-        String coreNodeName = cd.getCloudDescriptor().getCoreNodeName();
-        if (coreNodeName != null) {
-          props.put("coreNodeName", coreNodeName);
-        }
-        String roles = cd.getCloudDescriptor().getRoles();
-        if (roles != null) {
-          props.put("roles", roles);
-        }
-        String shardId = cd.getCloudDescriptor().getShardId();
-        if (shardId != null) {
-          props.put("shard", shardId);
-        }
-      }
-      Writer out = null;
-      try {
-        out = new OutputStreamWriter(new FileOutputStream(propFile), IOUtils.CHARSET_UTF_8);
-        props.store(out, null);
-      } catch (IOException e) {
-        throw new SolrException(ErrorCode.SERVER_ERROR, null, e);
-      } finally {
-        IOUtils.closeWhileHandlingException(out);
-      }
-    }
   }
     
   private Codec initCodec(SolrConfig solrConfig, final IndexSchema schema) {
@@ -963,6 +908,7 @@ public class SolrCore implements SolrInfoMBean {
       def = map.get(null);
     } 
     if (def == null) {
+      log.info("no updateRequestProcessorChain defined as default, creating implicit default");
       // construct the default chain
       UpdateRequestProcessorFactory[] factories = new UpdateRequestProcessorFactory[]{
               new LogUpdateProcessorFactory(),
@@ -1419,7 +1365,7 @@ public class SolrCore implements SolrInfoMBean {
 
     SolrIndexSearcher tmp;
     RefCounted<SolrIndexSearcher> newestSearcher = null;
-    boolean nrt = solrConfig.reopenReaders && updateHandlerReopens;
+    boolean nrt = solrConfig.nrtMode && updateHandlerReopens;
 
     openSearcherLock.lock();
     try {
@@ -1440,8 +1386,7 @@ public class SolrCore implements SolrInfoMBean {
         }
       }
 
-      if (newestSearcher != null && solrConfig.reopenReaders
-          && (nrt || indexDirFile.equals(newIndexDirFile))) {
+      if (newestSearcher != null && (nrt || indexDirFile.equals(newIndexDirFile))) {
 
         DirectoryReader newReader;
         DirectoryReader currentReader = newestSearcher.get().getIndexReader();
@@ -1451,13 +1396,13 @@ public class SolrCore implements SolrInfoMBean {
         RefCounted<IndexWriter> writer = getUpdateHandler().getSolrCoreState()
             .getIndexWriter(null);
         try {
-          if (writer != null) {
-            newReader = DirectoryReader.openIfChanged(currentReader,
-                writer.get(), true);
+          if (writer != null && solrConfig.nrtMode) {
+            // if in NRT mode, open from the writer
+            newReader = DirectoryReader.openIfChanged(currentReader, writer.get(), true);
           } else {
             // verbose("start reopen without writer, reader=", currentReader);
+            // if not in NRT mode, just re-open the reader
             newReader = DirectoryReader.openIfChanged(currentReader);
-            
             // verbose("reopen result", newReader);
           }
         } finally {
@@ -1489,6 +1434,16 @@ public class SolrCore implements SolrInfoMBean {
           // so that we pick up any uncommitted changes and so we don't go backwards
           // in time on a core reload
           DirectoryReader newReader = newReaderCreator.call();
+          tmp = new SolrIndexSearcher(this, newIndexDir, getLatestSchema(), getSolrConfig().indexConfig, 
+              (realtime ? "realtime":"main"), newReader, true, !realtime, true, directoryFactory);
+        } else if (solrConfig.nrtMode) {
+          RefCounted<IndexWriter> writer = getUpdateHandler().getSolrCoreState().getIndexWriter(this);
+          DirectoryReader newReader = null;
+          try {
+            newReader = indexReaderFactory.newReader(writer.get(), this);
+          } finally {
+            writer.decref();
+          }
           tmp = new SolrIndexSearcher(this, newIndexDir, getLatestSchema(), getSolrConfig().indexConfig, 
               (realtime ? "realtime":"main"), newReader, true, !realtime, true, directoryFactory);
         } else {
@@ -2295,6 +2250,7 @@ public class SolrCore implements SolrInfoMBean {
     lst.add("coreName", name==null ? "(null)" : name);
     lst.add("startTime", new Date(startTime));
     lst.add("refCount", getOpenCount());
+    lst.add("instanceDir", resourceLoader.getInstanceDir());
     lst.add("indexDir", getIndexDir());
 
     CoreDescriptor cd = getCoreDescriptor();

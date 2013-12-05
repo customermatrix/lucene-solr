@@ -91,7 +91,7 @@ public abstract class AtomicReader extends IndexReader {
       return 0;
     }
     final TermsEnum termsEnum = terms.iterator(null);
-    if (termsEnum.seekExact(term.bytes(), true)) {
+    if (termsEnum.seekExact(term.bytes())) {
       return termsEnum.docFreq();
     } else {
       return 0;
@@ -114,7 +114,7 @@ public abstract class AtomicReader extends IndexReader {
       return 0;
     }
     final TermsEnum termsEnum = terms.iterator(null);
-    if (termsEnum.seekExact(term.bytes(), true)) {
+    if (termsEnum.seekExact(term.bytes())) {
       return termsEnum.totalTermFreq();
     } else {
       return 0;
@@ -169,7 +169,7 @@ public abstract class AtomicReader extends IndexReader {
       final Terms terms = fields.terms(term.field());
       if (terms != null) {
         final TermsEnum termsEnum = terms.iterator(null);
-        if (termsEnum.seekExact(term.bytes(), true)) {
+        if (termsEnum.seekExact(term.bytes())) {
           return termsEnum.docs(getLiveDocs(), null);
         }
       }
@@ -189,7 +189,7 @@ public abstract class AtomicReader extends IndexReader {
       final Terms terms = fields.terms(term.field());
       if (terms != null) {
         final TermsEnum termsEnum = terms.iterator(null);
-        if (termsEnum.seekExact(term.bytes(), true)) {
+        if (termsEnum.seekExact(term.bytes())) {
           return termsEnum.docsAndPositions(getLiveDocs(), null);
         }
       }
@@ -220,6 +220,12 @@ public abstract class AtomicReader extends IndexReader {
    *  this field.  The returned instance should only be
    *  used by a single thread. */
   public abstract SortedSetDocValues getSortedSetDocValues(String field) throws IOException;
+  
+  /** Returns a {@link Bits} at the size of <code>reader.maxDoc()</code>, 
+   *  with turned on bits for each docid that does have a value for this field,
+   *  or null if no DocValues were indexed for this field. The
+   *  returned instance should only be used by a single thread */
+  public abstract Bits getDocsWithField(String field) throws IOException;
 
   /** Returns {@link NumericDocValues} representing norms
    *  for this field, or null if no {@link NumericDocValues}

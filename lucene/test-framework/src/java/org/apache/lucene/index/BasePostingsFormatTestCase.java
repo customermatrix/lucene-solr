@@ -353,9 +353,12 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
       fields.put(field, postings);
       Set<String> seenTerms = new HashSet<String>();
 
-      // TODO:
-      //final int numTerms = atLeast(10);
-      final int numTerms = 4;
+      int numTerms;
+      if (random().nextInt(10) == 7) {
+        numTerms = atLeast(50);
+      } else {
+        numTerms = _TestUtil.nextInt(random(), 2, 20);
+      }
 
       for(int termUpto=0;termUpto<numTerms;termUpto++) {
         String term = _TestUtil.randomSimpleString(random());
@@ -567,7 +570,7 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
 
     currentFieldInfos = newFieldInfos;
 
-    SegmentReadState readState = new SegmentReadState(dir, segmentInfo, newFieldInfos, IOContext.DEFAULT, 1);
+    SegmentReadState readState = new SegmentReadState(dir, segmentInfo, newFieldInfos, IOContext.READ, 1);
 
     return codec.postingsFormat().fieldsProducer(readState);
   }
@@ -594,6 +597,10 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
     if (VERBOSE) {
       System.out.println("  verifyEnum: options=" + options + " maxTestOptions=" + maxTestOptions);
     }
+
+    // Make sure TermsEnum really is positioned on the
+    // expected term:
+    assertEquals(term, termsEnum.term());
 
     // 50% of the time time pass liveDocs:
     boolean useLiveDocs = options.contains(Option.LIVE_DOCS) && random().nextBoolean();
@@ -983,7 +990,7 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
       termsEnum = terms.iterator(null);
 
       if (!useTermState) {
-        assertTrue(termsEnum.seekExact(fieldAndTerm.term, true));
+        assertTrue(termsEnum.seekExact(fieldAndTerm.term));
       } else {
         termsEnum.seekExact(fieldAndTerm.term, termState);
       }

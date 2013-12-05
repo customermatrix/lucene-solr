@@ -18,6 +18,7 @@ package org.apache.solr.cloud;
  */
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.solr.client.solrj.impl.HttpSolrServer;
 import org.apache.solr.client.solrj.request.CoreAdminRequest.WaitForState;
 import org.apache.solr.common.SolrException;
@@ -36,14 +37,12 @@ import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.cloud.ZooKeeperException;
 import org.apache.solr.common.params.SolrParams;
-import org.apache.solr.core.ConfigSolr;
 import org.apache.solr.core.CoreContainer;
 import org.apache.solr.core.CoreDescriptor;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.handler.component.ShardHandler;
 import org.apache.solr.update.UpdateLog;
 import org.apache.solr.update.UpdateShardHandler;
-import org.apache.solr.util.PropertiesUtil;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.NoNodeException;
@@ -103,8 +102,43 @@ public final class ZkController {
   public final static String COLLECTION_PARAM_PREFIX="collection.";
   public final static String CONFIGNAME_PROP="configName";
 
-  
-  private final Map<String, ElectionContext> electionContexts = Collections.synchronizedMap(new HashMap<String, ElectionContext>());
+  static class ContextKey {
+
+    private String collection;
+    private String coreNodeName;
+    
+    public ContextKey(String collection, String coreNodeName) {
+      this.collection = collection;
+      this.coreNodeName = coreNodeName;
+    }
+    
+    @Override
+    public int hashCode() {
+      final int prime = 31;
+      int result = 1;
+      result = prime * result
+          + ((collection == null) ? 0 : collection.hashCode());
+      result = prime * result
+          + ((coreNodeName == null) ? 0 : coreNodeName.hashCode());
+      return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (this == obj) return true;
+      if (obj == null) return false;
+      if (getClass() != obj.getClass()) return false;
+      ContextKey other = (ContextKey) obj;
+      if (collection == null) {
+        if (other.collection != null) return false;
+      } else if (!collection.equals(other.collection)) return false;
+      if (coreNodeName == null) {
+        if (other.coreNodeName != null) return false;
+      } else if (!coreNodeName.equals(other.coreNodeName)) return false;
+      return true;
+    }
+  }
+  private final Map<ContextKey, ElectionContext> electionContexts = Collections.synchronizedMap(new HashMap<ContextKey, ElectionContext>());
   
   private SolrZkClient zkClient;
   private ZkCmdExecutor cmdExecutor;
@@ -131,7 +165,7 @@ public final class ZkController {
 
   protected volatile Overseer overseer;
 
-  private String leaderVoteWait;
+  private int leaderVoteWait;
   
   private boolean genericCoreNodeNames;
 
@@ -142,7 +176,7 @@ public final class ZkController {
   private UpdateShardHandler updateShardHandler;
 
   public ZkController(final CoreContainer cc, String zkServerAddress, int zkClientTimeout, int zkClientConnectTimeout, String localHost, String locaHostPort,
-      String localHostContext, String leaderVoteWait, boolean genericCoreNodeNames, int distribUpdateConnTimeout, int distribUpdateSoTimeout, final CurrentCoreDescriptorProvider registerOnReconnect) throws InterruptedException,
+      String localHostContext, int leaderVoteWait, boolean genericCoreNodeNames, int distribUpdateConnTimeout, int distribUpdateSoTimeout, final CurrentCoreDescriptorProvider registerOnReconnect) throws InterruptedException,
       TimeoutException, IOException {
     if (cc == null) throw new IllegalArgumentException("CoreContainer cannot be null.");
     this.cc = cc;
@@ -243,7 +277,7 @@ public final class ZkController {
     init(registerOnReconnect);
   }
 
-  public String getLeaderVoteWait() {
+  public int getLeaderVoteWait() {
     return leaderVoteWait;
   }
 
@@ -770,7 +804,7 @@ public final class ZkController {
     // in this case, we want to wait for the leader as long as the leader might 
     // wait for a vote, at least - but also long enough that a large cluster has
     // time to get its act together
-    String leaderUrl = getLeader(cloudDesc, Integer.parseInt(leaderVoteWait) + 600000);
+    String leaderUrl = getLeader(cloudDesc, leaderVoteWait + 600000);
     
     String ourUrl = ZkCoreNodeProps.getCoreUrl(baseUrl, coreName);
     log.info("We are " + ourUrl + " and leader is " + leaderUrl);
@@ -931,7 +965,7 @@ public final class ZkController {
         collection, coreNodeName, ourProps, this, cc);
 
     leaderElector.setup(context);
-    electionContexts.put(coreNodeName, context);
+    electionContexts.put(new ContextKey(collection, coreNodeName), context);
     leaderElector.joinElection(context, false);
   }
 
@@ -988,6 +1022,9 @@ public final class ZkController {
       numShards = Integer.getInteger(ZkStateReader.NUM_SHARDS_PROP);
     }
     
+    assert cd.getCloudDescriptor().getCollectionName() != null && cd.getCloudDescriptor()
+        .getCollectionName().length() > 0;
+    
     String coreNodeName = cd.getCloudDescriptor().getCoreNodeName();
     //assert cd.getCloudDescriptor().getShardId() != null;
     ZkNodeProps m = new ZkNodeProps(Overseer.QUEUE_OPERATION, "state", 
@@ -1028,13 +1065,14 @@ public final class ZkController {
   public void unregister(String coreName, CoreDescriptor cd)
       throws InterruptedException, KeeperException {
     final String coreNodeName = cd.getCloudDescriptor().getCoreNodeName();
-    ElectionContext context = electionContexts.remove(coreNodeName);
-    
-    assert context != null : coreNodeName;
+    final String collection = cd.getCloudDescriptor().getCollectionName();
+    assert collection != null;
+    ElectionContext context = electionContexts.remove(new ContextKey(collection, coreNodeName));
     
     if (context != null) {
       context.cancelElection();
     }
+    
     CloudDescriptor cloudDescriptor = cd.getCloudDescriptor();
     
     ZkNodeProps m = new ZkNodeProps(Overseer.QUEUE_OPERATION,
@@ -1128,9 +1166,9 @@ public final class ZkController {
               numShards = System.getProperty(ZkStateReader.NUM_SHARDS_PROP);
             }
             if (numShards == null) {
-              collectionProps.put(DocCollection.DOC_ROUTER, ImplicitDocRouter.NAME);
+              collectionProps.put(DocCollection.DOC_ROUTER, ZkNodeProps.makeMap("name",ImplicitDocRouter.NAME));
             } else {
-              collectionProps.put(DocCollection.DOC_ROUTER, DocRouter.DEFAULT_NAME);
+              collectionProps.put(DocCollection.DOC_ROUTER, ZkNodeProps.makeMap("name", DocRouter.DEFAULT_NAME));
             }
           }
 
@@ -1488,27 +1526,22 @@ public final class ZkController {
   /**
    * If in SolrCloud mode, upload config sets for each SolrCore in solr.xml.
    */
-  public static void bootstrapConf(SolrZkClient zkClient, ConfigSolr cfg, String solrHome) throws IOException,
+  public static void bootstrapConf(SolrZkClient zkClient, CoreContainer cc, String solrHome) throws IOException,
       KeeperException, InterruptedException {
 
-    List<String> allCoreNames = cfg.getAllCoreNames();
+    //List<String> allCoreNames = cfg.getAllCoreNames();
+    List<CoreDescriptor> cds = cc.getCoresLocator().discover(cc);
     
-    log.info("bootstraping config for " + allCoreNames.size() + " cores into ZooKeeper using solr.xml from " + solrHome);
+    log.info("bootstrapping config for " + cds.size() + " cores into ZooKeeper using solr.xml from " + solrHome);
 
-    for (String coreName : allCoreNames) {
-      String rawName = PropertiesUtil.substituteProperty(cfg.getProperty(coreName, "name", null), new Properties());
-      String instanceDir = cfg.getProperty(coreName, "instanceDir", null);
-      File idir = new File(instanceDir);
-      System.out.println("idir:" + idir);
-      if (!idir.isAbsolute()) {
-        idir = new File(solrHome, instanceDir);
-      }
-      String confName = PropertiesUtil.substituteProperty(cfg.getProperty(coreName, "collection", null), new Properties());
-      if (confName == null) {
-        confName = rawName;
-      }
-      File udir = new File(idir, "conf");
-      log.info("Uploading directory " + udir + " with name " + confName + " for SolrCore " + rawName);
+    for (CoreDescriptor cd : cds) {
+      String coreName = cd.getName();
+      String confName = cd.getCollectionName();
+      if (StringUtils.isEmpty(confName))
+        confName = coreName;
+      String instanceDir = cd.getInstanceDir();
+      File udir = new File(instanceDir, "conf");
+      log.info("Uploading directory " + udir + " with name " + confName + " for SolrCore " + coreName);
       ZkController.uploadConfigDir(zkClient, udir, confName);
     }
   }
