@@ -30,11 +30,14 @@ import org.apache.lucene.search.FieldCache;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.QueryWrapperFilter;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TermRangeQuery;
 import org.apache.lucene.search.grouping.AbstractAllGroupHeadsCollector;
 import org.apache.lucene.search.grouping.term.TermAllGroupsCollector;
 import org.apache.lucene.search.grouping.term.TermGroupFacetCollector;
+import org.apache.lucene.search.join.FixedBitSetCachingWrapperFilter;
+import org.apache.lucene.search.join.ToChildBlockJoinQuery;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.CharsRef;
 import org.apache.lucene.util.FixedBitSet;
@@ -202,6 +205,15 @@ public class SimpleFacets {
     if (tagMap != null && rb != null) {
       List<String> excludeTagList = StrUtils.splitSmart(excludeStr,',');
 
+      /* Begin SEA-825 */
+      boolean isNested = false; //SEA-825
+      Filter parentFilter = null;
+      if (excludeTagList.contains("pf")) {
+        isNested = true;
+        parentFilter = new FixedBitSetCachingWrapperFilter(new QueryWrapperFilter(new TermQuery(new Term("_parent_", "T"))));
+      }
+      /* End SEA-825 */
+
       IdentityHashMap<Query,Boolean> excludeSet = new IdentityHashMap<Query,Boolean>();
       for (String excludeTag : excludeTagList) {
         Object olst = tagMap.get(excludeTag);
@@ -219,14 +231,26 @@ public class SimpleFacets {
 
       // add the base query
       if (!excludeSet.containsKey(rb.getQuery())) {
-        qlist.add(rb.getQuery());
+         /* Begin SEA-825 */
+        if (isNested) {
+          qlist.add(new ToChildBlockJoinQuery(rb.getQuery(), parentFilter, false));
+        } else {
+          qlist.add(rb.getQuery());
+        }
+        /* end SEA-825 */
       }
 
       // add the filters
       if (rb.getFilters() != null) {
         for (Query q : rb.getFilters()) {
           if (!excludeSet.containsKey(q)) {
-            qlist.add(q);
+            /* Begin SEA-825 */
+            if (isNested) {
+              qlist.add(new ToChildBlockJoinQuery(q, parentFilter, false));
+            } else {
+              qlist.add(q);
+            }
+            /* End SEA-825 */
           }
         }
       }
