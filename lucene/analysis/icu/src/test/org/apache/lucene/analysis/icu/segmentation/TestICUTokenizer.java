@@ -24,6 +24,7 @@ import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.Tokenizer;
 import org.apache.lucene.analysis.icu.ICUNormalizer2Filter;
 import org.apache.lucene.analysis.icu.tokenattributes.ScriptAttribute;
+import org.apache.lucene.util.IOUtils;
 
 import com.ibm.icu.lang.UScript;
 
@@ -207,7 +208,7 @@ public class TestICUTokenizer extends BaseTokenStreamTestCase {
   }
   
   public void testReusableTokenStream() throws Exception {
-    assertAnalyzesToReuse(a, "སྣོན་མཛོད་དང་ལས་འདིས་བོད་ཡིག་མི་ཉམས་གོང་འཕེལ་དུ་གཏོང་བར་ཧ་ཅང་དགེ་མཚན་མཆིས་སོ། །",
+    assertAnalyzesTo(a, "སྣོན་མཛོད་དང་ལས་འདིས་བོད་ཡིག་མི་ཉམས་གོང་འཕེལ་དུ་གཏོང་བར་ཧ་ཅང་དགེ་མཚན་མཆིས་སོ། །",
         new String[] { "སྣོན", "མཛོད", "དང", "ལས", "འདིས", "བོད", "ཡིག", "མི", "ཉམས", "གོང", 
                       "འཕེལ", "དུ", "གཏོང", "བར", "ཧ", "ཅང", "དགེ", "མཚན", "མཆིས", "སོ" });
   }
@@ -250,15 +251,18 @@ public class TestICUTokenizer extends BaseTokenStreamTestCase {
   
   public void testTokenAttributes() throws Exception {
     TokenStream ts = a.tokenStream("dummy", "This is a test");
-    ScriptAttribute scriptAtt = ts.addAttribute(ScriptAttribute.class);
-    ts.reset();
-    while (ts.incrementToken()) {
-      assertEquals(UScript.LATIN, scriptAtt.getCode());
-      assertEquals(UScript.getName(UScript.LATIN), scriptAtt.getName());
-      assertEquals(UScript.getShortName(UScript.LATIN), scriptAtt.getShortName());
-      assertTrue(ts.reflectAsString(false).contains("script=Latin"));
+    try {
+      ScriptAttribute scriptAtt = ts.addAttribute(ScriptAttribute.class);
+      ts.reset();
+      while (ts.incrementToken()) {
+        assertEquals(UScript.LATIN, scriptAtt.getCode());
+        assertEquals(UScript.getName(UScript.LATIN), scriptAtt.getName());
+        assertEquals(UScript.getShortName(UScript.LATIN), scriptAtt.getShortName());
+        assertTrue(ts.reflectAsString(false).contains("script=Latin"));
+      }
+      ts.end();
+    } finally {
+      IOUtils.closeWhileHandlingException(ts);
     }
-    ts.end();
-    ts.close();
   }
 }

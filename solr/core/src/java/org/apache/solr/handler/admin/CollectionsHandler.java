@@ -56,6 +56,7 @@ import static org.apache.solr.cloud.Overseer.QUEUE_OPERATION;
 import static org.apache.solr.cloud.OverseerCollectionProcessor.COLL_CONF;
 import static org.apache.solr.cloud.OverseerCollectionProcessor.CREATESHARD;
 import static org.apache.solr.cloud.OverseerCollectionProcessor.CREATE_NODE_SET;
+import static org.apache.solr.cloud.OverseerCollectionProcessor.DELETEREPLICA;
 import static org.apache.solr.cloud.OverseerCollectionProcessor.MAX_SHARDS_PER_NODE;
 import static org.apache.solr.cloud.OverseerCollectionProcessor.NUM_SLICES;
 import static org.apache.solr.cloud.OverseerCollectionProcessor.REPLICATION_FACTOR;
@@ -164,6 +165,10 @@ public class CollectionsHandler extends RequestHandlerBase {
         this.handleCreateShard(req, rsp);
         break;
       }
+      case DELETEREPLICA: {
+        this.handleRemoveReplica(req, rsp);
+        break;
+      }
 
       default: {
           throw new RuntimeException("Unknown action: " + action);
@@ -232,13 +237,17 @@ public class CollectionsHandler extends RequestHandlerBase {
     ZkCoreNodeProps nodeProps = new ZkCoreNodeProps(leaderProps);
     
     HttpSolrServer server = new HttpSolrServer(nodeProps.getBaseUrl());
-    server.setConnectionTimeout(15000);
-    server.setSoTimeout(30000);
-    RequestSyncShard reqSyncShard = new CoreAdminRequest.RequestSyncShard();
-    reqSyncShard.setCollection(collection);
-    reqSyncShard.setShard(shard);
-    reqSyncShard.setCoreName(nodeProps.getCoreName());
-    server.request(reqSyncShard);
+    try {
+      server.setConnectionTimeout(15000);
+      server.setSoTimeout(60000);
+      RequestSyncShard reqSyncShard = new CoreAdminRequest.RequestSyncShard();
+      reqSyncShard.setCollection(collection);
+      reqSyncShard.setShard(shard);
+      reqSyncShard.setCoreName(nodeProps.getCoreName());
+      server.request(reqSyncShard);
+    } finally {
+      server.shutdown();
+    }
   }
   
   private void handleCreateAliasAction(SolrQueryRequest req,
@@ -291,10 +300,10 @@ public class CollectionsHandler extends RequestHandlerBase {
           "Collection name is required to create a new collection");
     }
     
-    Map<String,Object> props = new HashMap<String,Object>();
-    props.put(Overseer.QUEUE_OPERATION,
-        OverseerCollectionProcessor.CREATECOLLECTION);
-
+    Map<String,Object> props = ZkNodeProps.makeMap(
+        Overseer.QUEUE_OPERATION,
+        OverseerCollectionProcessor.CREATECOLLECTION,
+        "fromApi","true");
     copyIfNotNull(req.getParams(),props,
         "name",
         REPLICATION_FACTOR,
@@ -309,6 +318,16 @@ public class CollectionsHandler extends RequestHandlerBase {
     ZkNodeProps m = new ZkNodeProps(props);
     handleResponse(OverseerCollectionProcessor.CREATECOLLECTION, m, rsp);
   }
+
+  private void handleRemoveReplica(SolrQueryRequest req, SolrQueryResponse rsp) throws KeeperException, InterruptedException {
+    log.info("Remove replica: " + req.getParamString());
+    req.getParams().required().check(COLLECTION_PROP, SHARD_ID_PROP, "replica");
+    Map<String, Object> map = makeMap(QUEUE_OPERATION, DELETEREPLICA);
+    copyIfNotNull(req.getParams(),map,COLLECTION_PROP,SHARD_ID_PROP,"replica");
+    ZkNodeProps m = new ZkNodeProps(map);
+    handleResponse(DELETEREPLICA, m, rsp);
+  }
+
 
   private void handleCreateShard(SolrQueryRequest req, SolrQueryResponse rsp) throws KeeperException, InterruptedException {
     log.info("Create shard: " + req.getParamString());
@@ -369,13 +388,34 @@ public class CollectionsHandler extends RequestHandlerBase {
     log.info("Splitting shard : " + req.getParamString());
     String name = req.getParams().required().get("collection");
     // TODO : add support for multiple shards
-    String shard = req.getParams().required().get("shard");
-    // TODO : add support for shard range
+    String shard = req.getParams().get("shard");
+    String rangesStr = req.getParams().get(CoreAdminParams.RANGES);
+    String splitKey = req.getParams().get("split.key");
+
+    if (splitKey == null && shard == null) {
+      throw new SolrException( SolrException.ErrorCode.BAD_REQUEST, "Missing required parameter: shard");
+    }
+    if (splitKey != null && shard != null)  {
+      throw new SolrException( SolrException.ErrorCode.BAD_REQUEST,
+          "Only one of 'shard' or 'split.key' should be specified");
+    }
+    if (splitKey != null && rangesStr != null)  {
+      throw new SolrException( SolrException.ErrorCode.BAD_REQUEST,
+          "Only one of 'ranges' or 'split.key' should be specified");
+    }
 
     Map<String,Object> props = new HashMap<String,Object>();
     props.put(Overseer.QUEUE_OPERATION, OverseerCollectionProcessor.SPLITSHARD);
     props.put("collection", name);
-    props.put(ZkStateReader.SHARD_ID_PROP, shard);
+    if (shard != null)  {
+      props.put(ZkStateReader.SHARD_ID_PROP, shard);
+    }
+    if (splitKey != null) {
+      props.put("split.key", splitKey);
+    }
+    if (rangesStr != null)  {
+      props.put(CoreAdminParams.RANGES, rangesStr);
+    }
 
     ZkNodeProps m = new ZkNodeProps(props);
 

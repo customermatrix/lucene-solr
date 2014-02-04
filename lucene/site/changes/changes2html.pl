@@ -113,10 +113,13 @@ for (my $line_num = 0 ; $line_num <= $#lines ; ++$line_num) {
   }
 
   # Section heading: no leading whitespace, initial word capitalized,
-  #                  five words or less, and no trailing punctuation
-  if (    /^([A-Z]\S*(?:\s+\S+){0,4})(?<![-.:;!()])\s*$/
+  #                  five words or less, and no trailing punctuation, 
+  #                  except colons - don't match the one otherwise matching
+  #                  non-section-name by excluding "StandardTokenizer"
+  if (    /^(?!.*StandardTokenizer)([A-Z]\S*(?:\s+\S+){0,4})(?<![-.;!()])\s*$/
       and not $in_major_component_versions_section) {
     my $heading = $1;
+    $heading =~ s/:$//; # Strip trailing colon, if any
     $items = [];
     unless (@releases) {
       $sections = [];
@@ -195,7 +198,7 @@ for (my $line_num = 0 ; $line_num <= $#lines ; ++$line_num) {
     my $line;
     my $item = $_;
     $item =~ s/^(\s*\Q$type\E\s*)//;       # Trim the leading bullet
-    my $leading_ws_width = length($1);
+    my $leading_ws_width = defined($1) ? length($1) : 0;
     $item =~ s/\s+$//;                     # Trim trailing whitespace
     $item .= "\n";
 

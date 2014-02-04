@@ -46,7 +46,11 @@ import org.apache.solr.common.params.CollectionParams.CollectionAction;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.StrUtils;
+import org.apache.solr.core.CoreContainer;
+import org.apache.solr.core.SolrCore;
 import org.apache.solr.core.SolrResourceLoader;
+import org.apache.solr.servlet.SolrDispatchFilter;
+import org.apache.solr.update.DirectUpdateHandler2;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -63,6 +67,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -543,8 +548,10 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
       
       nextJetty:
       for (Slice slice : coll.getSlices()) {
-        for (Replica replica : slice.getReplicas()) {
-          if (replica.getNodeName().contains(":" + port + "_")) {
+        Set<Entry<String,Replica>> entries = slice.getReplicasMap().entrySet();
+        for (Entry<String,Replica> entry : entries) {
+          Replica replica = entry.getValue();
+          if (replica.getStr(ZkStateReader.BASE_URL_PROP).contains(":" + port)) {
             List<CloudJettyRunner> list = shardToJetty.get(slice.getName());
             if (list == null) {
               list = new ArrayList<CloudJettyRunner>();
@@ -555,7 +562,7 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
             cjr.jetty = jetty;
             cjr.info = replica;
             cjr.nodeName = replica.getStr(ZkStateReader.NODE_NAME_PROP);
-            cjr.coreNodeName = replica.getNodeName();
+            cjr.coreNodeName = entry.getKey();
             cjr.url = replica.getStr(ZkStateReader.BASE_URL_PROP) + "/" + replica.getStr(ZkStateReader.CORE_NAME_PROP);
             cjr.client = findClientByPort(port, theClients);
             list.add(cjr);
@@ -1052,6 +1059,20 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
         }
         System.err.println(" live:" + live);
         
+      }
+    }
+  }
+  
+  protected void enableAutoSoftCommit(int time) {
+    log.info("Turning on auto soft commit: " + time);
+    for (List<CloudJettyRunner> jettyList : shardToJetty.values()) {
+      for (CloudJettyRunner jetty : jettyList) {
+        CoreContainer cores = ((SolrDispatchFilter) jetty.jetty
+            .getDispatchFilter().getFilter()).getCores();
+        for (SolrCore core : cores.getCores()) {
+          ((DirectUpdateHandler2) core.getUpdateHandler())
+              .getSoftCommitTracker().setTimeUpperBound(time);
+        }
       }
     }
   }
@@ -1726,6 +1747,53 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
       }
     }
     return commondCloudSolrServer;
+  }
+  public static String getUrlFromZk(ClusterState clusterState, String collection) {
+    Map<String,Slice> slices = clusterState.getCollectionStates().get(collection).getSlicesMap();
+
+    if (slices == null) {
+      throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, "Could not find collection:" + collection);
+    }
+
+    for (Map.Entry<String,Slice> entry : slices.entrySet()) {
+      Slice slice = entry.getValue();
+      Map<String,Replica> shards = slice.getReplicasMap();
+      Set<Map.Entry<String,Replica>> shardEntries = shards.entrySet();
+      for (Map.Entry<String,Replica> shardEntry : shardEntries) {
+        final ZkNodeProps node = shardEntry.getValue();
+        if (clusterState.liveNodesContain(node.getStr(ZkStateReader.NODE_NAME_PROP))) {
+          return ZkCoreNodeProps.getCoreUrl(node.getStr(ZkStateReader.BASE_URL_PROP), collection); //new ZkCoreNodeProps(node).getCoreUrl();
+        }
+      }
+    }
+
+    throw new RuntimeException("Could not find a live node for collection:" + collection);
+  }
+
+ public  static void waitForNon403or404or503(HttpSolrServer collectionClient)
+      throws Exception {
+    SolrException exp = null;
+    long timeoutAt = System.currentTimeMillis() + 30000;
+
+    while (System.currentTimeMillis() < timeoutAt) {
+      boolean missing = false;
+
+      try {
+        collectionClient.query(new SolrQuery("*:*"));
+      } catch (SolrException e) {
+        if (!(e.code() == 403 || e.code() == 503 || e.code() == 404)) {
+          throw e;
+        }
+        exp = e;
+        missing = true;
+      }
+      if (!missing) {
+        return;
+      }
+      Thread.sleep(50);
+    }
+
+    fail("Could not find the new collection - " + exp.code() + " : " + collectionClient.getBaseURL());
   }
 
 }

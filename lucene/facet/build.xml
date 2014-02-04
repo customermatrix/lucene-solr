@@ -23,7 +23,28 @@
     Faceted indexing and search capabilities
   </description>
 
+  <property name="forbidden-sysout-excludes" value="
+    org/apache/lucene/facet/util/PrintTaxonomyStats.class
+  "/>
+
   <import file="../module-build.xml"/>
+  <import file="../common-build.xml"/>
+
+  <path id="classpath">
+    <path refid="base.classpath"/>
+    <pathelement path="${queries.jar}"/>
+    <fileset dir="${common.dir}/facet/lib" excludes="${common.classpath.excludes}"/>
+  </path>
+
+  <target name="compile-core" depends="jar-queries,common.compile-core" />
+
+  <target name="javadocs" depends="javadocs-queries,compile-core">
+    <invoke-module-javadoc>
+      <links>
+        <link href="../queries"/>
+      </links>
+    </invoke-module-javadoc>
+  </target>
 
   <target name="run-encoding-benchmark" depends="compile-test">
     <java classname="org.apache.lucene.util.encoding.EncodingSpeed" fork="true" failonerror="true">
@@ -31,5 +52,5 @@
       <classpath path="${build.dir}/classes/test" />
     </java>
   </target>
-	
+
 </project>

@@ -338,6 +338,84 @@ public class TestLazyCores extends SolrTestCaseJ4 {
     }
   }
 
+  private void createViaAdmin(CoreContainer cc, String name, String instanceDir, boolean isTransient,
+                              boolean loadOnStartup) throws Exception {
+
+    final CoreAdminHandler admin = new CoreAdminHandler(cc);
+    SolrQueryResponse resp = new SolrQueryResponse();
+    admin.handleRequestBody
+        (req(CoreAdminParams.ACTION,
+            CoreAdminParams.CoreAdminAction.CREATE.toString(),
+            CoreAdminParams.INSTANCE_DIR, instanceDir,
+            CoreAdminParams.NAME, name,
+            CoreAdminParams.TRANSIENT, Boolean.toString(isTransient),
+            CoreAdminParams.LOAD_ON_STARTUP, Boolean.toString(loadOnStartup)),
+            resp);
+
+  }
+
+  private void unloadViaAdmin(CoreContainer cc, String name) throws Exception {
+
+    final CoreAdminHandler admin = new CoreAdminHandler(cc);
+    SolrQueryResponse resp = new SolrQueryResponse();
+    admin.handleRequestBody
+        (req(CoreAdminParams.ACTION,
+            CoreAdminParams.CoreAdminAction.UNLOAD.toString(),
+            CoreAdminParams.CORE, name),
+            resp);
+
+  }
+
+
+  // Make sure that creating a transient core from the admin handler correctly respects the transient limits etc.
+  @Test
+  public void testCreateTransientFromAdmin() throws Exception {
+    final CoreContainer cc = init();
+    try {
+      copyMinConf(new File(solrHomeDirectory, "core1"));
+      copyMinConf(new File(solrHomeDirectory, "core2"));
+      copyMinConf(new File(solrHomeDirectory, "core3"));
+      copyMinConf(new File(solrHomeDirectory, "core4"));
+      copyMinConf(new File(solrHomeDirectory, "core5"));
+
+      createViaAdmin(cc, "core1", "./core1", true, true);
+      createViaAdmin(cc, "core2", "./core2", true, false);
+      createViaAdmin(cc, "core3", "./core3", true, true);
+      createViaAdmin(cc, "core4", "./core4", true, false);
+      createViaAdmin(cc, "core5", "./core5", true, false);
+
+      SolrCore c1 = cc.getCore("core1");
+      SolrCore c2 = cc.getCore("core2");
+      SolrCore c3 = cc.getCore("core3");
+      SolrCore c4 = cc.getCore("core4");
+      SolrCore c5 = cc.getCore("core5");
+
+      checkNotInCores(cc, "core1", "collectionLazy2", "collectionLazy3", "collectionLazy4", "collectionLazy6"
+          , "collectionLazy7", "collectionLazy8", "collectionLazy9");
+
+      checkInCores(cc, "collection1", "collectionLazy5", "core2", "core3", "core4", "core5");
+
+      // While we're at it, a test for SOLR-5366, unloading transient core that's been unloaded b/c it's
+      // transient generates a "too many closes" errorl
+
+      unloadViaAdmin(cc, "core1");
+      unloadViaAdmin(cc, "core2");
+      unloadViaAdmin(cc, "core3");
+      unloadViaAdmin(cc, "core4");
+      unloadViaAdmin(cc, "core5");
+
+      c1.close();
+      c2.close();
+      c3.close();
+      c4.close();
+      c5.close();
+
+    } finally {
+      cc.shutdown();
+    }
+  }
+
+
   //Make sure persisting not-loaded lazy cores is done. See SOLR-4347
 
   @Test
@@ -621,7 +699,7 @@ public class TestLazyCores extends SolrTestCaseJ4 {
   private void addLazy(SolrCore core, String... fieldValues) throws IOException {
     UpdateHandler updater = core.getUpdateHandler();
     AddUpdateCommand cmd = new AddUpdateCommand(makeReq(core));
-    cmd.solrDoc = sdoc(fieldValues);
+    cmd.solrDoc = sdoc((Object[])fieldValues);
     updater.addDoc(cmd);
   }
 

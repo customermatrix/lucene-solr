@@ -25,6 +25,27 @@
   
   <import file="lucene/common-build.xml"/>
 
+  <target name="-run-test">
+    <mkdir dir="lucene/build" />
+    <tempfile property="tests.totals.tmpfile"
+          destdir="lucene/build"
+          prefix=".test-totals-"
+          suffix=".tmp"
+          deleteonexit="true"
+          createfile="true" />
+
+    <subant target="test" inheritall="false" failonerror="true">
+      <fileset dir="lucene" includes="build.xml" />
+      <fileset dir="solr" includes="build.xml" />
+      <propertyset>
+        <propertyref name="tests.totals.tmpfile" />
+      </propertyset>      
+    </subant>
+
+    <property name="tests.totals.toplevel" value="true" />
+    <antcall target="-check-totals" />
+  </target>
+
   <!--
    Run after Junit tests.
    
@@ -79,11 +100,7 @@
     <local name="svn.checkprops.failed"/>
     <local name="svn.unversioned.failed"/>
     <local name="svn.changed.failed"/>
-    <script language="groovy" taskname="svn">
-      <classpath>
-        <path refid="groovy.classpath"/>
-        <path refid="svnkit.classpath"/>
-      </classpath><![CDATA[
+    <groovy taskname="svn" classpathref="svnkit.classpath"><![CDATA[
       import org.tmatesoft.svn.core.*;
       import org.tmatesoft.svn.core.wc.*;
       
@@ -99,7 +116,7 @@
       
       Set missingProps = new TreeSet(), unversioned = new TreeSet(), changed = new TreeSet();
 
-      self.log('Getting all versioned and unversioned files...');
+      task.log('Getting all versioned and unversioned files...');
       statusClient.doStatus(basedir, SVNRevision.WORKING, SVNDepth.fromRecurse(true), false, true, false, false, {
         status ->
         SVNStatusType nodeStatus = status.getNodeStatus();
@@ -114,12 +131,12 @@
         }
       } as ISVNStatusHandler, null);
 
-      self.log('Filtering files with existing svn:eol-style...');
+      task.log('Filtering files with existing svn:eol-style...');
       wcClient.doGetProperty(basedir, 'svn:eol-style', SVNRevision.WORKING, SVNRevision.WORKING, true, {
         file, prop -> missingProps.remove(convertRelative(file));
       } as ISVNPropertyHandler);
       
-      self.log('Filtering files with binary svn:mime-type...');
+      task.log('Filtering files with binary svn:mime-type...');
       wcClient.doGetProperty(basedir, 'svn:mime-type', SVNRevision.WORKING, SVNRevision.WORKING, true, {
         file, prop ->
         prop = SVNPropertyValue.getPropertyAsString(prop.getValue());
@@ -134,7 +151,7 @@
       project.setProperty('svn.checkprops.failed', convertSet2String(missingProps));
       project.setProperty('svn.unversioned.failed', convertSet2String(unversioned));
       project.setProperty('svn.changed.failed', convertSet2String(changed));
-    ]]></script>
+    ]]></groovy>
     <fail if="svn.checkprops.failed"
       message="The following files are missing svn:eol-style (or binary svn:mime-type):${line.separator}${svn.checkprops.failed}"/>
     <fail if="svn.unversioned.failed"

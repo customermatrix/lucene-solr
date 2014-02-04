@@ -45,14 +45,16 @@ import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.search.DocIterator;
 import org.apache.solr.search.DocList;
 import org.apache.solr.search.DocListAndSet;
+import org.apache.solr.search.ReturnFields;
 import org.apache.solr.search.SolrIndexSearcher;
+import org.apache.solr.search.SolrReturnFields;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * TODO!
- *
- *
+ * 
+ * 
  * @since solr 1.3
  */
 public class MoreLikeThisComponent extends SearchComponent {
@@ -60,22 +62,30 @@ public class MoreLikeThisComponent extends SearchComponent {
   public static final String DIST_DOC_ID = "mlt.dist.id";
   static final Logger log = LoggerFactory
       .getLogger(MoreLikeThisComponent.class);
-
+  
   @Override
   public void prepare(ResponseBuilder rb) throws IOException {
-
+    
   }
-
+  
   @Override
   public void process(ResponseBuilder rb) throws IOException {
 
     SolrParams params = rb.req.getParams();
+    ReturnFields returnFields = new SolrReturnFields( rb.req );
+
+    int flags = 0;
+    if (returnFields.wantsScore()) {
+      flags |= SolrIndexSearcher.GET_SCORES;
+    }
+
+    rb.setFieldFlags(flags);
+
     if (params.getBool(MoreLikeThisParams.MLT, false)) {
       log.debug("Starting MoreLikeThis.Process.  isShard: "
           + params.getBool(ShardParams.IS_SHARD));
       SolrIndexSearcher searcher = rb.req.getSearcher();
 
-      int mltcount = params.getInt(MoreLikeThisParams.DOC_COUNT, 5);
       if (params.getBool(ShardParams.IS_SHARD, false)) {
         if (params.get(MoreLikeThisComponent.DIST_DOC_ID) == null) {
           if (rb.getResults().docList.size() == 0) {
@@ -83,17 +93,17 @@ public class MoreLikeThisComponent extends SearchComponent {
             rb.rsp.add("moreLikeThis", new NamedList<DocList>());
             return;
           }
-
+          
           MoreLikeThisHandler.MoreLikeThisHelper mlt = new MoreLikeThisHandler.MoreLikeThisHelper(
               params, searcher);
 
           NamedList<BooleanQuery> bQuery = mlt.getMoreLikeTheseQuery(rb
               .getResults().docList);
-
+          
           NamedList<String> temp = new NamedList<String>();
           Iterator<Entry<String,BooleanQuery>> idToQueryIt = bQuery.iterator();
 
-
+          
           while (idToQueryIt.hasNext()) {
             Entry<String,BooleanQuery> idToQuery = idToQueryIt.next();
             String s = idToQuery.getValue().toString();
@@ -105,17 +115,18 @@ public class MoreLikeThisComponent extends SearchComponent {
           rb.rsp.add("moreLikeThis", temp);
         } else {
           NamedList<DocList> sim = getMoreLikeThese(rb, rb.req.getSearcher(),
-              rb.getResults().docList);
+              rb.getResults().docList, flags);
           rb.rsp.add("moreLikeThis", sim);
         }
       } else {
         // non distrib case
-        NamedList<DocList> sim = getMoreLikeThese(rb, rb.req.getSearcher(), rb.getResults().docList);
+        NamedList<DocList> sim = getMoreLikeThese(rb, rb.req.getSearcher(), rb.getResults().docList,
+            flags);
         rb.rsp.add("moreLikeThis", sim);
       }
     }
   }
-
+  
   @Override
   public void handleResponses(ResponseBuilder rb, ShardRequest sreq) {
     if ((sreq.purpose & ShardRequest.PURPOSE_GET_TOP_IDS) != 0
@@ -136,7 +147,7 @@ public class MoreLikeThisComponent extends SearchComponent {
         }
       }
     }
-
+    
     if ((sreq.purpose & ShardRequest.PURPOSE_GET_MLT_RESULTS) != 0) {
       for (ShardResponse r : sreq.responses) {
         log.debug("MLT Query returned: "
@@ -144,20 +155,20 @@ public class MoreLikeThisComponent extends SearchComponent {
       }
     }
   }
-
+  
   @Override
   public void finishStage(ResponseBuilder rb) {
-
+    
     // Handling Responses in finishStage, because solrResponse will put
     // moreLikeThis xml
     // segment ahead of result/response.
     if (rb.stage == ResponseBuilder.STAGE_GET_FIELDS
         && rb.req.getParams().getBool(COMPONENT_NAME, false)) {
       Map<Object,SolrDocumentList> tempResults = new LinkedHashMap<Object,SolrDocumentList>();
-
+      
       int mltcount = rb.req.getParams().getInt(MoreLikeThisParams.DOC_COUNT, 5);
       String keyName = rb.req.getSchema().getUniqueKeyField().getName();
-
+      
       for (ShardRequest sreq : rb.finished) {
         if ((sreq.purpose & ShardRequest.PURPOSE_GET_MLT_RESULTS) != 0) {
           for (ShardResponse r : sreq.responses) {
@@ -169,7 +180,7 @@ public class MoreLikeThisComponent extends SearchComponent {
             if (shardDocList == null) {
               continue;
             }
-
+ 
             log.info("MLT: results added for key: " + key + " documents: "
                 + shardDocList.toString());
 //            if (log.isDebugEnabled()) {
@@ -178,7 +189,7 @@ public class MoreLikeThisComponent extends SearchComponent {
 //              }
 //            }
             SolrDocumentList mergedDocList = tempResults.get(key);
-
+ 
             if (mergedDocList == null) {
               mergedDocList = new SolrDocumentList();
               mergedDocList.addAll(shardDocList);
@@ -197,13 +208,13 @@ public class MoreLikeThisComponent extends SearchComponent {
 
       NamedList<SolrDocumentList> list = buildMoreLikeThisNamed(tempResults,
           rb.resultIds);
-
+     
       rb.rsp.add("moreLikeThis", list);
-
+      
     }
     super.finishStage(rb);
   }
-
+  
   /**
    * Returns NamedList based on the order of
    * resultIds.shardDoc.positionInResponse
@@ -226,12 +237,12 @@ public class MoreLikeThisComponent extends SearchComponent {
     }
     return result;
   }
-
+  
   public SolrDocumentList mergeSolrDocumentList(SolrDocumentList one,
-                                                SolrDocumentList two, int maxSize, String idField) {
+      SolrDocumentList two, int maxSize, String idField) {
 
     List<SolrDocument> l = new ArrayList<SolrDocument>();
-
+    
     // De-dup records sets. Shouldn't happen if indexed correctly.
     Map<String,SolrDocument> map = new HashMap<String,SolrDocument>();
     for (SolrDocument doc : one) {
@@ -242,11 +253,11 @@ public class MoreLikeThisComponent extends SearchComponent {
     for (SolrDocument doc : two) {
       map.put(doc.getFieldValue(idField).toString(), doc);
     }
-
+    
     l = new ArrayList<SolrDocument>(map.values());
-
+    
     // Comparator to sort docs based on score. null scores/docs are set to 0.
-
+    
     // hmm...we are ordering by scores that are not really comparable...
     Comparator<SolrDocument> c = new Comparator<SolrDocument>() {
       public int compare(SolrDocument o1, SolrDocument o2) {
@@ -254,7 +265,7 @@ public class MoreLikeThisComponent extends SearchComponent {
         Float f2 = getFloat(o2);
         return f2.compareTo(f1);
       }
-
+      
       private Float getFloat(SolrDocument doc) {
         Float f = 0f;
         if (doc != null) {
@@ -266,14 +277,14 @@ public class MoreLikeThisComponent extends SearchComponent {
         return f;
       }
     };
-
+    
     Collections.sort(l, c);
-
+    
     // Truncate list to maxSize
     if (l.size() > maxSize) {
       l = l.subList(0, maxSize);
     }
-
+    
     // Create SolrDocumentList Attributes from originals
     SolrDocumentList result = new SolrDocumentList();
     result.addAll(l);
@@ -283,45 +294,45 @@ public class MoreLikeThisComponent extends SearchComponent {
 
     return result;
   }
-
+  
   ShardRequest buildShardQuery(ResponseBuilder rb, String q, String key) {
     ShardRequest s = new ShardRequest();
     s.params = new ModifiableSolrParams(rb.req.getParams());
     s.purpose |= ShardRequest.PURPOSE_GET_MLT_RESULTS;
     // Maybe unnecessary, but safe.
     s.purpose |= ShardRequest.PURPOSE_PRIVATE;
-
+    
     s.params.remove(ShardParams.SHARDS);
     // s.params.remove(MoreLikeThisComponent.COMPONENT_NAME);
-
+    
     // needed to correlate results
     s.params.set(MoreLikeThisComponent.DIST_DOC_ID, key);
     s.params.set(CommonParams.START, 0);
     int mltcount = s.params.getInt(MoreLikeThisParams.DOC_COUNT, 20); // overrequest
     s.params.set(CommonParams.ROWS, mltcount);
-
+    
     // adding score to rank moreLikeThis
     s.params.remove(CommonParams.FL);
-
+    
     // Should probably add something like this:
     // String fl = s.params.get(MoreLikeThisParams.RETURN_FL, "*");
     // if(fl != null){
     // s.params.set(CommonParams.FL, fl + ",score");
     // }
     String id = rb.req.getSchema().getUniqueKeyField()
-        .getName();
+    .getName();
     s.params.set(CommonParams.FL, "score," + id);
     s.params.set("sort", "score desc");
     // MLT Query is submitted as normal query to shards.
     s.params.set(CommonParams.Q, q);
-
+    
     return s;
   }
-
+  
   ShardRequest buildMLTQuery(ResponseBuilder rb, String q) {
     ShardRequest s = new ShardRequest();
     s.params = new ModifiableSolrParams();
-
+    
 
     s.params.set(CommonParams.START, 0);
 
@@ -330,34 +341,33 @@ public class MoreLikeThisComponent extends SearchComponent {
     s.params.set(CommonParams.FL, "score," + id);
     // MLT Query is submitted as normal query to shards.
     s.params.set(CommonParams.Q, q);
-
+    
     s.shards = ShardRequest.ALL_SHARDS;
     return s;
   }
-
+  
   NamedList<DocList> getMoreLikeThese(ResponseBuilder rb,
-      SolrIndexSearcher searcher, DocList docs) throws IOException {
-
+      SolrIndexSearcher searcher, DocList docs, int flags) throws IOException {
     SolrParams p = rb.req.getParams();
     IndexSchema schema = searcher.getSchema();
     MoreLikeThisHandler.MoreLikeThisHelper mltHelper = new MoreLikeThisHandler.MoreLikeThisHelper(
         p, searcher);
     NamedList<DocList> mlt = new SimpleOrderedMap<DocList>();
     DocIterator iterator = docs.iterator();
-
+    
     SimpleOrderedMap<Object> dbg = null;
     if (rb.isDebug()) {
       dbg = new SimpleOrderedMap<Object>();
     }
-
+    
     while (iterator.hasNext()) {
       int id = iterator.nextDoc();
       int rows = p.getInt(MoreLikeThisParams.DOC_COUNT, 5);
       DocListAndSet sim = mltHelper.getMoreLikeThis(id, 0, rows, null, null,
-                                                    rb.getFieldFlags());
+          flags);
       String name = schema.printableUniqueKey(searcher.doc(id));
       mlt.add(name, sim.docList);
-
+      
       if (dbg != null) {
         SimpleOrderedMap<Object> docDbg = new SimpleOrderedMap<Object>();
         docDbg.add("rawMLTQuery", mltHelper.getRawMLTQuery().toString());
@@ -376,28 +386,28 @@ public class MoreLikeThisComponent extends SearchComponent {
         dbg.add(name, docDbg);
       }
     }
-
+    
     // add debug information
     if (dbg != null) {
       rb.addDebugInfo("moreLikeThis", dbg);
     }
     return mlt;
   }
-
+  
   // ///////////////////////////////////////////
   // / SolrInfoMBean
   // //////////////////////////////////////////
-
+  
   @Override
   public String getDescription() {
     return "More Like This";
   }
-
+  
   @Override
   public String getSource() {
     return "$URL$";
   }
-
+  
   @Override
   public URL[] getDocs() {
     return null;

@@ -25,14 +25,14 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.lucene.search.spell.TermFreqIterator;
-import org.apache.lucene.search.spell.TermFreqPayloadIterator;
+import org.apache.lucene.search.suggest.InputIterator;
 import org.apache.lucene.search.suggest.Lookup;
-import org.apache.lucene.search.suggest.UnsortedTermFreqIteratorWrapper;
+import org.apache.lucene.search.suggest.UnsortedInputIterator;
 import org.apache.lucene.search.suggest.jaspell.JaspellTernarySearchTrie.TSTNode;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.CharsRef;
 import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.lucene.util.UnicodeUtil;
 
 /**
@@ -48,19 +48,19 @@ public class JaspellLookup extends Lookup {
   
   /** 
    * Creates a new empty trie 
-   * @see #build(TermFreqIterator)
+   * @see #build(InputIterator)
    * */
   public JaspellLookup() {}
 
   @Override
-  public void build(TermFreqIterator tfit) throws IOException {
-    if (tfit instanceof TermFreqPayloadIterator) {
+  public void build(InputIterator tfit) throws IOException {
+    if (tfit.hasPayloads()) {
       throw new IllegalArgumentException("this suggester doesn't support payloads");
     }
     if (tfit.getComparator() != null) {
       // make sure it's unsorted
       // WTF - this could result in yet another sorted iteration....
-      tfit = new UnsortedTermFreqIteratorWrapper(tfit);
+      tfit = new UnsortedInputIterator(tfit);
     }
     trie = new JaspellTernarySearchTrie();
     trie.setMatchAlmostDiff(editDistance);
@@ -206,5 +206,11 @@ public class JaspellLookup extends Lookup {
       IOUtils.close(in);
     }
     return true;
+  }
+
+  /** Returns byte size of the underlying TST. */
+  @Override
+  public long sizeInBytes() {
+    return RamUsageEstimator.sizeOf(trie);
   }
 }

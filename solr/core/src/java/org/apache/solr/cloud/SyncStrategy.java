@@ -20,13 +20,10 @@ package org.apache.solr.cloud;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ExecutorService;
 
 import org.apache.http.client.HttpClient;
 import org.apache.solr.client.solrj.SolrServerException;
-import org.apache.solr.client.solrj.impl.HttpClientUtil;
 import org.apache.solr.client.solrj.impl.HttpSolrServer;
 import org.apache.solr.client.solrj.request.CoreAdminRequest.RequestRecovery;
 import org.apache.solr.common.SolrException;
@@ -35,7 +32,6 @@ import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.params.CoreAdminParams.CoreAdminAction;
 import org.apache.solr.common.params.ModifiableSolrParams;
-import org.apache.solr.common.util.ExecutorUtil;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.CoreDescriptor;
 import org.apache.solr.core.SolrCore;
@@ -44,7 +40,7 @@ import org.apache.solr.handler.component.ShardHandler;
 import org.apache.solr.handler.component.ShardRequest;
 import org.apache.solr.handler.component.ShardResponse;
 import org.apache.solr.update.PeerSync;
-import org.apache.solr.util.DefaultSolrThreadFactory;
+import org.apache.solr.update.UpdateShardHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,27 +50,18 @@ public class SyncStrategy {
   private final boolean SKIP_AUTO_RECOVERY = Boolean.getBoolean("solrcloud.skip.autorecovery");
   
   private final ShardHandler shardHandler;
-  
-  private ThreadPoolExecutor recoveryCmdExecutor = new ThreadPoolExecutor(
-      0, Integer.MAX_VALUE, 5, TimeUnit.SECONDS,
-      new SynchronousQueue<Runnable>(), new DefaultSolrThreadFactory(
-          "recoveryCmdExecutor"));
 
   private volatile boolean isClosed;
   
   private final HttpClient client;
-  {
-    ModifiableSolrParams params = new ModifiableSolrParams();
-    params.set(HttpClientUtil.PROP_MAX_CONNECTIONS, 10000);
-    params.set(HttpClientUtil.PROP_MAX_CONNECTIONS_PER_HOST, 20);
-    params.set(HttpClientUtil.PROP_CONNECTION_TIMEOUT, 15000);
-    params.set(HttpClientUtil.PROP_SO_TIMEOUT, 30000);
-    params.set(HttpClientUtil.PROP_USE_RETRY, false);
-    client = HttpClientUtil.createClient(params);
-  }
+
+  private final ExecutorService updateExecutor;
   
-  public SyncStrategy() {
+  public SyncStrategy(UpdateShardHandler updateShardHandler) {
+    client = updateShardHandler.getHttpClient();
+    
     shardHandler = new HttpShardHandlerFactory().getShardHandler(client);
+    updateExecutor = updateShardHandler.getUpdateExecutor();
   }
   
   private static class ShardCoreRequest extends ShardRequest {
@@ -92,11 +79,7 @@ public class SyncStrategy {
       return false;
     }
     log.info("Sync replicas to " + ZkCoreNodeProps.getCoreUrl(leaderProps));
-    // TODO: look at our state usage of sync
-    // zkController.publish(core, ZkStateReader.SYNC);
-    
-    // solrcloud_debug
-    // System.out.println("SYNC UP");
+
     if (core.getUpdateHandler().getUpdateLog() == null) {
       log.error("No UpdateLog found - cannot sync");
       return false;
@@ -261,16 +244,6 @@ public class SyncStrategy {
   
   public void close() {
     this.isClosed = true;
-    try {
-      client.getConnectionManager().shutdown();
-    } catch (Throwable e) {
-      SolrException.log(log, e);
-    }
-    try {
-      ExecutorUtil.shutdownNowAndAwaitTermination(recoveryCmdExecutor);
-    } catch (Throwable e) {
-      SolrException.log(log, e);
-    }
   }
   
   private void requestRecovery(final ZkNodeProps leaderProps, final String baseUrl, final String coreName) throws SolrServerException, IOException {
@@ -285,16 +258,18 @@ public class SyncStrategy {
         recoverRequestCmd.setCoreName(coreName);
         
         HttpSolrServer server = new HttpSolrServer(baseUrl, client);
-        server.setConnectionTimeout(15000);
-        server.setSoTimeout(30000);
         try {
+          server.setConnectionTimeout(30000);
+          server.setSoTimeout(120000);
           server.request(recoverRequestCmd);
         } catch (Throwable t) {
           SolrException.log(log, ZkCoreNodeProps.getCoreUrl(leaderProps) + ": Could not tell a replica to recover", t);
+        } finally {
+          server.shutdown();
         }
       }
     };
-    recoveryCmdExecutor.execute(thread);
+    updateExecutor.execute(thread);
   }
   
   public static ModifiableSolrParams params(String... params) {

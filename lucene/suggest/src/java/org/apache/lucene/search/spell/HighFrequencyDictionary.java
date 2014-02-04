@@ -24,6 +24,7 @@ import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.MultiFields;
+import org.apache.lucene.search.suggest.InputIterator;
 import org.apache.lucene.util.BytesRefIterator;
 import org.apache.lucene.util.BytesRef;
 
@@ -60,7 +61,7 @@ public class HighFrequencyDictionary implements Dictionary {
     return new HighFrequencyIterator();
   }
 
-  final class HighFrequencyIterator implements TermFreqIterator {
+  final class HighFrequencyIterator implements InputIterator {
     private final BytesRef spare = new BytesRef();
     private final TermsEnum termsEnum;
     private int minNumDocs;
@@ -107,6 +108,16 @@ public class HighFrequencyDictionary implements Dictionary {
       } else {
         return termsEnum.getComparator();
       }
+    }
+
+    @Override
+    public BytesRef payload() {
+      return null;
+    }
+
+    @Override
+    public boolean hasPayloads() {
+      return false;
     }
   }
 }

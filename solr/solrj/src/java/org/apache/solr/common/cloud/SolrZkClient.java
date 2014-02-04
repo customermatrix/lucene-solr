@@ -120,6 +120,13 @@ public class SolrZkClient {
           });
     } catch (Throwable e) {
       connManager.close();
+      if (keeper != null) {
+        try {
+          keeper.close();
+        } catch (InterruptedException e1) {
+          Thread.currentThread().interrupt();
+        }
+      }
       throw new RuntimeException(e);
     }
     
@@ -127,11 +134,20 @@ public class SolrZkClient {
       connManager.waitForConnected(clientConnectTimeout);
     } catch (Throwable e) {
       connManager.close();
+      try {
+        keeper.close();
+      } catch (InterruptedException e1) {
+        Thread.currentThread().interrupt();
+      }
       throw new RuntimeException(e);
     }
     numOpens.incrementAndGet();
   }
 
+  public ConnectionManager getConnectionManager() {
+    return connManager;
+  }
+  
   public ZkClientConnectionStrategy getZkClientConnectionStrategy() {
     return zkClientConnectionStrategy;
   }

@@ -25,13 +25,13 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.lucene.search.spell.TermFreqIterator;
-import org.apache.lucene.search.spell.TermFreqPayloadIterator;
+import org.apache.lucene.search.suggest.InputIterator;
 import org.apache.lucene.search.suggest.Lookup;
-import org.apache.lucene.search.suggest.SortedTermFreqIteratorWrapper;
+import org.apache.lucene.search.suggest.SortedInputIterator;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.CharsRef;
 import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.lucene.util.UnicodeUtil;
 
 /**
@@ -46,20 +46,20 @@ public class TSTLookup extends Lookup {
   
   /** 
    * Creates a new TSTLookup with an empty Ternary Search Tree.
-   * @see #build(TermFreqIterator)
+   * @see #build(InputIterator)
    */
   public TSTLookup() {}
 
   @Override
-  public void build(TermFreqIterator tfit) throws IOException {
-    if (tfit instanceof TermFreqPayloadIterator) {
+  public void build(InputIterator tfit) throws IOException {
+    if (tfit.hasPayloads()) {
       throw new IllegalArgumentException("this suggester doesn't support payloads");
     }
     root = new TernaryTreeNode();
     // buffer first
     if (tfit.getComparator() != BytesRef.getUTF8SortedAsUTF16Comparator()) {
       // make sure it's sorted and the comparator uses UTF16 sort order
-      tfit = new SortedTermFreqIteratorWrapper(tfit, BytesRef.getUTF8SortedAsUTF16Comparator());
+      tfit = new SortedInputIterator(tfit, BytesRef.getUTF8SortedAsUTF16Comparator());
     }
 
     ArrayList<String> tokens = new ArrayList<String>();
@@ -221,6 +221,12 @@ public class TSTLookup extends Lookup {
       IOUtils.close(in);
     }
     return true;
+  }
+
+  /** Returns byte size of the underlying TST */
+  @Override
+  public long sizeInBytes() {
+    return RamUsageEstimator.sizeOf(autocomplete);
   }
   
 }

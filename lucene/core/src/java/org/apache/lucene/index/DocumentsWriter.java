@@ -136,7 +136,7 @@ final class DocumentsWriter {
     flushPolicy = config.getFlushPolicy();
     this.writer = writer;
     this.events = new ConcurrentLinkedQueue<Event>();
-    flushControl = new DocumentsWriterFlushControl(this, config, writer.bufferedDeletesStream);
+    flushControl = new DocumentsWriterFlushControl(this, config, writer.bufferedUpdatesStream);
   }
   
   synchronized boolean deleteQueries(final Query... queries) throws IOException {
@@ -158,12 +158,19 @@ final class DocumentsWriter {
     return applyAllDeletes( deleteQueue);
   }
 
+  synchronized boolean updateNumericDocValue(Term term, String field, Long value) throws IOException {
+    final DocumentsWriterDeleteQueue deleteQueue = this.deleteQueue;
+    deleteQueue.addNumericUpdate(new NumericUpdate(term, field, value));
+    flushControl.doOnDelete();
+    return applyAllDeletes(deleteQueue);
+  }
+
   DocumentsWriterDeleteQueue currentDeleteSession() {
     return deleteQueue;
   }
   
   private final boolean applyAllDeletes(DocumentsWriterDeleteQueue deleteQueue) throws IOException {
-    if (flushControl.doApplyAllDeletes()) {
+    if (flushControl.getAndResetApplyAllDeletes()) {
       if (deleteQueue != null && !flushControl.isFullFlush()) {
         ticketQueue.addDeletes(deleteQueue);
       }
@@ -316,7 +323,7 @@ final class DocumentsWriter {
   }
   
   public int getBufferedDeleteTermsSize() {
-    return deleteQueue.getBufferedDeleteTermsSize();
+    return deleteQueue.getBufferedUpdatesTermsSize();
   }
 
   //for testing

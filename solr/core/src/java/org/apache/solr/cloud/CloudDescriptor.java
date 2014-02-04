@@ -27,6 +27,7 @@ import java.util.Properties;
 
 public class CloudDescriptor {
 
+  private final CoreDescriptor cd;
   private String shardId;
   private String collectionName;
   private SolrParams params;
@@ -38,6 +39,7 @@ public class CloudDescriptor {
    * Use the values from {@link Slice} instead */
   volatile String shardRange = null;
   volatile String shardState = Slice.ACTIVE;
+  volatile String shardParent = null;
 
   volatile boolean isLeader = false;
   volatile String lastPublished = ZkStateReader.ACTIVE;
@@ -45,8 +47,10 @@ public class CloudDescriptor {
   public static final String SHARD_STATE = "shardState";
   public static final String NUM_SHARDS = "numShards";
   public static final String SHARD_RANGE = "shardRange";
+  public static final String SHARD_PARENT = "shardParent";
 
-  public CloudDescriptor(String coreName, Properties props) {
+  public CloudDescriptor(String coreName, Properties props, CoreDescriptor cd) {
+    this.cd = cd;
     this.shardId = props.getProperty(CoreDescriptor.CORE_SHARD, null);
     // If no collection name is specified, we default to the core name
     this.collectionName = props.getProperty(CoreDescriptor.CORE_COLLECTION, coreName);
@@ -55,6 +59,7 @@ public class CloudDescriptor {
     this.shardState = props.getProperty(CloudDescriptor.SHARD_STATE, Slice.ACTIVE);
     this.numShards = PropertiesUtil.toInteger(props.getProperty(CloudDescriptor.NUM_SHARDS), null);
     this.shardRange = props.getProperty(CloudDescriptor.SHARD_RANGE, null);
+    this.shardParent = props.getProperty(CloudDescriptor.SHARD_PARENT, null);
   }
   
   public String getLastPublished() {
@@ -117,6 +122,8 @@ public class CloudDescriptor {
 
   public void setCoreNodeName(String nodeName) {
     this.nodeName = nodeName;
+    if(nodeName==null) cd.getPersistableStandardProperties().remove(CoreDescriptor.CORE_NODE_NAME);
+    else cd.getPersistableStandardProperties().setProperty(CoreDescriptor.CORE_NODE_NAME, nodeName);
   }
 
   public String getShardRange() {
@@ -133,5 +140,13 @@ public class CloudDescriptor {
 
   public void setShardState(String shardState) {
     this.shardState = shardState;
+  }
+
+  public String getShardParent() {
+    return shardParent;
+  }
+
+  public void setShardParent(String shardParent) {
+    this.shardParent = shardParent;
   }
 }

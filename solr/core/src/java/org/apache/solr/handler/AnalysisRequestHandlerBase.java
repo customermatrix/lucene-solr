@@ -30,6 +30,7 @@ import org.apache.lucene.util.AttributeSource;
 import org.apache.lucene.util.AttributeReflector;
 import org.apache.lucene.util.CharsRef;
 import org.apache.lucene.util.ArrayUtil;
+import org.apache.lucene.util.IOUtils;
 import org.apache.solr.analysis.TokenizerChain;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SimpleOrderedMap;
@@ -87,12 +88,14 @@ public abstract class AnalysisRequestHandlerBase extends RequestHandlerBase {
       TokenStream tokenStream = null;
       try {
         tokenStream = analyzer.tokenStream(context.getFieldName(), value);
+        NamedList<List<NamedList>> namedList = new NamedList<List<NamedList>>();
+        namedList.add(tokenStream.getClass().getName(), convertTokensToNamedLists(analyzeTokenStream(tokenStream), context));
+        return namedList;
       } catch (IOException e) {
         throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, e);
+      } finally {
+        IOUtils.closeWhileHandlingException(tokenStream);
       }
-      NamedList<List<NamedList>> namedList = new NamedList<List<NamedList>>();
-      namedList.add(tokenStream.getClass().getName(), convertTokensToNamedLists(analyzeTokenStream(tokenStream), context));
-      return namedList;
     }
 
     TokenizerChain tokenizerChain = (TokenizerChain) analyzer;
@@ -138,9 +141,10 @@ public abstract class AnalysisRequestHandlerBase extends RequestHandlerBase {
    * @param analyzer The analyzer to use.
    */
   protected Set<BytesRef> getQueryTokenSet(String query, Analyzer analyzer) {
+    TokenStream tokenStream = null;
     try {
+      tokenStream = analyzer.tokenStream("", query);
       final Set<BytesRef> tokens = new HashSet<BytesRef>();
-      final TokenStream tokenStream = analyzer.tokenStream("", query);
       final TermToBytesRefAttribute bytesAtt = tokenStream.getAttribute(TermToBytesRefAttribute.class);
       final BytesRef bytes = bytesAtt.getBytesRef();
 
@@ -152,10 +156,11 @@ public abstract class AnalysisRequestHandlerBase extends RequestHandlerBase {
       }
 
       tokenStream.end();
-      tokenStream.close();
       return tokens;
     } catch (IOException ioe) {
       throw new RuntimeException("Error occured while iterating over tokenstream", ioe);
+    } finally {
+      IOUtils.closeWhileHandlingException(tokenStream);
     }
   }
 
@@ -181,8 +186,11 @@ public abstract class AnalysisRequestHandlerBase extends RequestHandlerBase {
         trackerAtt.setActPosition(position);
         tokens.add(tokenStream.cloneAttributes());
       }
+      tokenStream.end();
     } catch (IOException ioe) {
       throw new RuntimeException("Error occured while iterating over tokenstream", ioe);
+    } finally {
+      IOUtils.closeWhileHandlingException(tokenStream);
     }
 
     return tokens;

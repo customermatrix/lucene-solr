@@ -168,7 +168,7 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
       final String baseUrl = getBaseUrl((HttpSolrServer) clients.get(0));
       HttpSolrServer server = new HttpSolrServer(baseUrl);
       server.setConnectionTimeout(15000);
-      server.setSoTimeout(30000);
+      server.setSoTimeout(60000);
       Create createCmd = new Create();
       createCmd.setRoles("none");
       createCmd.setCoreName(ONE_NODE_COLLECTION + "core");
@@ -267,14 +267,6 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     
     // kill a shard
     CloudJettyRunner deadShard = chaosMonkey.stopShard(SHARD1, 0);
-
-
-    // we are careful to make sure the downed node is no longer in the state,
-    // because on some systems (especially freebsd w/ blackhole enabled), trying
-    // to talk to a downed node causes grief
-    Set<CloudJettyRunner> jetties = new HashSet<CloudJettyRunner>();
-    jetties.addAll(shardToJetty.get(SHARD1));
-    jetties.remove(deadShard);
     
     // ensure shard is dead
     try {

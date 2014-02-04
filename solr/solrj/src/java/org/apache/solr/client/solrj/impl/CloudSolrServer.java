@@ -44,6 +44,7 @@ import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.request.AbstractUpdateRequest;
 import org.apache.solr.client.solrj.request.IsUpdateRequest;
+import org.apache.solr.client.solrj.request.RequestWriter;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.util.ClientUtils;
 import org.apache.solr.common.SolrException;
@@ -72,7 +73,7 @@ import org.apache.zookeeper.KeeperException;
  * Instances of this class communicate with Zookeeper to discover
  * Solr endpoints for SolrCloud collections, and then use the 
  * {@link LBHttpSolrServer} to issue requests.
- * 
+ *
  * This class assumes the id field for your documents is called
  * 'id' - if this is not the case, you must set the right name
  * with {@link #setIdField(String)}.
@@ -87,7 +88,7 @@ public class CloudSolrServer extends SolrServer {
   private final boolean shutdownLBHttpSolrServer;
   private HttpClient myClient;
   Random rand = new Random();
-  
+
   private final boolean updatesToLeaders;
   private boolean parallelUpdates = true;
   private ExecutorService threadPool = Executors
@@ -102,11 +103,11 @@ public class CloudSolrServer extends SolrServer {
     NON_ROUTABLE_PARAMS.add(UpdateParams.COMMIT);
     NON_ROUTABLE_PARAMS.add(UpdateParams.WAIT_SEARCHER);
     NON_ROUTABLE_PARAMS.add(UpdateParams.OPEN_SEARCHER);
-    
+
     NON_ROUTABLE_PARAMS.add(UpdateParams.SOFT_COMMIT);
     NON_ROUTABLE_PARAMS.add(UpdateParams.PREPARE_COMMIT);
     NON_ROUTABLE_PARAMS.add(UpdateParams.OPTIMIZE);
-    
+
     // Not supported via SolrCloud
     // NON_ROUTABLE_PARAMS.add(UpdateParams.ROLLBACK);
 
@@ -119,18 +120,22 @@ public class CloudSolrServer extends SolrServer {
    * in the form HOST:PORT.
    */
   public CloudSolrServer(String zkHost) throws MalformedURLException {
-      this.zkHost = zkHost;
-      this.myClient = HttpClientUtil.createClient(null);
-      this.lbServer = new LBHttpSolrServer(myClient);
-      this.updatesToLeaders = true;
-      shutdownLBHttpSolrServer = true;
+    this.zkHost = zkHost;
+    this.myClient = HttpClientUtil.createClient(null);
+    this.lbServer = new LBHttpSolrServer(myClient);
+    this.lbServer.setRequestWriter(new BinaryRequestWriter());
+    this.lbServer.setParser(new BinaryResponseParser());
+    this.updatesToLeaders = true;
+    shutdownLBHttpSolrServer = true;
   }
-  
+
   public CloudSolrServer(String zkHost, boolean updatesToLeaders)
       throws MalformedURLException {
     this.zkHost = zkHost;
     this.myClient = HttpClientUtil.createClient(null);
     this.lbServer = new LBHttpSolrServer(myClient);
+    this.lbServer.setRequestWriter(new BinaryRequestWriter());
+    this.lbServer.setParser(new BinaryResponseParser());
     this.updatesToLeaders = updatesToLeaders;
     shutdownLBHttpSolrServer = true;
   }
@@ -146,7 +151,7 @@ public class CloudSolrServer extends SolrServer {
     this.updatesToLeaders = true;
     shutdownLBHttpSolrServer = false;
   }
-  
+
   /**
    * @param zkHost The client endpoint of the zookeeper quorum containing the cloud state,
    * in the form HOST:PORT.
@@ -159,14 +164,14 @@ public class CloudSolrServer extends SolrServer {
     this.updatesToLeaders = updatesToLeaders;
     shutdownLBHttpSolrServer = false;
   }
-  
+
   public ResponseParser getParser() {
     return lbServer.getParser();
   }
-  
+
   /**
    * Note: This setter method is <b>not thread-safe</b>.
-   * 
+   *
    * @param processor
    *          Default Response Parser chosen to parse the response if the parser
    *          were not specified as part of the request.
@@ -174,6 +179,14 @@ public class CloudSolrServer extends SolrServer {
    */
   public void setParser(ResponseParser processor) {
     lbServer.setParser(processor);
+  }
+
+  public RequestWriter getRequestWriter() {
+    return lbServer.getRequestWriter();
+  }
+
+  public void setRequestWriter(RequestWriter requestWriter) {
+    lbServer.setRequestWriter(requestWriter);
   }
 
   public ZkStateReader getZkStateReader() {
@@ -193,7 +206,7 @@ public class CloudSolrServer extends SolrServer {
   public String getIdField() {
     return idField;
   }
-  
+
   /** Sets the default collection for request */
   public void setDefaultCollection(String collection) {
     this.defaultCollection = collection;
@@ -283,7 +296,7 @@ public class CloudSolrServer extends SolrServer {
     DocCollection col = clusterState.getCollection(collection);
 
     DocRouter router = col.getRouter();
-    
+
     if (router instanceof ImplicitDocRouter) {
       // short circuit as optimization
       return null;
@@ -357,12 +370,12 @@ public class CloudSolrServer extends SolrServer {
       deleteQueryRequest.setDeleteQuery(deleteQuery);
       nonRoutableRequest = deleteQueryRequest;
     }
-    
+
     Set<String> paramNames = nonRoutableParams.getParameterNames();
-    
+
     Set<String> intersection = new HashSet<String>(paramNames);
     intersection.retainAll(NON_ROUTABLE_PARAMS);
-    
+
     if (nonRoutableRequest != null || intersection.size() > 0) {
       if (nonRoutableRequest == null) {
         nonRoutableRequest = new UpdateRequest();
@@ -429,7 +442,7 @@ public class CloudSolrServer extends SolrServer {
       Integer shardStatus = (Integer)header.get("status");
       int s = shardStatus.intValue();
       if(s > 0) {
-          status = s;
+        status = s;
       }
     }
 
@@ -486,12 +499,12 @@ public class CloudSolrServer extends SolrServer {
   public NamedList<Object> request(SolrRequest request)
       throws SolrServerException, IOException {
     connect();
-    
+
     ClusterState clusterState = zkStateReader.getClusterState();
-    
+
     boolean sendToLeaders = false;
     List<String> replicas = null;
-    
+
     if (request instanceof IsUpdateRequest) {
       if (request instanceof UpdateRequest) {
         NamedList response = directUpdate((AbstractUpdateRequest) request,
@@ -503,7 +516,7 @@ public class CloudSolrServer extends SolrServer {
       sendToLeaders = true;
       replicas = new ArrayList<String>();
     }
-    
+
     SolrParams reqParams = request.getParams();
     if (reqParams == null) {
       reqParams = new ModifiableSolrParams();
@@ -518,36 +531,26 @@ public class CloudSolrServer extends SolrServer {
             + liveNode.substring(0, splitPointBetweenHostPortAndContext)
             + "/"
             + URLDecoder.decode(liveNode, "UTF-8").substring(
-                splitPointBetweenHostPortAndContext + 1));
+            splitPointBetweenHostPortAndContext + 1));
       }
     } else {
       String collection = reqParams.get("collection", defaultCollection);
-      
+
       if (collection == null) {
         throw new SolrServerException(
             "No collection param specified on request and no default collection has been set.");
       }
-      
+
       Set<String> collectionsList = getCollectionList(clusterState, collection);
       if (collectionsList.size() == 0) {
         throw new SolrException(ErrorCode.BAD_REQUEST,
             "Could not find collection: " + collection);
       }
-      collection = collectionsList.iterator().next();
-      
-      StringBuilder collectionString = new StringBuilder();
-      Iterator<String> it = collectionsList.iterator();
-      for (int i = 0; i < collectionsList.size(); i++) {
-        String col = it.next();
-        collectionString.append(col);
-        if (i < collectionsList.size() - 1) {
-          collectionString.append(",");
-        }
-      }
+
       // TODO: not a big deal because of the caching, but we could avoid looking
       // at every shard
       // when getting leaders if we tweaked some things
-      
+
       // Retrieve slices from the cloud state and, for each collection
       // specified,
       // add it to the Map of slices.
@@ -562,11 +565,11 @@ public class CloudSolrServer extends SolrServer {
         ClientUtils.addSlices(slices, collectionName, colSlices, true);
       }
       Set<String> liveNodes = clusterState.getLiveNodes();
-      
+
       List<String> leaderUrlList = null;
       List<String> urlList = null;
       List<String> replicasList = null;
-      
+
       // build a map of unique nodes
       // TODO: allow filtering by group, role, etc
       Map<String,ZkNodeProps> nodes = new HashMap<String,ZkNodeProps>();
@@ -579,23 +582,37 @@ public class CloudSolrServer extends SolrServer {
               || !coreNodeProps.getState().equals(ZkStateReader.ACTIVE)) continue;
           if (nodes.put(node, nodeProps) == null) {
             if (!sendToLeaders || (sendToLeaders && coreNodeProps.isLeader())) {
-              String url = coreNodeProps.getCoreUrl();
+              String url;
+              if (reqParams.get("collection") == null) {
+                url = ZkCoreNodeProps.getCoreUrl(
+                    nodeProps.getStr(ZkStateReader.BASE_URL_PROP),
+                    defaultCollection);
+              } else {
+                url = coreNodeProps.getCoreUrl();
+              }
               urlList2.add(url);
             } else if (sendToLeaders) {
-              String url = coreNodeProps.getCoreUrl();
+              String url;
+              if (reqParams.get("collection") == null) {
+                url = ZkCoreNodeProps.getCoreUrl(
+                    nodeProps.getStr(ZkStateReader.BASE_URL_PROP),
+                    defaultCollection);
+              } else {
+                url = coreNodeProps.getCoreUrl();
+              }
               replicas.add(url);
             }
           }
         }
       }
-      
+
       if (sendToLeaders) {
         leaderUrlList = urlList2;
         replicasList = replicas;
       } else {
         urlList = urlList2;
       }
-      
+
       if (sendToLeaders) {
         theUrlList = new ArrayList<String>(leaderUrlList.size());
         theUrlList.addAll(leaderUrlList);
@@ -613,19 +630,19 @@ public class CloudSolrServer extends SolrServer {
         // System.out.println("replicas:" + theReplicas);
         theUrlList.addAll(theReplicas);
       }
-      
+
     }
-    
+
     // System.out.println("########################## MAKING REQUEST TO " +
     // theUrlList);
-    
+
     LBHttpSolrServer.Req req = new LBHttpSolrServer.Req(request, theUrlList);
     LBHttpSolrServer.Rsp rsp = lbServer.request(req);
     return rsp.getResponse();
   }
 
   private Set<String> getCollectionList(ClusterState clusterState,
-      String collection) {
+                                        String collection) {
     // Extract each comma separated collection name and store in a List.
     List<String> rawCollectionsList = StrUtils.splitSmart(collection, ",", true);
     Set<String> collectionsList = new HashSet<String>();
@@ -635,14 +652,14 @@ public class CloudSolrServer extends SolrServer {
         Aliases aliases = zkStateReader.getAliases();
         String alias = aliases.getCollectionAlias(collectionName);
         if (alias != null) {
-          List<String> aliasList = StrUtils.splitSmart(alias, ",", true); 
+          List<String> aliasList = StrUtils.splitSmart(alias, ",", true);
           collectionsList.addAll(aliasList);
           continue;
         }
-        
+
         throw new SolrException(ErrorCode.BAD_REQUEST, "Collection not found: " + collectionName);
       }
-      
+
       collectionsList.add(collectionName);
     }
     return collectionsList;
@@ -657,11 +674,11 @@ public class CloudSolrServer extends SolrServer {
         zkStateReader = null;
       }
     }
-    
+
     if (shutdownLBHttpSolrServer) {
       lbServer.shutdown();
     }
-    
+
     if (myClient!=null) {
       myClient.getConnectionManager().shutdown();
     }
@@ -674,7 +691,7 @@ public class CloudSolrServer extends SolrServer {
   public LBHttpSolrServer getLbServer() {
     return lbServer;
   }
-  
+
   public boolean isUpdatesToLeaders() {
     return updatesToLeaders;
   }

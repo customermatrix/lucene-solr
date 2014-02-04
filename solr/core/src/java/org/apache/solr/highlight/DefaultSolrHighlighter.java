@@ -602,6 +602,10 @@ public class DefaultSolrHighlighter extends SolrHighlighter implements PluginInf
     String alternateField = params.getFieldParam(fieldName, HighlightParams.ALTERNATE_FIELD);
     if (alternateField != null && alternateField.length() > 0) {
       IndexableField[] docFields = doc.getFields(alternateField);
+      if (docFields.length == 0) {
+        // The alternate field did not exist, treat the original field as fallback instead
+        docFields = doc.getFields(fieldName);
+      }
       List<String> listFields = new ArrayList<String>();
       for (IndexableField field : docFields) {
         if (field.binaryValue() == null)
@@ -690,6 +694,11 @@ final class TokenOrderingFilter extends TokenFilter {
       restoreState(queue.removeFirst().state);
       return true;
     }
+  }
+
+  @Override
+  public void reset() throws IOException {
+    // this looks wrong: but its correct.
   }
 }
 

@@ -1390,8 +1390,24 @@ public class TestIndexWriter extends LuceneTestCase {
         r = DirectoryReader.open(dir);
       }
 
-      List<String> files = Arrays.asList(dir.listAll());
+      List<String> files = new ArrayList<String>(Arrays.asList(dir.listAll()));
+
+      // RAMDir won't have a write.lock, but fs dirs will:
+      files.remove("write.lock");
+
       assertTrue(files.contains("_0.cfs"));
+      assertTrue(files.contains("_0.cfe"));
+      assertTrue(files.contains("_0.si"));
+      if (iter == 1) {
+        // we run a full commit so there should be a segments file etc.
+        assertTrue(files.contains("segments_1"));
+        assertTrue(files.contains("segments.gen"));
+        assertEquals(files.toString(), files.size(), 5);
+      } else {
+        // this is an NRT reopen - no segments files yet
+
+        assertEquals(files.toString(), files.size(), 3);
+      }
       w.addDocument(doc);
       w.forceMerge(1);
       if (iter == 1) {
@@ -1650,14 +1666,15 @@ public class TestIndexWriter extends LuceneTestCase {
 
     @Override
     public void reset() throws IOException {
-       this.upto = 0;
-       final StringBuilder b = new StringBuilder();
-       final char[] buffer = new char[1024];
-       int n;
-       while ((n = input.read(buffer)) != -1) {
-         b.append(buffer, 0, n);
-       }
-       this.tokens = b.toString().split(" ");
+      super.reset();
+      this.upto = 0;
+      final StringBuilder b = new StringBuilder();
+      final char[] buffer = new char[1024];
+      int n;
+      while ((n = input.read(buffer)) != -1) {
+        b.append(buffer, 0, n);
+      }
+      this.tokens = b.toString().split(" ");
     }
   }
 
@@ -2369,6 +2386,29 @@ public class TestIndexWriter extends LuceneTestCase {
     evilWriter.deleteDocuments(new MatchAllDocsQuery());
     evilWriter.forceMerge(1);
     evilWriter.close();
+    dir.close();
+  }
+
+  // LUCENE-5239
+  public void testDeleteSameTermAcrossFields() throws Exception {
+    Directory dir = newDirectory();
+    IndexWriterConfig iwc = new IndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()));
+    IndexWriter w = new IndexWriter(dir, iwc);
+    Document doc = new Document();
+    doc.add(new TextField("a", "foo", Field.Store.NO));
+    w.addDocument(doc);
+
+    // Should not delete the document; with LUCENE-5239 the
+    // "foo" from the 2nd delete term would incorrectly
+    // match field a's "foo":
+    w.deleteDocuments(new Term("a", "xxx"));
+    w.deleteDocuments(new Term("b", "foo"));
+    IndexReader r = w.getReader();
+    w.close();
+
+    // Make sure document was not (incorrectly) deleted:
+    assertEquals(1, r.numDocs());
+    r.close();
     dir.close();
   }
 }

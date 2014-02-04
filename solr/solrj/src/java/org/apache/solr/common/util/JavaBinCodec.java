@@ -16,6 +16,7 @@
  */
 package org.apache.solr.common.util;
 
+import org.apache.solr.common.EnumFieldValue;
 import org.noggit.CharArr;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
@@ -26,6 +27,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.*;
+import java.util.Map.Entry;
 import java.nio.ByteBuffer;
 
 /**
@@ -62,7 +64,9 @@ public class JavaBinCodec {
           END = 15,
 
           SOLRINPUTDOC = 16,
-
+          SOLRINPUTDOC_CHILDS = 17,
+          ENUM_FIELD_VALUE = 18,
+          MAP_ENTRY = 19,
           // types that combine tag + length (or other info) in a single byte
           TAG_AND_LEN = (byte) (1 << 5),
           STR = (byte) (1 << 5),
@@ -223,6 +227,10 @@ public class JavaBinCodec {
         return END_OBJ;
       case SOLRINPUTDOC:
         return readSolrInputDocument(dis);
+      case ENUM_FIELD_VALUE:
+        return readEnumFieldValue(dis);
+      case MAP_ENTRY:
+        return readMapEntry(dis);
     }
 
     throw new RuntimeException("Unknown type " + tagByte);
@@ -276,6 +284,14 @@ public class JavaBinCodec {
     }
     if (val instanceof Iterable) {
       writeIterator(((Iterable) val).iterator());
+      return true;
+    }
+    if (val instanceof EnumFieldValue) {
+      writeEnumFieldValue((EnumFieldValue) val);
+      return true;
+    }
+    if (val instanceof Map.Entry) {
+      writeMapEntry((Map.Entry)val);
       return true;
     }
     return false;
@@ -461,6 +477,60 @@ public class JavaBinCodec {
       l.add(readVal(dis));
     }
     return l;
+  }
+
+  /**
+   * write {@link EnumFieldValue} as tag+int value+string value
+   * @param enumFieldValue to write
+   */
+  public void writeEnumFieldValue(EnumFieldValue enumFieldValue) throws IOException {
+    writeTag(ENUM_FIELD_VALUE);
+    writeInt(enumFieldValue.toInt());
+    writeStr(enumFieldValue.toString());
+  }
+  
+  public void writeMapEntry(Entry<Object,Object> val) throws IOException {
+    writeTag(MAP_ENTRY);
+    writeVal(val.getKey());
+    writeVal(val.getValue());
+  }
+
+  /**
+   * read {@link EnumFieldValue} (int+string) from input stream
+   * @param dis data input stream
+   * @return {@link EnumFieldValue}
+   */
+  public EnumFieldValue readEnumFieldValue(DataInputInputStream dis) throws IOException {
+    Integer intValue = (Integer) readVal(dis);
+    String stringValue = (String) readVal(dis);
+    return new EnumFieldValue(intValue, stringValue);
+  }
+  
+
+  public Map.Entry<Object,Object> readMapEntry(DataInputInputStream dis) throws IOException {
+    final Object key = readVal(dis);
+    final Object value = readVal(dis);
+    return new Map.Entry<Object,Object>() {
+
+      @Override
+      public Object getKey() {
+        return key;
+      }
+
+      @Override
+      public Object getValue() {
+        return value;
+      }
+      
+      @Override
+      public String toString() {
+        return "MapEntry[" + key.toString() + ":" + value.toString() + "]";
+      }
+
+      @Override
+      public Object setValue(Object value) {
+        throw new UnsupportedOperationException();
+      }};
   }
 
   /**

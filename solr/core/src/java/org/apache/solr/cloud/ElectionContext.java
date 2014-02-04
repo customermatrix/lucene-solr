@@ -1,25 +1,29 @@
 package org.apache.solr.cloud;
 
+import java.io.IOException;
+import java.util.Map;
+
+import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.cloud.ClusterState;
 import org.apache.solr.common.cloud.Replica;
 import org.apache.solr.common.cloud.Slice;
 import org.apache.solr.common.cloud.SolrZkClient;
+import org.apache.solr.common.cloud.ZkCmdExecutor;
 import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.core.CoreContainer;
 import org.apache.solr.core.SolrCore;
+import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.update.UpdateLog;
+import org.apache.solr.util.RefCounted;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.util.Map;
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -86,6 +90,15 @@ class ShardLeaderElectionContextBase extends ElectionContext {
     this.zkClient = zkStateReader.getZkClient();
     this.shardId = shardId;
     this.collection = collection;
+    
+    try {
+      new ZkCmdExecutor(zkStateReader.getZkClient().getZkClientTimeout()).ensureExists(ZkStateReader.COLLECTIONS_ZKNODE + "/" + collection, zkClient);
+    } catch (KeeperException e) {
+      throw new SolrException(ErrorCode.SERVER_ERROR, e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new SolrException(ErrorCode.SERVER_ERROR, e);
+    }
   }
 
   @Override
@@ -111,9 +124,9 @@ class ShardLeaderElectionContextBase extends ElectionContext {
 final class ShardLeaderElectionContext extends ShardLeaderElectionContextBase {
   private static Logger log = LoggerFactory.getLogger(ShardLeaderElectionContext.class);
   
-  private ZkController zkController;
-  private CoreContainer cc;
-  private SyncStrategy syncStrategy = new SyncStrategy();
+  private final ZkController zkController;
+  private final CoreContainer cc;
+  private final SyncStrategy syncStrategy;
 
   private volatile boolean isClosed = false;
   
@@ -124,6 +137,7 @@ final class ShardLeaderElectionContext extends ShardLeaderElectionContextBase {
         zkController.getZkStateReader());
     this.zkController = zkController;
     this.cc = cc;
+    syncStrategy = new SyncStrategy(cc.getUpdateShardHandler());
   }
   
   @Override
@@ -207,36 +221,25 @@ final class ShardLeaderElectionContext extends ShardLeaderElectionContextBase {
           success = true;
         }
       }
-
-
-      // if !success but no one else is in active mode,
-      // we are the leader anyway
-      // TODO: should we also be leader if there is only one other active?
-      // if we couldn't sync with it, it shouldn't be able to sync with us
-      // TODO: this needs to be moved to the election context - the logic does
-      // not belong here.
-      if (!success
-          && !areAnyOtherReplicasActive(zkController, leaderProps, collection,
-              shardId)) {
-        log.info("Sync was not a success but no one else is active! I am the leader");
-        success = true;
-      }
       
       // solrcloud_debug
-      // try {
-      // RefCounted<SolrIndexSearcher> searchHolder =
-      // core.getNewestSearcher(false);
-      // SolrIndexSearcher searcher = searchHolder.get();
-      // try {
-      // System.out.println(core.getCoreDescriptor().getCoreContainer().getZkController().getNodeName()
-      // + " synched "
-      // + searcher.search(new MatchAllDocsQuery(), 1).totalHits);
-      // } finally {
-      // searchHolder.decref();
-      // }
-      // } catch (Exception e) {
-      //
-      // }
+      if (log.isDebugEnabled()) {
+        try {
+          RefCounted<SolrIndexSearcher> searchHolder = core
+              .getNewestSearcher(false);
+          SolrIndexSearcher searcher = searchHolder.get();
+          try {
+            log.debug(core.getCoreDescriptor().getCoreContainer()
+                .getZkController().getNodeName()
+                + " synched "
+                + searcher.search(new MatchAllDocsQuery(), 1).totalHits);
+          } finally {
+            searchHolder.decref();
+          }
+        } catch (Exception e) {
+          throw new SolrException(ErrorCode.SERVER_ERROR, null, e);
+        }
+      }
       if (!success) {
         rejoinLeaderElection(leaderSeqPath, core);
         return;
@@ -416,6 +419,14 @@ final class OverseerElectionContext extends ElectionContext {
     super(zkNodeName, "/overseer_elect", "/overseer_elect/leader", null, zkClient);
     this.overseer = overseer;
     this.zkClient = zkClient;
+    try {
+      new ZkCmdExecutor(zkClient.getZkClientTimeout()).ensureExists("/overseer_elect", zkClient);
+    } catch (KeeperException e) {
+      throw new SolrException(ErrorCode.SERVER_ERROR, e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new SolrException(ErrorCode.SERVER_ERROR, e);
+    }
   }
 
   @Override
@@ -432,4 +443,8 @@ final class OverseerElectionContext extends ElectionContext {
     overseer.start(id);
   }
   
+  public void cancelElection() throws InterruptedException, KeeperException {
+    super.cancelElection();
+    overseer.close();
+  }
 }

@@ -234,7 +234,7 @@ public abstract class LuceneTestCase extends Assert {
    * Use this constant when creating Analyzers and any other version-dependent stuff.
    * <p><b>NOTE:</b> Change this when development starts for new Lucene version:
    */
-  public static final Version TEST_VERSION_CURRENT = Version.LUCENE_45;
+  public static final Version TEST_VERSION_CURRENT = Version.LUCENE_46;
 
   /**
    * True if and only if tests are run in verbose mode. If this flag is false
@@ -333,6 +333,7 @@ public abstract class LuceneTestCase extends Assert {
   // Fields initialized in class or instance rules.
   // -----------------------------------------------------------------
 
+  // TODO: why do we have this? This should just use the OLD_FORMAT_IMPERSONATION...
   /**
    * @lucene.internal
    */
@@ -340,12 +341,12 @@ public abstract class LuceneTestCase extends Assert {
 
   /**
    * When {@code true}, Codecs for old Lucene version will support writing
-   * indexes in that format. Defaults to {@code true}, can be disabled by
-   * spdecific tests on demand.
+   * indexes in that format. Defaults to {@code false}, can be disabled by
+   * specific tests on demand.
    * 
    * @lucene.internal
    */
-  public static boolean OLD_FORMAT_IMPERSONATION_IS_ACTIVE = true;
+  public static boolean OLD_FORMAT_IMPERSONATION_IS_ACTIVE = false;
 
   // -----------------------------------------------------------------
   // Class level (suite) rules.
@@ -1404,6 +1405,17 @@ public abstract class LuceneTestCase extends Assert {
     }
     String name = Codec.getDefault().getName();
     if (name.equals("Appending") || name.equals("Lucene40") || name.equals("Lucene41") || name.equals("Lucene42")) {
+      return false;
+    }
+    return true;
+  }
+  
+  /** Returns true if the codec "supports" field updates. */
+  public static boolean defaultCodecSupportsFieldUpdates() {
+    String name = Codec.getDefault().getName();
+    if (name.equals("Lucene3x") || name.equals("Appending")
+        || name.equals("Lucene40") || name.equals("Lucene41")
+        || name.equals("Lucene42") || name.equals("Lucene45")) {
       return false;
     }
     return true;

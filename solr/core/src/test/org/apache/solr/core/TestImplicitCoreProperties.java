@@ -1,6 +1,7 @@
 package org.apache.solr.core;
 
 import org.apache.solr.SolrTestCaseJ4;
+import java.io.File;
 import org.junit.Test;
 
 /*
@@ -30,7 +31,13 @@ public class TestImplicitCoreProperties extends SolrTestCaseJ4 {
     CoreContainer cc = createCoreContainer(TEST_HOME(), SOLRXML);
     try {
       cc.load();
-      assertQ(req("q", "*:*"), "//str[@name='dummyParam'][.='collection1']");
+      assertQ(req("q", "*:*")
+          , "//str[@name='dummy1'][.='collection1']"
+          , "//str[@name='dummy2'][.='data"+File.separator+"']"
+          , "//str[@name='dummy3'][.='solrconfig-implicitproperties.xml']"
+          , "//str[@name='dummy4'][.='schema.xml']"
+          , "//str[@name='dummy5'][.='false']"
+      );
       // Test for SOLR-5279 - make sure properties are there on core reload
       cc.reload("collection1");
     }

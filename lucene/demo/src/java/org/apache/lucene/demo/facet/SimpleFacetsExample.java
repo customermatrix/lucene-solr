@@ -93,7 +93,7 @@ public class SimpleFacetsExample {
         new CountFacetRequest(new CategoryPath("Publish Date"), 10), 
         new CountFacetRequest(new CategoryPath("Author"), 10));
 
-    // Aggregatses the facet counts
+    // Aggregates the facet counts
     FacetsCollector fc = FacetsCollector.create(fsp, searcher.getIndexReader(), taxoReader);
 
     // MatchAllDocsQuery is for "browsing" (counts facets

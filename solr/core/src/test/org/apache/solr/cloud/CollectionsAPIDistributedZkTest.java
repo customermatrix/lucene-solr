@@ -48,14 +48,17 @@ import org.apache.lucene.util.LuceneTestCase.Slow;
 import org.apache.lucene.util._TestUtil;
 import org.apache.solr.SolrTestCaseJ4;
 import org.apache.solr.client.solrj.SolrQuery;
+import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.embedded.JettySolrRunner;
 import org.apache.solr.client.solrj.impl.CloudSolrServer;
 import org.apache.solr.client.solrj.impl.HttpSolrServer;
 import org.apache.solr.client.solrj.impl.HttpSolrServer.RemoteSolrException;
+import org.apache.solr.client.solrj.request.CollectionAdminRequest;
 import org.apache.solr.client.solrj.request.CoreAdminRequest;
 import org.apache.solr.client.solrj.request.CoreAdminRequest.Create;
 import org.apache.solr.client.solrj.request.QueryRequest;
+import org.apache.solr.client.solrj.response.CollectionAdminResponse;
 import org.apache.solr.client.solrj.response.CoreAdminResponse;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.common.SolrException;
@@ -80,7 +83,6 @@ import org.apache.solr.core.SolrInfoMBean.Category;
 import org.apache.solr.core.SolrResourceLoader;
 import org.apache.solr.servlet.SolrDispatchFilter;
 import org.apache.solr.update.DirectUpdateHandler2;
-import org.apache.solr.update.SolrCmdDistributor.Request;
 import org.apache.solr.util.DefaultSolrThreadFactory;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -98,12 +100,11 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
       Integer.MAX_VALUE, 5, TimeUnit.SECONDS, new SynchronousQueue<Runnable>(),
       new DefaultSolrThreadFactory("testExecutor"));
   
-  CompletionService<Request> completionService;
-  Set<Future<Request>> pending;
-
+  CompletionService<Object> completionService;
+  Set<Future<Object>> pending;
+  
   // we randomly use a second config set rather than just one
   private boolean secondConfigSet = random().nextBoolean();
-
   private boolean oldStyleSolrXml = false;
   
   @BeforeClass
@@ -116,8 +117,6 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
   public void setUp() throws Exception {
     super.setUp();
     
-    System.setProperty("numShards", Integer.toString(sliceCount));
-    System.setProperty("solr.xml.persist", "true");
     useJettyDataDir = false;
     
     oldStyleSolrXml = random().nextBoolean();
@@ -152,7 +151,9 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
       AbstractZkTestCase.putConfig("conf2", zkClient, solrhome, "elevate.xml");
       zkClient.close();
     }
-
+    
+    System.setProperty("numShards", Integer.toString(sliceCount));
+    System.setProperty("solr.xml.persist", "true");
   }
   
   protected String getSolrXml() {
@@ -166,8 +167,8 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     
     sliceCount = 2;
     shardCount = 4;
-    completionService = new ExecutorCompletionService<Request>(executor);
-    pending = new HashSet<Future<Request>>();
+    completionService = new ExecutorCompletionService<Object>(executor);
+    pending = new HashSet<Future<Object>>();
     checkCreatedVsState = false;
     
   }
@@ -191,6 +192,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
   
   @Override
   public void doTest() throws Exception {
+    testSolrJAPICalls();
     testNodesUsedByCreate();
     testCollectionsAPI();
     testErrorHandling();
@@ -223,7 +225,6 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     params.set("name", collectionName);
     QueryRequest request = new QueryRequest(params);
     request.setPath("/admin/collections");
-
     try {
       NamedList<Object> resp = createNewSolrServer("", baseUrl)
           .request(request);
@@ -237,6 +238,86 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     assertFalse(cloudClient.getZkStateReader().getZkClient().exists(ZkStateReader.COLLECTIONS_ZKNODE + "/" + collectionName, true));
     
   }
+
+  private void testSolrJAPICalls() throws Exception {
+    SolrServer server = createNewSolrServer("", getBaseUrl((HttpSolrServer) clients.get(0)));
+    CollectionAdminResponse response;
+    Map<String, NamedList<Integer>> coresStatus;
+    Map<String, NamedList<Integer>> nodesStatus;
+
+    response = CollectionAdminRequest.createCollection("solrj_collection",
+                                                       2, 2, null,
+                                                       null, "conf1", "myOwnField",
+                                                       server);
+    assertEquals(0, response.getStatus());
+    assertTrue(response.isSuccess());
+    coresStatus = response.getCollectionCoresStatus();
+    assertEquals(4, coresStatus.size());
+    for (int i=0; i<4; i++) {
+      NamedList<Integer> status = coresStatus.get("solrj_collection_shard" + (i/2+1) + "_replica" + (i%2+1));
+      assertEquals(0, (int)status.get("status"));
+      assertTrue(status.get("QTime") > 0);
+    }
+
+    response = CollectionAdminRequest.createCollection("solrj_implicit",
+                                                       "shardA,shardB", "conf1", server);
+    assertEquals(0, response.getStatus());
+    assertTrue(response.isSuccess());
+    coresStatus = response.getCollectionCoresStatus();
+    assertEquals(2, coresStatus.size());
+
+    response = CollectionAdminRequest.createShard("solrj_implicit", "shardC", server);
+    assertEquals(0, response.getStatus());
+    assertTrue(response.isSuccess());
+    coresStatus = response.getCollectionCoresStatus();
+    assertEquals(1, coresStatus.size());
+    assertEquals(0, (int) coresStatus.get("solrj_implicit_shardC_replica1").get("status"));
+
+    response = CollectionAdminRequest.deleteShard("solrj_implicit", "shardC", server);
+    assertEquals(0, response.getStatus());
+    assertTrue(response.isSuccess());
+    nodesStatus = response.getCollectionNodesStatus();
+    assertEquals(1, nodesStatus.size());
+
+    response = CollectionAdminRequest.deleteCollection("solrj_implicit", server);
+    assertEquals(0, response.getStatus());
+    assertTrue(response.isSuccess());
+    nodesStatus = response.getCollectionNodesStatus();
+    assertEquals(2, nodesStatus.size());
+
+    response = CollectionAdminRequest.createCollection("conf1", 4, "conf1", server);
+    assertEquals(0, response.getStatus());
+    assertTrue(response.isSuccess());
+
+    response = CollectionAdminRequest.reloadCollection("conf1", server);
+    assertEquals(0, response.getStatus());
+
+    response = CollectionAdminRequest.createAlias("solrj_alias", "conf1,solrj_collection", server);
+    assertEquals(0, response.getStatus());
+
+    response = CollectionAdminRequest.deleteAlias("solrj_alias", server);
+    assertEquals(0, response.getStatus());
+
+    response = CollectionAdminRequest.splitShard("conf1", "shard1", server);
+    assertEquals(0, response.getStatus());
+    assertTrue(response.isSuccess());
+    coresStatus = response.getCollectionCoresStatus();
+    assertEquals(0, (int) coresStatus.get("conf1_shard1_0_replica1").get("status"));
+    assertEquals(0, (int) coresStatus.get("conf1_shard1_0_replica1").get("status"));
+
+    response = CollectionAdminRequest.deleteCollection("conf1", server);
+    assertEquals(0, response.getStatus());
+    nodesStatus = response.getCollectionNodesStatus();
+    assertTrue(response.isSuccess());
+    assertEquals(4, nodesStatus.size());
+
+    response = CollectionAdminRequest.deleteCollection("solrj_collection", server);
+    assertEquals(0, response.getStatus());
+    nodesStatus = response.getCollectionNodesStatus();
+    assertTrue(response.isSuccess());
+    assertEquals(4, nodesStatus.size());
+  }
+
 
   private void deletePartiallyCreatedCollection() throws Exception {
     final String baseUrl = getBaseUrl((HttpSolrServer) clients.get(0));
@@ -281,10 +362,10 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     String baseUrl = getBaseUrl((HttpSolrServer) clients.get(0));
     // now try to remove a collection when a couple of it's nodes are down
     if (secondConfigSet) {
-      createCollection(null, "halfdeletedcollection2", 3, 2, 6,
+      createCollection(null, "halfdeletedcollection2", 3, 3, 6,
           createNewSolrServer("", baseUrl), null, "conf2");
     } else {
-      createCollection(null, "halfdeletedcollection2", 3, 2, 6,
+      createCollection(null, "halfdeletedcollection2", 3, 3, 6,
           createNewSolrServer("", baseUrl), null);
     }
     
@@ -293,6 +374,11 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     // stop a couple nodes
     ChaosMonkey.stop(jettys.get(0));
     ChaosMonkey.stop(jettys.get(1));
+    
+    // wait for leaders to settle out
+    for (int i = 1; i < 4; i++) {
+      cloudClient.getZkStateReader().getLeaderRetry("halfdeletedcollection2", "shard" + i, 15000);
+    }
     
     baseUrl = getBaseUrl((HttpSolrServer) clients.get(2));
     
@@ -306,8 +392,8 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     createNewSolrServer("", baseUrl).request(request);
     
     cloudClient.getZkStateReader().updateClusterState(true);
-    assertFalse(cloudClient.getZkStateReader().getClusterState()
-        .getCollections().contains("halfdeletedcollection2"));
+
+    assertFalse("Still found collection that should be gone", cloudClient.getZkStateReader().getClusterState().hasCollection("halfdeletedcollection2"));
     
   }
 
@@ -868,9 +954,13 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
         while (shardIt.hasNext()) {
           Entry<String,Replica> shardEntry = shardIt.next();
           ZkCoreNodeProps coreProps = new ZkCoreNodeProps(shardEntry.getValue());
-          CoreAdminResponse mcr = CoreAdminRequest.getStatus(
-              coreProps.getCoreName(),
-              new HttpSolrServer(coreProps.getBaseUrl()));
+          HttpSolrServer server = new HttpSolrServer(coreProps.getBaseUrl());
+          CoreAdminResponse mcr;
+          try {
+            mcr = CoreAdminRequest.getStatus(coreProps.getCoreName(), server);
+          } finally {
+            server.shutdown();
+          }
           long before = mcr.getStartTime(coreProps.getCoreName()).getTime();
           urlToTime.put(coreProps.getCoreUrl(), before);
         }
@@ -904,7 +994,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     throw new RuntimeException("Could not find a live node for collection:" + collection);
   }
 
-  private void waitForNon403or404or503(HttpSolrServer collectionClient)
+/*  private void waitForNon403or404or503(HttpSolrServer collectionClient)
       throws Exception {
     SolrException exp = null;
     long timeoutAt = System.currentTimeMillis() + 30000;
@@ -928,7 +1018,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     }
 
     fail("Could not find the new collection - " + exp.code() + " : " + collectionClient.getBaseURL());
-  }
+  }*/
   
   private void checkForMissingCollection(String collectionName)
       throws Exception {

@@ -61,6 +61,8 @@ public final class SegmentInfo {
 
   private Map<String,String> diagnostics;
   
+  /** @deprecated not used anymore */
+  @Deprecated
   private Map<String,String> attributes;
 
   // Tracks the Lucene version this segment was created with, since 3.1. Null
@@ -78,6 +80,16 @@ public final class SegmentInfo {
    *  written. */
   public Map<String, String> getDiagnostics() {
     return diagnostics;
+  }
+  
+  /**
+   * Construct a new complete SegmentInfo instance from input.
+   * <p>Note: this is public only to allow access from
+   * the codecs package.</p>
+   */
+  public SegmentInfo(Directory dir, String version, String name, int docCount, 
+      boolean isCompoundFile, Codec codec, Map<String,String> diagnostics) {
+    this(dir, version, name, docCount, isCompoundFile, codec, diagnostics, null);
   }
 
   /**
@@ -128,7 +140,7 @@ public final class SegmentInfo {
   public void setCodec(Codec codec) {
     assert this.codec == null;
     if (codec == null) {
-      throw new IllegalArgumentException("segmentCodecs must be non-null");
+      throw new IllegalArgumentException("codec must be non-null");
     }
     this.codec = codec;
   }
@@ -179,7 +191,6 @@ public final class SegmentInfo {
    *  left off when there are no deletions).</p>
    */
   public String toString(Directory dir, int delCount) {
-
     StringBuilder s = new StringBuilder();
     s.append(name).append('(').append(version == null ? "?" : version).append(')').append(':');
     char cfs = getUseCompoundFile() ? 'c' : 'C';
@@ -271,7 +282,10 @@ public final class SegmentInfo {
     
   /**
    * Get a codec attribute value, or null if it does not exist
+   * 
+   * @deprecated no longer supported
    */
+  @Deprecated
   public String getAttribute(String key) {
     if (attributes == null) {
       return null;
@@ -283,13 +297,16 @@ public final class SegmentInfo {
   /**
    * Puts a codec attribute value.
    * <p>
-   * This is a key-value mapping for the field that the codec can use
-   * to store additional metadata, and will be available to the codec
-   * when reading the segment via {@link #getAttribute(String)}
+   * This is a key-value mapping for the field that the codec can use to store
+   * additional metadata, and will be available to the codec when reading the
+   * segment via {@link #getAttribute(String)}
    * <p>
-   * If a value already exists for the field, it will be replaced with 
-   * the new value.
+   * If a value already exists for the field, it will be replaced with the new
+   * value.
+   * 
+   * @deprecated no longer supported
    */
+  @Deprecated
   public String putAttribute(String key, String value) {
     if (attributes == null) {
       attributes = new HashMap<String,String>();
@@ -301,7 +318,10 @@ public final class SegmentInfo {
    * Returns the internal codec attributes map.
    *
    * @return internal codec attributes map. May be null if no mappings exist.
+   * 
+   * @deprecated no longer supported
    */
+  @Deprecated
   public Map<String,String> attributes() {
     return attributes;
   }
