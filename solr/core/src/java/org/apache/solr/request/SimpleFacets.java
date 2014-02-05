@@ -25,6 +25,8 @@ import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.FieldCache;
 import org.apache.lucene.search.Filter;
@@ -233,7 +235,11 @@ public class SimpleFacets {
       if (!excludeSet.containsKey(rb.getQuery())) {
          /* Begin SEA-825 */
         if (isNested) {
-          qlist.add(new ToChildBlockJoinQuery(rb.getQuery(), parentFilter, false));
+          BooleanQuery wrappedQuery = new BooleanQuery();
+          wrappedQuery.add(new BooleanClause(rb.getQuery(), BooleanClause.Occur.MUST));
+          wrappedQuery.add(new BooleanClause(new TermQuery(new Term("_parent_", "T")), BooleanClause.Occur.MUST));
+
+          qlist.add(new ToChildBlockJoinQuery(wrappedQuery, parentFilter, false));
         } else {
           qlist.add(rb.getQuery());
         }
