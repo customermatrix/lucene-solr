@@ -250,13 +250,16 @@ public class SimpleFacets {
       if (rb.getFilters() != null) {
         for (Query q : rb.getFilters()) {
           if (!excludeSet.containsKey(q)) {
-            /* Begin SEA-825 */
+            /* Begin SEA-825 / SEA-967 */
             if (isNested) {
-              qlist.add(new ToChildBlockJoinQuery(q, parentFilter, false));
+              BooleanQuery wrappedQuery = new BooleanQuery();
+              wrappedQuery.add(new BooleanClause(q, BooleanClause.Occur.MUST));
+              wrappedQuery.add(new BooleanClause(new TermQuery(new Term("_parent_", "T")), BooleanClause.Occur.MUST));
+              qlist.add(new ToChildBlockJoinQuery(wrappedQuery, parentFilter, false));
             } else {
               qlist.add(q);
             }
-            /* End SEA-825 */
+            /* End SEA-825 / SEA-967*/
           }
         }
       }
