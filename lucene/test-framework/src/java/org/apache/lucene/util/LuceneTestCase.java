@@ -230,11 +230,12 @@ public abstract class LuceneTestCase extends Assert {
   // for all suites ever since.
   // -----------------------------------------------------------------
 
+  // :Post-Release-Update-Version.LUCENE_XY:
   /** 
    * Use this constant when creating Analyzers and any other version-dependent stuff.
    * <p><b>NOTE:</b> Change this when development starts for new Lucene version:
    */
-  public static final Version TEST_VERSION_CURRENT = Version.LUCENE_46;
+  public static final Version TEST_VERSION_CURRENT = Version.LUCENE_47;
 
   /**
    * True if and only if tests are run in verbose mode. If this flag is false
@@ -334,11 +335,6 @@ public abstract class LuceneTestCase extends Assert {
   // -----------------------------------------------------------------
 
   // TODO: why do we have this? This should just use the OLD_FORMAT_IMPERSONATION...
-  /**
-   * @lucene.internal
-   */
-  public static boolean PREFLEX_IMPERSONATION_IS_ACTIVE;
-
   /**
    * When {@code true}, Codecs for old Lucene version will support writing
    * indexes in that format. Defaults to {@code false}, can be disabled by
@@ -1103,7 +1099,7 @@ public abstract class LuceneTestCase extends Assert {
       if (!newType.storeTermVectorPositions()) {
         newType.setStoreTermVectorPositions(random.nextBoolean());
         
-        if (newType.storeTermVectorPositions() && !newType.storeTermVectorPayloads() && !PREFLEX_IMPERSONATION_IS_ACTIVE) {
+        if (newType.storeTermVectorPositions() && !newType.storeTermVectorPayloads() && !OLD_FORMAT_IMPERSONATION_IS_ACTIVE) {
           newType.setStoreTermVectorPayloads(random.nextBoolean());
         }
       }
@@ -1383,6 +1379,18 @@ public abstract class LuceneTestCase extends Assert {
     } catch (Exception e) {
       throw new IOException("Cannot find resource: " + name);
     }
+  }
+  
+  /** Returns true if the default codec supports single valued docvalues with missing values */ 
+  public static boolean defaultCodecSupportsMissingDocValues() {
+    String name = Codec.getDefault().getName();
+    if (name.equals("Lucene3x") ||
+        name.equals("Lucene40") || name.equals("Appending") ||
+        name.equals("Lucene41") || 
+        name.equals("Lucene42")) {
+      return false;
+    }
+    return true;
   }
   
   /** Returns true if the default codec supports SORTED_SET docvalues */ 

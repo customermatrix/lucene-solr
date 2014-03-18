@@ -18,16 +18,18 @@
 package org.apache.solr.handler.component;
 
 import org.apache.solr.common.SolrException;
+import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.ShardParams;
-import org.apache.solr.util.RTimer;
+import org.apache.solr.common.util.ContentStream;
 import org.apache.solr.core.CloseHook;
 import org.apache.solr.core.PluginInfo;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.handler.RequestHandlerBase;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.response.SolrQueryResponse;
+import org.apache.solr.util.RTimer;
 import org.apache.solr.util.SolrPluginUtils;
 import org.apache.solr.util.plugin.PluginInfoInitialized;
 import org.apache.solr.util.plugin.SolrCoreAware;
@@ -168,6 +170,10 @@ public class SearchHandler extends RequestHandlerBase implements SolrCoreAware ,
   {
     // int sleep = req.getParams().getInt("sleep",0);
     // if (sleep > 0) {log.error("SLEEPING for " + sleep);  Thread.sleep(sleep);}
+    if (req.getContentStreams() != null && req.getContentStreams().iterator().hasNext()) {
+      throw new SolrException(ErrorCode.BAD_REQUEST, "Search requests cannot accept content streams");
+    }
+    
     ResponseBuilder rb = new ResponseBuilder(req, rsp, components);
     if (rb.requestInfo != null) {
       rb.requestInfo.setResponseBuilder(rb);
@@ -265,7 +271,7 @@ public class SearchHandler extends RequestHandlerBase implements SolrCoreAware ,
             for (String shard : sreq.actualShards) {
               ModifiableSolrParams params = new ModifiableSolrParams(sreq.params);
               params.remove(ShardParams.SHARDS);      // not a top-level request
-              params.set("distrib", "false");               // not a top-level request
+              params.set(CommonParams.DISTRIB, "false");               // not a top-level request
               params.remove("indent");
               params.remove(CommonParams.HEADER_ECHO_PARAMS);
               params.set(ShardParams.IS_SHARD, true);  // a sub (shard) request
@@ -304,6 +310,10 @@ public class SearchHandler extends RequestHandlerBase implements SolrCoreAware ,
                   throw (SolrException)srsp.getException();
                 } else {
                   throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, srsp.getException());
+                }
+              } else {
+                if(rsp.getResponseHeader().get("partialResults") == null) {
+                  rsp.getResponseHeader().add("partialResults", Boolean.TRUE);
                 }
               }
             }

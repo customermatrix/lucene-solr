@@ -63,7 +63,7 @@
             (int, float, boolean, string...)
      -->
 
- <fields>
+<fields>
    <!-- Valid attributes for fields:
      name: mandatory - the name for the field
      type: mandatory - the name of a field type from the 
@@ -776,6 +776,18 @@
         <!-- for any non-CJK -->
         <filter class="solr.LowerCaseFilterFactory"/>
         <filter class="solr.CJKBigramFilterFactory"/>
+      </analyzer>
+    </fieldType>
+
+    <!-- Kurdish -->
+    <fieldType name="text_ckb" class="solr.TextField" positionIncrementGap="100">
+      <analyzer>
+        <tokenizer class="solr.StandardTokenizerFactory"/>
+        <filter class="solr.SoraniNormalizationFilterFactory"/>
+        <!-- for any latin text -->
+        <filter class="solr.LowerCaseFilterFactory"/>
+        <filter class="solr.StopFilterFactory" ignoreCase="true" words="lang/stopwords_ckb.txt"/>
+        <filter class="solr.SoraniStemFilterFactory"/>
       </analyzer>
     </fieldType>
 

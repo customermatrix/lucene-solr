@@ -17,25 +17,15 @@
 package org.apache.solr.search;
 
 import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.SortField;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.MapSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.request.SolrQueryRequest;
-import org.apache.solr.schema.IndexSchema;
-import org.apache.solr.schema.SchemaField;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * <b>Note: This API is experimental and may change in non backward-compatible ways in the future</b>
@@ -43,7 +33,6 @@ import java.util.Map;
  *
  */
 public abstract class QParser {
-  private final Logger logger = LoggerFactory.getLogger(QParser.class);
   protected String qstr;
   protected SolrParams params;
   protected SolrParams localParams;
@@ -219,43 +208,10 @@ public abstract class QParser {
   }
 
   /**
-   * use common params to look up pageScore and pageDoc in global params
-   * @return the ScoreDoc
-   */
-  public ScoreDoc getPaging() throws SyntaxError
-  {
-    return null;
-
-    /*** This is not ready for prime-time... see SOLR-1726
-
-    String pageScoreS = null;
-    String pageDocS = null;
-
-    pageScoreS = params.get(CommonParams.PAGESCORE);
-    pageDocS = params.get(CommonParams.PAGEDOC);
-
-    if (pageScoreS == null || pageDocS == null)
-      return null;
-
-    int pageDoc = pageDocS != null ? Integer.parseInt(pageDocS) : -1;
-    float pageScore = pageScoreS != null ? new Float(pageScoreS) : -1;
-    if(pageDoc != -1 && pageScore != -1){
-      return new ScoreDoc(pageDoc, pageScore);
-    }
-    else {
-      return null;
-    }
-
-    ***/
-  }
-  
-  /**
-   *
    * @param useGlobalParams look up sort, start, rows in global params if not in local params
-   * @param schema
    * @return the sort specification
    */
-  public SortSpec getSort(boolean useGlobalParams, IndexSchema schema) throws SyntaxError {
+  public SortSpec getSort(boolean useGlobalParams) throws SyntaxError {
     getQuery(); // ensure query is parsed first
 
     String sortStr = null;
@@ -288,25 +244,11 @@ public abstract class QParser {
     int start = startS != null ? Integer.parseInt(startS) : 0;
     int rows = rowsS != null ? Integer.parseInt(rowsS) : 10;
 
-    Sort sort = null;
-    if( sortStr != null ) {
-      try {
-        sort = QueryParsing.parseSort(sortStr, req);
+    SortSpec sort = QueryParsing.parseSortSpec(sortStr, req);
 
-        if (sort != null && schema != null) {
-          for (SortField sortField : sort.getSort()) {
-            SchemaField pmField = schema.getPMField(sortField.getField());
-            if (pmField != null) {
-              sortField.setField(pmField.getName());
-            }
-          }
-        }
-
-      } catch (Exception e) {
-        logger.warn("Invalid sort '" + sort + "' field requested", e);
-      }
-    }
-    return new SortSpec( sort, start, rows );
+    sort.setOffset(start);
+    sort.setCount(rows);
+    return sort;
   }
 
   public String[] getDefaultHighlightFields() {

@@ -19,6 +19,7 @@ package org.apache.solr.core;
 
 import com.google.common.base.Charsets;
 import com.google.common.io.ByteStreams;
+
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.logging.LogWatcherConfig;
@@ -33,6 +34,7 @@ import org.xml.sax.InputSource;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -76,8 +78,8 @@ public abstract class ConfigSolr {
     }
   }
 
-  public static ConfigSolr fromString(String xml) {
-    return fromInputStream(null, new ByteArrayInputStream(xml.getBytes(Charsets.UTF_8)));
+  public static ConfigSolr fromString(SolrResourceLoader loader, String xml) {
+    return fromInputStream(loader, new ByteArrayInputStream(xml.getBytes(Charsets.UTF_8)));
   }
 
   public static ConfigSolr fromInputStream(SolrResourceLoader loader, InputStream is) {
@@ -105,6 +107,17 @@ public abstract class ConfigSolr {
   }
 
   public abstract CoresLocator getCoresLocator();
+
+
+  /**
+   * The directory against which relative core instance dirs are resolved.  If none is
+   * specified in the config, uses solr home.
+   *
+   * @return core root directory
+   */
+  public String getCoreRootDirectory() {
+    return get(CfgProp.SOLR_COREROOTDIRECTORY, config.getResourceLoader().getInstanceDir());
+  }
 
   public PluginInfo getShardHandlerFactoryPluginInfo() {
     Node node = config.getNode(getShardHandlerFactoryConfigPath(), false);
@@ -191,6 +204,14 @@ public abstract class ConfigSolr {
     return get(CfgProp.SOLR_ADMINHANDLER, "org.apache.solr.handler.admin.CoreAdminHandler");
   }
 
+  public String getCollectionsHandlerClass() {
+    return get(CfgProp.SOLR_COLLECTIONSHANDLER, "org.apache.solr.handler.admin.CollectionsHandler");
+  }
+
+  public String getInfoHandlerClass() {
+    return get(CfgProp.SOLR_INFOHANDLER, "org.apache.solr.handler.admin.InfoHandler");
+  }
+
   public boolean hasSchemaCache() {
     return getBool(ConfigSolr.CfgProp.SOLR_SHARESCHEMA, false);
   }
@@ -215,6 +236,7 @@ public abstract class ConfigSolr {
   // Ugly for now, but we'll at least be able to centralize all of the differences between 4x and 5x.
   protected static enum CfgProp {
     SOLR_ADMINHANDLER,
+    SOLR_COLLECTIONSHANDLER,
     SOLR_CORELOADTHREADS,
     SOLR_COREROOTDIRECTORY,
     SOLR_DISTRIBUPDATECONNTIMEOUT,
@@ -224,6 +246,7 @@ public abstract class ConfigSolr {
     SOLR_HOST,
     SOLR_HOSTCONTEXT,
     SOLR_HOSTPORT,
+    SOLR_INFOHANDLER,
     SOLR_LEADERVOTEWAIT,
     SOLR_LOGGING_CLASS,
     SOLR_LOGGING_ENABLED,
@@ -282,7 +305,7 @@ public abstract class ConfigSolr {
     try {
       return readProperties(((NodeList) config.evaluate(
           path, XPathConstants.NODESET)).item(0));
-    } catch (Throwable e) {
+    } catch (Exception e) {
       SolrException.log(log, null, e);
     }
     return null;

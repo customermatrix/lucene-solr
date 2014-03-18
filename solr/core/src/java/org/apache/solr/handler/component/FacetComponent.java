@@ -617,8 +617,8 @@ public class FacetComponent extends SearchComponent
           // and if it is >= smallestCount, then flag for refinement
           long maxCount = sfc.count;
           for (int shardNum=0; shardNum<rb.shards.length; shardNum++) {
-            OpenBitSet obs = dff.counted[shardNum];
-            if (obs!=null && !obs.get(sfc.termNum)) {  // obs can be null if a shard request failed
+            FixedBitSet fbs = dff.counted[shardNum];
+            if (fbs!=null && (sfc.termNum >= fbs.length() || !fbs.get(sfc.termNum))) {  // fbs can be null if a shard request failed
               // if missing from this shard, add the max it could be
               maxCount += dff.maxPossible(sfc,shardNum);
             }
@@ -632,8 +632,8 @@ public class FacetComponent extends SearchComponent
         if (needRefinement) {
           // add a query for each shard missing the term that needs refinement
           for (int shardNum=0; shardNum<rb.shards.length; shardNum++) {
-            OpenBitSet obs = dff.counted[shardNum];
-            if(obs!=null && !obs.get(sfc.termNum) && dff.maxPossible(sfc,shardNum)>0) {
+            FixedBitSet fbs = dff.counted[shardNum];
+            if(fbs!=null && (sfc.termNum >= fbs.length() || !fbs.get(sfc.termNum)) && dff.maxPossible(sfc,shardNum)>0) {
               dff.needRefinements = true;
               List<String> lst = dff._toRefine[shardNum];
               if (lst == null) {
@@ -1225,7 +1225,7 @@ public class FacetComponent extends SearchComponent
     public long missingMaxPossible;
     // the max possible count for a missing term for each shard (indexed by shardNum)
     public long[] missingMax;
-    public OpenBitSet[] counted; // a bitset for each shard, keeping track of which terms seen
+    public FixedBitSet[] counted; // a bitset for each shard, keeping track of which terms seen
     public HashMap<String,ShardFacetCount> counts = new HashMap<String,ShardFacetCount>(128);
     public int termNum;
 
@@ -1238,7 +1238,7 @@ public class FacetComponent extends SearchComponent
       super(rb, facetStr);
       // sf = rb.req.getSchema().getField(field);
       missingMax = new long[rb.shards.length];
-      counted = new OpenBitSet[rb.shards.length];
+      counted = new FixedBitSet[rb.shards.length];
     }
 
     void add(int shardNum, NamedList shardCounts, int numRequested) {
@@ -1246,7 +1246,7 @@ public class FacetComponent extends SearchComponent
       int sz = shardCounts == null ? 0 : shardCounts.size();
       int numReceived = sz;
 
-      OpenBitSet terms = new OpenBitSet(termNum+sz);
+      FixedBitSet terms = new FixedBitSet(termNum+sz);
 
       long last = 0;
       for (int i=0; i<sz; i++) {
@@ -1265,7 +1265,7 @@ public class FacetComponent extends SearchComponent
             counts.put(name, sfc);
           }
           sfc.count += count;
-          terms.fastSet(sfc.termNum);
+          terms.set(sfc.termNum);
           last = count;
         }
       }

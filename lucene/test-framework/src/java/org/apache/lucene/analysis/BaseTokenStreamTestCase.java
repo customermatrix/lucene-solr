@@ -549,7 +549,7 @@ public abstract class BaseTokenStreamTestCase extends LuceneTestCase {
         ft.setStoreTermVectors(true);
         ft.setStoreTermVectorOffsets(random.nextBoolean());
         ft.setStoreTermVectorPositions(random.nextBoolean());
-        if (ft.storeTermVectorPositions() && !PREFLEX_IMPERSONATION_IS_ACTIVE) {
+        if (ft.storeTermVectorPositions() && !OLD_FORMAT_IMPERSONATION_IS_ACTIVE) {
           ft.setStoreTermVectorPayloads(random.nextBoolean());
         }
       }
@@ -598,7 +598,7 @@ public abstract class BaseTokenStreamTestCase extends LuceneTestCase {
           }
         } else {
           // synthetic
-          text = randomAnalysisString(random, maxWordLength, simple);
+          text = _TestUtil.randomAnalysisString(random, maxWordLength, simple);
         }
         
         try {
@@ -635,7 +635,7 @@ public abstract class BaseTokenStreamTestCase extends LuceneTestCase {
     int charUpto = 0;
     final StringBuilder sb = new StringBuilder();
     while (charUpto < s.length()) {
-      final int c = s.codePointAt(charUpto);
+      final int c = s.charAt(charUpto);
       if (c == 0xa) {
         // Strangely, you cannot put \ u000A into Java
         // sources (not in a comment nor a string
@@ -655,7 +655,7 @@ public abstract class BaseTokenStreamTestCase extends LuceneTestCase {
         // don't escape...
         sb.append(String.format(Locale.ROOT, "\\u%04x", c));
       }
-      charUpto += Character.charCount(c);
+      charUpto++;
     }
     return sb.toString();
   }
@@ -874,77 +874,6 @@ public abstract class BaseTokenStreamTestCase extends LuceneTestCase {
       }
 
       field.setReaderValue(useCharFilter ? new MockCharFilter(reader, remainder) : reader);
-    }
-  }
-  
-  private static String randomAnalysisString(Random random, int maxLength, boolean simple) {
-    assert maxLength >= 0;
-    
-    // sometimes just a purely random string
-    if (random.nextInt(31) == 0) {
-      return randomSubString(random, random.nextInt(maxLength), simple);
-    }
-    
-    // otherwise, try to make it more realistic with 'words' since most tests use MockTokenizer
-    // first decide how big the string will really be: 0..n
-    maxLength = random.nextInt(maxLength);
-    int avgWordLength = _TestUtil.nextInt(random, 3, 8);
-    StringBuilder sb = new StringBuilder();
-    while (sb.length() < maxLength) {
-      if (sb.length() > 0) {
-        sb.append(' ');
-      }
-      int wordLength = -1;
-      while (wordLength < 0) {
-        wordLength = (int) (random.nextGaussian() * 3 + avgWordLength);
-      }
-      wordLength = Math.min(wordLength, maxLength - sb.length());
-      sb.append(randomSubString(random, wordLength, simple));
-    }
-    return sb.toString();
-  }
-  
-  private static String randomSubString(Random random, int wordLength, boolean simple) {
-    if (wordLength == 0) {
-      return "";
-    }
-    
-    int evilness = _TestUtil.nextInt(random, 0, 20);
-    
-    StringBuilder sb = new StringBuilder();
-    while (sb.length() < wordLength) {;
-      if (simple) { 
-        sb.append(random.nextBoolean() ? _TestUtil.randomSimpleString(random, wordLength) : _TestUtil.randomHtmlishString(random, wordLength));
-      } else {
-        if (evilness < 10) {
-          sb.append(_TestUtil.randomSimpleString(random, wordLength));
-        } else if (evilness < 15) {
-          assert sb.length() == 0; // we should always get wordLength back!
-          sb.append(_TestUtil.randomRealisticUnicodeString(random, wordLength, wordLength));
-        } else if (evilness == 16) {
-          sb.append(_TestUtil.randomHtmlishString(random, wordLength));
-        } else if (evilness == 17) {
-          // gives a lot of punctuation
-          sb.append(_TestUtil.randomRegexpishString(random, wordLength));
-        } else {
-          sb.append(_TestUtil.randomUnicodeString(random, wordLength));
-        }
-      }
-    }
-    if (sb.length() > wordLength) {
-      sb.setLength(wordLength);
-      if (Character.isHighSurrogate(sb.charAt(wordLength-1))) {
-        sb.setLength(wordLength-1);
-      }
-    }
-    
-    if (random.nextInt(17) == 0) {
-      // mix up case
-      String mixedUp = _TestUtil.randomlyRecaseCodePoints(random, sb.toString());
-      assert mixedUp.length() == sb.length();
-      return mixedUp;
-    } else {
-      return sb.toString();
     }
   }
 

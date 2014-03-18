@@ -18,6 +18,7 @@ package org.apache.solr.client.solrj.impl;
 
 import org.apache.http.client.HttpClient;
 import org.apache.solr.client.solrj.*;
+import org.apache.solr.client.solrj.request.IsUpdateRequest;
 import org.apache.solr.client.solrj.request.RequestWriter;
 import org.apache.solr.client.solrj.request.RequestWriter;
 import org.apache.solr.client.solrj.response.QueryResponse;
@@ -28,6 +29,7 @@ import org.apache.solr.common.SolrException;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.net.ConnectException;
 import java.net.MalformedURLException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
@@ -75,7 +77,14 @@ import java.util.*;
  * @since solr 1.4
  */
 public class LBHttpSolrServer extends SolrServer {
+  private static Set<Integer> RETRY_CODES = new HashSet<Integer>(4);
 
+  static {
+    RETRY_CODES.add(404);
+    RETRY_CODES.add(403);
+    RETRY_CODES.add(503);
+    RETRY_CODES.add(500);
+  }
 
   // keys to the maps are currently of the form "http://localhost:8983/solr"
   // which should be equivalent to CommonsHttpSolrServer.getBaseURL()
@@ -188,14 +197,12 @@ public class LBHttpSolrServer extends SolrServer {
   }
   
   /** The provided httpClient should use a multi-threaded connection manager */ 
-  public LBHttpSolrServer(HttpClient httpClient, String... solrServerUrl)
-          throws MalformedURLException {
+  public LBHttpSolrServer(HttpClient httpClient, String... solrServerUrl) {
     this(httpClient, new BinaryResponseParser(), solrServerUrl);
   }
 
   /** The provided httpClient should use a multi-threaded connection manager */  
-  public LBHttpSolrServer(HttpClient httpClient, ResponseParser parser, String... solrServerUrl)
-          throws MalformedURLException {
+  public LBHttpSolrServer(HttpClient httpClient, ResponseParser parser, String... solrServerUrl) {
     clientIsInternal = (httpClient == null);
     this.parser = parser;
     if (httpClient == null) {
@@ -230,7 +237,7 @@ public class LBHttpSolrServer extends SolrServer {
     return server;
   }
 
-  protected HttpSolrServer makeServer(String server) throws MalformedURLException {
+  protected HttpSolrServer makeServer(String server) {
     HttpSolrServer s = new HttpSolrServer(server, httpClient, parser);
     if (requestWriter != null) {
       s.setRequestWriter(requestWriter);
@@ -261,7 +268,7 @@ public class LBHttpSolrServer extends SolrServer {
   public Rsp request(Req req) throws SolrServerException, IOException {
     Rsp rsp = new Rsp();
     Exception ex = null;
-
+    boolean isUpdate = req.request instanceof IsUpdateRequest;
     List<ServerWrapper> skipped = new ArrayList<ServerWrapper>(req.getNumDeadServersToTry());
 
     for (String serverStr : req.getServers()) {
@@ -281,25 +288,31 @@ public class LBHttpSolrServer extends SolrServer {
         rsp.rsp = server.request(req.getRequest());
         return rsp; // SUCCESS
       } catch (SolrException e) {
-        // we retry on 404 or 403 or 503 - you can see this on solr shutdown
-        if (e.code() == 404 || e.code() == 403 || e.code() == 503 || e.code() == 500) {
+        // we retry on 404 or 403 or 503 or 500
+        // unless it's an update - then we only retry on connect exceptions
+        if (!isUpdate && RETRY_CODES.contains(e.code())) {
           ex = addZombie(server, e);
         } else {
           // Server is alive but the request was likely malformed or invalid
           throw e;
         }
-       
-       // TODO: consider using below above - currently does cause a problem with distrib updates:
-       // seems to match up against a failed forward to leader exception as well...
-       //     || e.getMessage().contains("java.net.SocketException")
-       //     || e.getMessage().contains("java.net.ConnectException")
       } catch (SocketException e) {
-        ex = addZombie(server, e);
+        if (!isUpdate || e instanceof ConnectException) {
+          ex = addZombie(server, e);
+        } else {
+          throw e;
+        }
       } catch (SocketTimeoutException e) {
-        ex = addZombie(server, e);
+        if (!isUpdate) {
+          ex = addZombie(server, e);
+        } else {
+          throw e;
+        }
       } catch (SolrServerException e) {
         Throwable rootCause = e.getRootCause();
-        if (rootCause instanceof IOException) {
+        if (!isUpdate && rootCause instanceof IOException) {
+          ex = addZombie(server, e);
+        } else if (isUpdate && rootCause instanceof ConnectException) {
           ex = addZombie(server, e);
         } else {
           throw e;
@@ -316,8 +329,9 @@ public class LBHttpSolrServer extends SolrServer {
         zombieServers.remove(wrapper.getKey());
         return rsp; // SUCCESS
       } catch (SolrException e) {
-        // we retry on 404 or 403 or 503 - you can see this on solr shutdown
-        if (e.code() == 404 || e.code() == 403 || e.code() == 503 || e.code() == 500) {
+        // we retry on 404 or 403 or 503 or 500
+        // unless it's an update - then we only retry on connect exceptions
+        if (!isUpdate && RETRY_CODES.contains(e.code())) {
           ex = e;
           // already a zombie, no need to re-add
         } else {
@@ -327,14 +341,23 @@ public class LBHttpSolrServer extends SolrServer {
         }
 
       } catch (SocketException e) {
-        ex = e;
+        if (!isUpdate || e instanceof ConnectException) {
+          ex = e;
+        } else {
+          throw e;
+        }
       } catch (SocketTimeoutException e) {
-        ex = e;
+        if (!isUpdate) {
+          ex = e;
+        } else {
+          throw e;
+        }
       } catch (SolrServerException e) {
         Throwable rootCause = e.getRootCause();
-        if (rootCause instanceof IOException) {
+        if (!isUpdate && rootCause instanceof IOException) {
           ex = e;
-          // already a zombie, no need to re-add
+        } else if (isUpdate && rootCause instanceof ConnectException) {
+          ex = e;
         } else {
           throw e;
         }
@@ -645,6 +668,9 @@ public class LBHttpSolrServer extends SolrServer {
   protected SolrQuery newPingQuery() {
     SolrQuery solrQuery = new SolrQuery("*:*");
     solrQuery.setRows(0);
+    solrQuery.setSort(SolrQuery.DOCID, SolrQuery.ORDER.asc);
+    // not a top-level request, we are interested only in the server being sent to i.e. it need not distribute our request to further servers    
+    solrQuery.setDistrib(false);
     return solrQuery;
   }
 }

@@ -42,7 +42,6 @@ public class StreamingSolrServers {
   public static Logger log = LoggerFactory.getLogger(StreamingSolrServers.class);
   
   private HttpClient httpClient;
-
   
   private Map<String,ConcurrentUpdateSolrServer> solrServers = new HashMap<String,ConcurrentUpdateSolrServer>();
   private List<Error> errors = Collections.synchronizedList(new ArrayList<Error>());

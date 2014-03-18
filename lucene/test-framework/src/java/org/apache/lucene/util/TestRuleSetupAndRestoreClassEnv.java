@@ -50,6 +50,7 @@ import org.apache.lucene.codecs.compressing.CompressingCodec;
 import org.apache.lucene.codecs.lucene40.Lucene40RWCodec;
 import org.apache.lucene.codecs.lucene40.Lucene40RWPostingsFormat;
 import org.apache.lucene.codecs.lucene41.Lucene41RWCodec;
+import org.apache.lucene.codecs.mockrandom.MockRandomPostingsFormat;
 import org.apache.lucene.codecs.lucene42.Lucene42RWCodec;
 import org.apache.lucene.codecs.lucene45.Lucene45RWCodec;
 import org.apache.lucene.codecs.lucene46.Lucene46Codec;
@@ -155,7 +156,6 @@ final class TestRuleSetupAndRestoreClassEnv extends AbstractBeforeAfterRule {
     }
     
     // set back to default
-    LuceneTestCase.PREFLEX_IMPERSONATION_IS_ACTIVE = false;
     LuceneTestCase.OLD_FORMAT_IMPERSONATION_IS_ACTIVE = false;
     
     savedCodec = Codec.getDefault();
@@ -167,7 +167,7 @@ final class TestRuleSetupAndRestoreClassEnv extends AbstractBeforeAfterRule {
                                           !shouldAvoidCodec("Lucene3x"))) { // preflex-only setup
       codec = Codec.forName("Lucene3x");
       assert (codec instanceof PreFlexRWCodec) : "fix your classpath to have tests-framework.jar before lucene-core.jar";
-      LuceneTestCase.PREFLEX_IMPERSONATION_IS_ACTIVE = true;
+      LuceneTestCase.OLD_FORMAT_IMPERSONATION_IS_ACTIVE = true;
     } else if ("Lucene40".equals(TEST_CODEC) || ("random".equals(TEST_CODEC) &&
                                                  "random".equals(TEST_POSTINGSFORMAT) &&
                                                   randomVal == 0 &&
@@ -207,6 +207,8 @@ final class TestRuleSetupAndRestoreClassEnv extends AbstractBeforeAfterRule {
       final PostingsFormat format;
       if ("random".equals(TEST_POSTINGSFORMAT)) {
         format = PostingsFormat.forName("Lucene41");
+      } else if ("MockRandom".equals(TEST_POSTINGSFORMAT)) {
+        format = new MockRandomPostingsFormat(new Random(random.nextLong()));
       } else {
         format = PostingsFormat.forName(TEST_POSTINGSFORMAT);
       }

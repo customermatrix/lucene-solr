@@ -18,7 +18,7 @@
 package org.apache.solr.core;
 
 import com.google.common.collect.Maps;
-import org.apache.lucene.util.NamedThreadFactory;
+
 import org.apache.solr.cloud.ZkController;
 import org.apache.solr.cloud.ZkSolrResourceLoader;
 import org.apache.solr.common.SolrException;
@@ -87,7 +87,9 @@ public class CoreContainer {
   protected boolean shareSchema;
 
   protected ZkContainer zkSys = new ZkContainer();
-  protected ShardHandlerFactory shardHandlerFactory;
+  private ShardHandlerFactory shardHandlerFactory;
+  
+  private UpdateShardHandler updateShardHandler;
 
   protected UpdateShardHandler updateShardHandler;
 
@@ -101,6 +103,9 @@ public class CoreContainer {
 
   protected final CoresLocator coresLocator;
   
+  private String hostName;
+  
+ // private ClientConnectionManager clientConnectionManager = new PoolingClientConnectionManager();
 
   {
     log.info("New CoreContainer " + System.identityHashCode(this));
@@ -207,12 +212,15 @@ public class CoreContainer {
     if (shareSchema) {
       indexSchemaCache = new ConcurrentHashMap<String,IndexSchema>();
     }
+    
+    hostName = cfg.getHost();
+    log.info("Host Name: " + hostName);
 
     zkSys.initZooKeeper(this, solrHome, cfg);
 
-    collectionsHandler = new CollectionsHandler(this);
-    infoHandler = new InfoHandler(this);
-    coreAdminHandler = createMultiCoreHandler(initAdminHandler());
+    collectionsHandler = createHandler(cfg.getCollectionsHandlerClass(), CollectionsHandler.class);
+    infoHandler        = createHandler(cfg.getInfoHandlerClass(), InfoHandler.class);
+    coreAdminHandler   = createHandler(initAdminHandler(), CoreAdminHandler.class);
 
     containerProperties = cfg.getSolrProperties("solr");
 
@@ -244,8 +252,8 @@ public class CoreContainer {
           if (cd.isLoadOnStartup()) { // The normal case
             doStartupCoreCreation(completionService, pending, name, cd);
           }
-        } catch (Throwable ex) {
-          SolrException.log(log, null, ex);
+        } catch (Exception e) {
+          SolrException.log(log, null, e);
         }
       }
 
@@ -321,32 +329,15 @@ public class CoreContainer {
   public void shutdown() {
     log.info("Shutting down CoreContainer instance="
         + System.identityHashCode(this));
-
-    if (isZooKeeperAware()) {
-      executeZKTask(new Callable<Object>() {
-        @Override
-        public Object call() throws Exception {
-          try {
-            zkSys.getZkController().publishAndWaitForDownStates();
-          } catch (KeeperException e) {
-            log.error("", e);
-          } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.warn("", e);
-          }
-          return null;
-        }
-      });
-    }
-
+    
     isShutDown = true;
-
+    
     if (isZooKeeperAware()) {
       executeZKTask(new Callable<Object>() {
         @Override
         public Object call() throws Exception {
-          zkSys.publishCoresAsDown(solrCores.getCores());
           cancelCoreRecoveries();
+          zkSys.publishCoresAsDown(solrCores.getCores());
           return null;
         }
       });
@@ -420,8 +411,8 @@ public class CoreContainer {
     for (SolrCore core : cores) {
       try {
         core.getSolrCoreState().cancelRecovery();
-      } catch (Throwable t) {
-        SolrException.log(log, "Error canceling recovery for core", t);
+      } catch (Exception e) {
+        SolrException.log(log, "Error canceling recovery for core", e);
       }
     }
   }
@@ -697,7 +688,7 @@ public class CoreContainer {
             String collection = cd.getCloudDescriptor().getCollectionName();
             zkSys.getZkController().createCollectionZkNode(cd.getCloudDescriptor());
 
-            String zkConfigName = zkSys.getZkController().readConfigName(collection);
+            String zkConfigName = zkSys.getZkController().getZkStateReader().readConfigName(collection);
             if (zkConfigName == null) {
               log.error("Could not find config name for collection:" + collection);
               throw new ZooKeeperException(SolrException.ErrorCode.SERVER_ERROR,
@@ -794,10 +785,14 @@ public class CoreContainer {
     return null;
   }
 
-  /** 
+  public String getCoreRootDirectory() {
+    return cfg.getCoreRootDirectory();
+  }
+
+  /**
    * Gets a core by name and increase its refcount.
    *
-   * @see SolrCore#close() 
+   * @see SolrCore#close()
    * @param name the core name
    * @return the core if found, null if a SolrCore by this name does not exist
    * @exception SolrException if a SolrCore with this name failed to be initialized
@@ -816,7 +811,7 @@ public class CoreContainer {
     // OK, it's not presently in any list, is it in the list of dynamic cores but not loaded yet? If so, load it.
     CoreDescriptor desc = solrCores.getDynamicDescriptor(name);
     if (desc == null) { //Nope, no transient core with this name
-      
+
       // if there was an error initalizing this core, throw a 500
       // error with the details for clients attempting to access it.
       Exception e = getCoreInitFailures().get(name);
@@ -847,7 +842,7 @@ public class CoreContainer {
       }
     } catch(Exception ex){
       // remains to be seen how transient cores and such
-      // will work in SolrCloud mode, but just to be future 
+      // will work in SolrCloud mode, but just to be future
       // proof...
       /*if (isZooKeeperAware()) {
         try {
@@ -867,26 +862,25 @@ public class CoreContainer {
     return core;
   }
 
-  // ---------------- Multicore self related methods ---------------
-  /** 
-   * Creates a CoreAdminHandler for this MultiCore.
-   * @return a CoreAdminHandler
-   */
-  protected CoreAdminHandler createMultiCoreHandler(final String adminHandlerClass) {
-    return loader.newAdminHandlerInstance(CoreContainer.this, adminHandlerClass);
+  // ---------------- CoreContainer request handlers --------------
+
+  protected <T> T createHandler(String handlerClass, Class<T> clazz) {
+    return loader.newInstance(handlerClass, clazz, null, new Class[] { CoreContainer.class }, new Object[] { this });
   }
 
   public CoreAdminHandler getMultiCoreHandler() {
     return coreAdminHandler;
   }
-  
+
   public CollectionsHandler getCollectionsHandler() {
     return collectionsHandler;
   }
-  
+
   public InfoHandler getInfoHandler() {
     return infoHandler;
   }
+
+  // ---------------- Multicore self related methods ---------------
 
   /**
    * the default core name, or null if there is no default core name
@@ -894,7 +888,7 @@ public class CoreContainer {
   public String getDefaultCoreName() {
     return cfg.getDefaultCoreName();
   }
-  
+
   // all of the following properties aren't synchronized
   // but this should be OK since they normally won't be changed rapidly
   @Deprecated
@@ -904,6 +898,10 @@ public class CoreContainer {
   
   public String getAdminPath() {
     return cfg.getAdminPath();
+  }
+  
+  public String getHostName() {
+    return this.hostName;
   }
 
   /**
@@ -971,10 +969,6 @@ public class CoreContainer {
   
   public UpdateShardHandler getUpdateShardHandler() {
     return updateShardHandler;
-  }
-  
-  public ExecutorService getUpdateExecutor() {
-    return updateShardHandler.getUpdateExecutor();
   }
   
   // Just to tidy up the code where it did this in-line.

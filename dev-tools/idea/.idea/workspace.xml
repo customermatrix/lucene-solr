@@ -8,7 +8,7 @@
       <module name="lucene-core-tests" />
       <option name="TEST_OBJECT" value="package" />
       <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$/idea-build/lucene/core" />
-      <option name="VM_PARAMETERS" value="-Xmx256m -ea -Dlucene.version=4.6-SNAPSHOT -DtempDir=temp" />
+      <option name="VM_PARAMETERS" value="-Xmx256m -ea -Dlucene.version=4.7.1-SNAPSHOT -DtempDir=temp" />
       <option name="TEST_SEARCH_SCOPE"><value defaultName="singleModule" /></option>
     </configuration>
     <configuration default="false" name="Module analyzers-common" type="JUnit" factoryName="JUnit">
@@ -183,28 +183,28 @@
       <module name="solr-core-tests" />
       <option name="TEST_OBJECT" value="package" />
       <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$/idea-build/solr/solr-core" />
-      <option name="VM_PARAMETERS" value="-ea -Dtests.luceneMatchVersion=4.6 -DtempDir=temp -Djetty.testMode=1 -Djetty.insecurerandom=1 -Dsolr.directoryFactory=org.apache.solr.core.MockDirectoryFactory" />
+      <option name="VM_PARAMETERS" value="-ea -Dtests.luceneMatchVersion=4.7 -DtempDir=temp -Djetty.testMode=1 -Djetty.insecurerandom=1 -Dsolr.directoryFactory=org.apache.solr.core.MockDirectoryFactory" />
       <option name="TEST_SEARCH_SCOPE"><value defaultName="singleModule" /></option>
     </configuration>
     <configuration default="false" name="Solrj" type="JUnit" factoryName="JUnit">
       <module name="solrj-tests" />
       <option name="TEST_OBJECT" value="package" />
       <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$/idea-build/solr/solr-solrj" />
-      <option name="VM_PARAMETERS" value="-ea -Dtests.luceneMatchVersion=4.6 -DtempDir=temp -Djetty.testMode=1 -Djetty.insecurerandom=1 -Dsolr.directoryFactory=org.apache.solr.core.MockDirectoryFactory" />
+      <option name="VM_PARAMETERS" value="-ea -Dtests.luceneMatchVersion=4.7 -DtempDir=temp -Djetty.testMode=1 -Djetty.insecurerandom=1 -Dsolr.directoryFactory=org.apache.solr.core.MockDirectoryFactory" />
       <option name="TEST_SEARCH_SCOPE"><value defaultName="singleModule" /></option>
     </configuration>
     <configuration default="false" name="Solr analysis-extras contrib" type="JUnit" factoryName="JUnit">
       <module name="analysis-extras" />
       <option name="TEST_OBJECT" value="package" />
       <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$/idea-build/solr/contrib/solr-analysis-extras" />
-      <option name="VM_PARAMETERS" value="-ea -Dtests.luceneMatchVersion=4.6 -DtempDir=temp -Djetty.testMode=1 -Djetty.insecurerandom=1 -Dsolr.directoryFactory=org.apache.solr.core.MockDirectoryFactory" />
+      <option name="VM_PARAMETERS" value="-ea -Dtests.luceneMatchVersion=4.7 -DtempDir=temp -Djetty.testMode=1 -Djetty.insecurerandom=1 -Dsolr.directoryFactory=org.apache.solr.core.MockDirectoryFactory" />
       <option name="TEST_SEARCH_SCOPE"><value defaultName="singleModule" /></option>
     </configuration>
     <configuration default="false" name="Solr clustering contrib" type="JUnit" factoryName="JUnit">
       <module name="clustering" />
       <option name="TEST_OBJECT" value="package" />
       <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$/idea-build/solr/contrib/solr-clustering" />
-      <option name="VM_PARAMETERS" value="-ea -Dtests.luceneMatchVersion=4.6 -DtempDir=temp -Djetty.testMode=1 -Djetty.insecurerandom=1 -Dsolr.directoryFactory=org.apache.solr.core.MockDirectoryFactory" />
+      <option name="VM_PARAMETERS" value="-ea -Dtests.luceneMatchVersion=4.7 -DtempDir=temp -Djetty.testMode=1 -Djetty.insecurerandom=1 -Dsolr.directoryFactory=org.apache.solr.core.MockDirectoryFactory" />
       <option name="TEST_SEARCH_SCOPE"><value defaultName="singleModule" /></option>
     </configuration>
     <configuration default="false" name="Solr dataimporthandler contrib" type="JUnit" factoryName="JUnit">
@@ -235,11 +235,32 @@
       <option name="VM_PARAMETERS" value="-ea -DtempDir=temp -Djetty.testMode=1 -Djetty.insecurerandom=1 -Dsolr.directoryFactory=org.apache.solr.core.MockDirectoryFactory" />
       <option name="TEST_SEARCH_SCOPE"><value defaultName="singleModule" /></option>
     </configuration>
+    <configuration default="false" name="Solr morphlines-cell contrib" type="JUnit" factoryName="JUnit">
+      <module name="morphlines-cell" />
+      <option name="TEST_OBJECT" value="package" />
+      <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$/idea-build/solr/contrib/morphlines-cell" />
+      <option name="VM_PARAMETERS" value="-ea -DtempDir=temp -Djetty.testMode=1 -Djetty.insecurerandom=1 -Dsolr.directoryFactory=org.apache.solr.core.MockDirectoryFactory" />
+      <option name="TEST_SEARCH_SCOPE"><value defaultName="singleModule" /></option>
+    </configuration>
+    <configuration default="false" name="Solr morphlines-core contrib" type="JUnit" factoryName="JUnit">
+      <module name="morphlines-core" />
+      <option name="TEST_OBJECT" value="package" />
+      <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$/idea-build/solr/contrib/morphlines-core" />
+      <option name="VM_PARAMETERS" value="-ea -DtempDir=temp -Djetty.testMode=1 -Djetty.insecurerandom=1 -Dsolr.directoryFactory=org.apache.solr.core.MockDirectoryFactory" />
+      <option name="TEST_SEARCH_SCOPE"><value defaultName="singleModule" /></option>
+    </configuration>
+    <configuration default="false" name="Solr mr (map-reduce) contrib" type="JUnit" factoryName="JUnit">
+      <module name="map-reduce" />
+      <option name="TEST_OBJECT" value="package" />
+      <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$/idea-build/solr/contrib/map-reduce" />
+      <option name="VM_PARAMETERS" value="-ea -DtempDir=temp -Djetty.testMode=1 -Djetty.insecurerandom=1 -Dsolr.directoryFactory=org.apache.solr.core.MockDirectoryFactory" />
+      <option name="TEST_SEARCH_SCOPE"><value defaultName="singleModule" /></option>
+    </configuration>
     <configuration default="false" name="Solr uima contrib" type="JUnit" factoryName="JUnit">
       <module name="uima" />
       <option name="TEST_OBJECT" value="package" />
       <option name="WORKING_DIRECTORY" value="file://$PROJECT_DIR$/idea-build/solr/contrib/solr-uima" />
-      <option name="VM_PARAMETERS" value="-ea -Dtests.luceneMatchVersion=4.6 -DtempDir=temp -Djetty.testMode=1 -Djetty.insecurerandom=1 -Dsolr.directoryFactory=org.apache.solr.core.MockDirectoryFactory" />
+      <option name="VM_PARAMETERS" value="-ea -Dtests.luceneMatchVersion=4.7 -DtempDir=temp -Djetty.testMode=1 -Djetty.insecurerandom=1 -Dsolr.directoryFactory=org.apache.solr.core.MockDirectoryFactory" />
       <option name="TEST_SEARCH_SCOPE"><value defaultName="singleModule" /></option>
     </configuration>
     <configuration default="false" name="Solr velocity contrib" type="JUnit" factoryName="JUnit">
@@ -249,7 +270,7 @@
       <option name="VM_PARAMETERS" value="-ea" />
       <option name="TEST_SEARCH_SCOPE"><value defaultName="singleModule" /></option>
     </configuration>
-    <list size="35">
+    <list size="38">
       <item index="0" class="java.lang.String" itemvalue="JUnit.Lucene core" />
       <item index="1" class="java.lang.String" itemvalue="JUnit.Module analyzers-common" />
       <item index="2" class="java.lang.String" itemvalue="JUnit.Module analyzers-icu" />
@@ -281,10 +302,13 @@
       <item index="28" class="java.lang.String" itemvalue="JUnit.Solr dataimporthandler contrib" />
       <item index="29" class="java.lang.String" itemvalue="JUnit.Solr dataimporthandler-extras contrib" />
       <item index="30" class="java.lang.String" itemvalue="JUnit.Solr extraction contrib" />
-      <item index="31" class="java.lang.String" itemvalue="JUnit.Solr langid contrib" />
-      <item index="32" class="java.lang.String" itemvalue="JUnit.Solr uima contrib" />
-      <item index="33" class="java.lang.String" itemvalue="JUnit.Solr velocity contrib" />
-      <item index="34" class="java.lang.String" itemvalue="JUnit.Solrj" />
+      <item index="31" class="java.lang.String" itemvalue="JUnit.Solr morphlines-cell contrib" />
+      <item index="32" class="java.lang.String" itemvalue="JUnit.Solr morphlines-core contrib" />
+      <item index="33" class="java.lang.String" itemvalue="JUnit.Solr mr (map-reduce) contrib" />
+      <item index="34" class="java.lang.String" itemvalue="JUnit.Solr langid contrib" />
+      <item index="35" class="java.lang.String" itemvalue="JUnit.Solr uima contrib" />
+      <item index="36" class="java.lang.String" itemvalue="JUnit.Solr velocity contrib" />
+      <item index="37" class="java.lang.String" itemvalue="JUnit.Solrj" />
     </list>
   </component>
 </project>

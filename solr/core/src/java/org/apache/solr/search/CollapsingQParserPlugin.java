@@ -17,38 +17,48 @@
 
 package org.apache.solr.search;
 
-import org.apache.lucene.util.BytesRef;
-import org.apache.solr.schema.TrieFloatField;
-import org.apache.solr.schema.TrieIntField;
-import org.apache.solr.schema.TrieLongField;
-import org.apache.solr.schema.FieldType;
-import org.apache.solr.handler.component.QueryElevationComponent;
-import org.apache.lucene.index.AtomicReaderContext;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import org.apache.lucene.index.AtomicReader;
+import org.apache.lucene.index.AtomicReaderContext;
+import org.apache.lucene.index.DocsEnum;
 import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.index.DocsEnum;
-import org.apache.lucene.search.*;
-import org.apache.lucene.util.OpenBitSet;
+import org.apache.lucene.queries.function.FunctionQuery;
+import org.apache.lucene.queries.function.FunctionValues;
+import org.apache.lucene.queries.function.ValueSource;
+import org.apache.lucene.search.DocIdSetIterator;
+import org.apache.lucene.search.FieldCache;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.Scorer;
 import org.apache.lucene.util.Bits;
+import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.FixedBitSet;
+import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
-import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.common.util.NamedList;
+import org.apache.solr.handler.component.QueryElevationComponent;
+import org.apache.solr.request.LocalSolrQueryRequest;
+import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.request.SolrRequestInfo;
+import org.apache.solr.schema.FieldType;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.SchemaField;
+import org.apache.solr.schema.TrieFloatField;
+import org.apache.solr.schema.TrieIntField;
+import org.apache.solr.schema.TrieLongField;
 
 import com.carrotsearch.hppc.FloatArrayList;
 import com.carrotsearch.hppc.IntOpenHashSet;
 import com.carrotsearch.hppc.cursors.IntCursor;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Map;
-import java.util.Set;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Iterator;
 
 /**
 
@@ -120,13 +130,12 @@ public class CollapsingQParserPlugin extends QParserPlugin {
 
   public class CollapsingPostFilter extends ExtendedQueryBase implements PostFilter, ScoreFilter {
 
-    private Object cacheId;
     private String field;
     private String max;
     private String min;
     private boolean needsScores = true;
     private int nullPolicy;
-    private Map context;
+    private Set<String> boosted;
     public static final int NULL_POLICY_IGNORE = 0;
     public static final int NULL_POLICY_COLLAPSE = 1;
     public static final int NULL_POLICY_EXPAND = 2;
@@ -148,15 +157,39 @@ public class CollapsingQParserPlugin extends QParserPlugin {
     }
 
     public int hashCode() {
-      return this.cacheId.hashCode()*((1+Float.floatToIntBits(this.getBoost()))*31);
+
+      /*
+      *  Checking for boosted here because the request context will not have the elevated docs
+      *  until after the query is constructed. So to be sure there are no elevated docs in the query
+      *  while checking the cache we must check the request context during the call to hashCode().
+      */
+
+      if(this.boosted == null) {
+        SolrRequestInfo info = SolrRequestInfo.getRequestInfo();
+        if(info != null) {
+          this.boosted = (Set<String>)info.getReq().getContext().get(QueryElevationComponent.BOOSTED);
+        }
+      }
+
+      int hashCode = field.hashCode();
+      hashCode = max!=null ? hashCode+max.hashCode():hashCode;
+      hashCode = min!=null ? hashCode+min.hashCode():hashCode;
+      hashCode = boosted!=null ? hashCode+boosted.hashCode():hashCode;
+      hashCode = hashCode+nullPolicy;
+      hashCode = hashCode*((1+Float.floatToIntBits(this.getBoost()))*31);
+      return hashCode;
     }
 
     public boolean equals(Object o) {
-      //Uses the unique id for equals to ensure that the query result cache always fails.
+
       if(o instanceof CollapsingPostFilter) {
         CollapsingPostFilter c = (CollapsingPostFilter)o;
-        //Do object comparison to be sure only the same object will return true.
-        if(this.cacheId == c.cacheId && this.getBoost()==c.getBoost()) {
+        if(this.field.equals(c.field) &&
+           ((this.max == null && c.max == null) || (this.max != null && c.max != null && this.max.equals(c.max))) &&
+           ((this.min == null && c.min == null) || (this.min != null && c.min != null && this.min.equals(c.min))) &&
+           this.nullPolicy == c.nullPolicy &&
+           ((this.boosted == null && c.boosted == null) || (this.boosted == c.boosted)) &&
+           this.getBoost()==c.getBoost()) {
           return true;
         }
       }
@@ -172,11 +205,9 @@ public class CollapsingQParserPlugin extends QParserPlugin {
     }
 
     public CollapsingPostFilter(SolrParams localParams, SolrParams params, SolrQueryRequest request) throws IOException {
-      this.cacheId = new Object();
       this.field = localParams.get("field");
       this.max = localParams.get("max");
       this.min = localParams.get("min");
-      this.context = request.getContext();
       if(this.min != null || this.max != null) {
         this.needsScores = needsScores(params);
       }
@@ -195,6 +226,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
 
     private IntOpenHashSet getBoostDocs(SolrIndexSearcher indexSearcher, Set<String> boosted) throws IOException {
       IntOpenHashSet boostDocs = null;
+
       if(boosted != null) {
         SchemaField idField = indexSearcher.getSchema().getUniqueKeyField();
         String fieldName = idField.getName();
@@ -242,7 +274,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
         SchemaField schemaField = schema.getField(this.field);
 
         SortedDocValues docValues = null;
-
+        FunctionQuery funcQuery = null;
         if(schemaField.hasDocValues()) {
           docValues = searcher.getAtomicReader().getSortedDocValues(this.field);
         } else {
@@ -252,17 +284,52 @@ public class CollapsingQParserPlugin extends QParserPlugin {
         FieldType fieldType = null;
 
         if(this.max != null) {
-          fieldType = searcher.getSchema().getField(this.max).getType();
+          if(this.max.indexOf("(") == -1) {
+            fieldType = searcher.getSchema().getField(this.max).getType();
+          } else {
+            LocalSolrQueryRequest request = null;
+            try {
+              SolrParams params = new ModifiableSolrParams();
+              request = new LocalSolrQueryRequest(searcher.getCore(), params);
+              FunctionQParser functionQParser = new FunctionQParser(this.max, null, null,request);
+              funcQuery = (FunctionQuery)functionQParser.parse();
+            } catch (Exception e) {
+              throw new IOException(e);
+            } finally {
+              request.close();
+            }
+          }
         }
 
         if(this.min != null) {
-          fieldType = searcher.getSchema().getField(this.min).getType();
+          if(this.min.indexOf("(") == -1) {
+            fieldType = searcher.getSchema().getField(this.min).getType();
+          } else {
+            LocalSolrQueryRequest request = null;
+            try {
+              SolrParams params = new ModifiableSolrParams();
+              request = new LocalSolrQueryRequest(searcher.getCore(), params);
+              FunctionQParser functionQParser = new FunctionQParser(this.min, null, null,request);
+              funcQuery = (FunctionQuery)functionQParser.parse();
+            } catch (Exception e) {
+              throw new IOException(e);
+            } finally {
+              request.close();
+            }
+          }
         }
 
         int maxDoc = searcher.maxDoc();
         int leafCount = searcher.getTopReaderContext().leaves().size();
 
-        IntOpenHashSet boostDocs = getBoostDocs(searcher, (Set<String>) (this.context.get(QueryElevationComponent.BOOSTED)));
+        if(this.boosted == null) {
+          SolrRequestInfo info = SolrRequestInfo.getRequestInfo();
+          if(info != null) {
+            this.boosted = (Set<String>)info.getReq().getContext().get(QueryElevationComponent.BOOSTED);
+          }
+        }
+
+        IntOpenHashSet boostDocs = getBoostDocs(searcher, this.boosted);
 
         if(this.min != null || this.max != null) {
 
@@ -274,7 +341,8 @@ public class CollapsingQParserPlugin extends QParserPlugin {
                                                    max != null,
                                                    this.needsScores,
                                                    fieldType,
-                                                   boostDocs);
+                                                   boostDocs,
+                                                   funcQuery, searcher);
         } else {
           return new CollapsingScoreCollector(maxDoc, leafCount, docValues, this.nullPolicy, boostDocs);
         }
@@ -309,7 +377,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
         }
       }
 
-      if(this.context.containsKey(QueryElevationComponent.BOOSTED)) {
+      if(this.boosted != null) {
         return true;
       }
 
@@ -355,7 +423,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
   private class CollapsingScoreCollector extends DelegatingCollector {
 
     private AtomicReaderContext[] contexts;
-    private OpenBitSet collapsedSet;
+    private FixedBitSet collapsedSet;
     private SortedDocValues values;
     private int[] ords;
     private float[] scores;
@@ -374,14 +442,14 @@ public class CollapsingQParserPlugin extends QParserPlugin {
                                     IntOpenHashSet boostDocs) {
       this.maxDoc = maxDoc;
       this.contexts = new AtomicReaderContext[segments];
-      this.collapsedSet = new OpenBitSet(maxDoc);
+      this.collapsedSet = new FixedBitSet(maxDoc);
       this.boostDocs = boostDocs;
       if(this.boostDocs != null) {
         //Set the elevated docs now.
         Iterator<IntCursor> it = this.boostDocs.iterator();
         while(it.hasNext()) {
           IntCursor cursor = it.next();
-          this.collapsedSet.fastSet(cursor.value);
+          this.collapsedSet.set(cursor.value);
         }
       }
       this.values = values;
@@ -396,16 +464,19 @@ public class CollapsingQParserPlugin extends QParserPlugin {
       }
     }
 
+    @Override
     public boolean acceptsDocsOutOfOrder() {
       //Documents must be sent in order to this collector.
       return false;
     }
 
+    @Override
     public void setNextReader(AtomicReaderContext context) throws IOException {
       this.contexts[context.ord] = context;
       this.docBase = context.docBase;
     }
 
+    @Override
     public void collect(int docId) throws IOException {
       int globalDoc = docId+this.docBase;
       int ord = values.getOrd(globalDoc);
@@ -415,7 +486,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
           ords[ord] = globalDoc;
           scores[ord] = score;
         }
-      } else if (this.collapsedSet.fastGet(globalDoc)) {
+      } else if (this.collapsedSet.get(globalDoc)) {
         //The doc is elevated so score does not matter
         //We just want to be sure it doesn't fall into the null policy
       } else if(nullPolicy == CollapsingPostFilter.NULL_POLICY_COLLAPSE) {
@@ -425,24 +496,25 @@ public class CollapsingQParserPlugin extends QParserPlugin {
           nullDoc = globalDoc;
         }
       } else if(nullPolicy == CollapsingPostFilter.NULL_POLICY_EXPAND) {
-        collapsedSet.fastSet(globalDoc);
+        collapsedSet.set(globalDoc);
         nullScores.add(scorer.score());
       }
     }
 
+    @Override
     public void finish() throws IOException {
       if(contexts.length == 0) {
         return;
       }
 
       if(nullScore > 0) {
-        this.collapsedSet.fastSet(nullDoc);
+        this.collapsedSet.set(nullDoc);
       }
 
       for(int i=0; i<ords.length; i++) {
         int doc = ords[i];
         if(doc > -1) {
-          collapsedSet.fastSet(doc);
+          collapsedSet.set(doc);
         }
       }
 
@@ -508,7 +580,8 @@ public class CollapsingQParserPlugin extends QParserPlugin {
                                          boolean max,
                                          boolean needsScores,
                                          FieldType fieldType,
-                                         IntOpenHashSet boostDocs) throws IOException{
+                                         IntOpenHashSet boostDocs,
+                                         FunctionQuery funcQuery, IndexSearcher searcher) throws IOException{
 
       this.maxDoc = maxDoc;
       this.contexts = new AtomicReaderContext[segments];
@@ -517,14 +590,18 @@ public class CollapsingQParserPlugin extends QParserPlugin {
       this.nullPolicy = nullPolicy;
       this.needsScores = needsScores;
       this.boostDocs = boostDocs;
-      if(fieldType instanceof TrieIntField) {
-        this.fieldValueCollapse = new IntValueCollapse(maxDoc, field, nullPolicy, new int[valueCount], max, this.needsScores, boostDocs);
-      } else if(fieldType instanceof TrieLongField) {
-        this.fieldValueCollapse =  new LongValueCollapse(maxDoc, field, nullPolicy, new int[valueCount], max, this.needsScores, boostDocs);
-      } else if(fieldType instanceof TrieFloatField) {
-        this.fieldValueCollapse =  new FloatValueCollapse(maxDoc, field, nullPolicy, new int[valueCount], max, this.needsScores, boostDocs);
+      if(funcQuery != null) {
+        this.fieldValueCollapse =  new ValueSourceCollapse(maxDoc, field, nullPolicy, new int[valueCount], max, this.needsScores, boostDocs, funcQuery, searcher);
       } else {
-        throw new IOException("min/max must be either TrieInt, TrieLong or TrieFloat.");
+        if(fieldType instanceof TrieIntField) {
+          this.fieldValueCollapse = new IntValueCollapse(maxDoc, field, nullPolicy, new int[valueCount], max, this.needsScores, boostDocs);
+        } else if(fieldType instanceof TrieLongField) {
+          this.fieldValueCollapse =  new LongValueCollapse(maxDoc, field, nullPolicy, new int[valueCount], max, this.needsScores, boostDocs);
+        } else if(fieldType instanceof TrieFloatField) {
+          this.fieldValueCollapse =  new FloatValueCollapse(maxDoc, field, nullPolicy, new int[valueCount], max, this.needsScores, boostDocs);
+        } else {
+          throw new IOException("min/max must be either TrieInt, TrieLong or TrieFloat.");
+        }
       }
     }
 
@@ -608,7 +685,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
     protected FloatArrayList nullScores;
     protected float nullScore;
     protected float[] scores;
-    protected OpenBitSet collapsedSet;
+    protected FixedBitSet collapsedSet;
     protected IntOpenHashSet boostDocs;
     protected int nullDoc = -1;
     protected boolean needsScores;
@@ -628,26 +705,26 @@ public class CollapsingQParserPlugin extends QParserPlugin {
       this.nullPolicy = nullPolicy;
       this.max = max;
       this.needsScores = needsScores;
-      this.collapsedSet = new OpenBitSet(maxDoc);
+      this.collapsedSet = new FixedBitSet(maxDoc);
       this.boostDocs = boostDocs;
       if(this.boostDocs != null) {
         Iterator<IntCursor> it = boostDocs.iterator();
         while(it.hasNext()) {
           IntCursor cursor = it.next();
-          this.collapsedSet.fastSet(cursor.value);
+          this.collapsedSet.set(cursor.value);
         }
       }
     }
 
-    public OpenBitSet getCollapsedSet() {
+    public FixedBitSet getCollapsedSet() {
       if(nullDoc > -1) {
-        this.collapsedSet.fastSet(nullDoc);
+        this.collapsedSet.set(nullDoc);
       }
 
       for(int i=0; i<ords.length; i++) {
         int doc = ords[i];
         if(doc > -1) {
-          collapsedSet.fastSet(doc);
+          collapsedSet.set(doc);
         }
       }
 
@@ -721,7 +798,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
             scores[ord] = scorer.score();
           }
         }
-      } else if(this.collapsedSet.fastGet(globalDoc)) {
+      } else if(this.collapsedSet.get(globalDoc)) {
         // Elevated doc so do nothing.
       } else if(this.nullPolicy == CollapsingPostFilter.NULL_POLICY_COLLAPSE) {
         if(comp.test(val, nullVal)) {
@@ -732,7 +809,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
           }
         }
       } else if(this.nullPolicy == CollapsingPostFilter.NULL_POLICY_EXPAND) {
-        this.collapsedSet.fastSet(globalDoc);
+        this.collapsedSet.set(globalDoc);
         if(needsScores) {
           nullScores.add(scorer.score());
         }
@@ -789,7 +866,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
             scores[ord] = scorer.score();
           }
         }
-      } else if (this.collapsedSet.fastGet(globalDoc)) {
+      } else if (this.collapsedSet.get(globalDoc)) {
         //Elevated doc so do nothing
       } else if(this.nullPolicy == CollapsingPostFilter.NULL_POLICY_COLLAPSE) {
         if(comp.test(val, nullVal)) {
@@ -800,7 +877,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
           }
         }
       } else if(this.nullPolicy == CollapsingPostFilter.NULL_POLICY_EXPAND) {
-        this.collapsedSet.fastSet(globalDoc);
+        this.collapsedSet.set(globalDoc);
         if(needsScores) {
           nullScores.add(scorer.score());
         }
@@ -858,7 +935,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
             scores[ord] = scorer.score();
           }
         }
-      } else if (this.collapsedSet.fastGet(globalDoc)) {
+      } else if (this.collapsedSet.get(globalDoc)) {
         //Elevated doc so do nothing
       } else if(this.nullPolicy == CollapsingPostFilter.NULL_POLICY_COLLAPSE) {
         if(comp.test(val, nullVal)) {
@@ -869,12 +946,104 @@ public class CollapsingQParserPlugin extends QParserPlugin {
           }
         }
       } else if(this.nullPolicy == CollapsingPostFilter.NULL_POLICY_EXPAND) {
-        this.collapsedSet.fastSet(globalDoc);
+        this.collapsedSet.set(globalDoc);
         if(needsScores) {
           nullScores.add(scorer.score());
         }
       }
     }
+  }
+
+  private class ValueSourceCollapse extends FieldValueCollapse {
+
+    private FloatCompare comp;
+    private float nullVal;
+    private ValueSource valueSource;
+    private FunctionValues functionValues;
+    private float[] ordVals;
+    private Map rcontext;
+    private CollapseScore collapseScore = new CollapseScore();
+    private float score;
+    private boolean cscore;
+
+    public ValueSourceCollapse(int maxDoc,
+                               String funcStr,
+                               int nullPolicy,
+                               int[] ords,
+                               boolean max,
+                               boolean needsScores,
+                               IntOpenHashSet boostDocs,
+                               FunctionQuery funcQuery, IndexSearcher searcher) throws IOException {
+      super(maxDoc, null, nullPolicy, max, needsScores, boostDocs);
+      this.valueSource = funcQuery.getValueSource();
+      this.rcontext = ValueSource.newContext(searcher);
+      this.ords = ords;
+      this.ordVals = new float[ords.length];
+      Arrays.fill(ords, -1);
+
+      if(max) {
+        comp = new MaxFloatComp();
+        Arrays.fill(ordVals, -Float.MAX_VALUE );
+      } else {
+        this.nullVal = Float.MAX_VALUE;
+        comp = new MinFloatComp();
+        Arrays.fill(ordVals, Float.MAX_VALUE);
+      }
+
+      if(funcStr.indexOf("cscore()") != -1) {
+        this.cscore = true;
+        this.rcontext.put("CSCORE",this.collapseScore);
+      }
+
+      if(this.needsScores) {
+        this.scores = new float[ords.length];
+        if(nullPolicy == CollapsingPostFilter.NULL_POLICY_EXPAND) {
+          nullScores = new FloatArrayList();
+        }
+      }
+    }
+
+    public void setNextReader(AtomicReaderContext context) throws IOException {
+      functionValues = this.valueSource.getValues(rcontext, context);
+    }
+
+    public void collapse(int ord, int contextDoc, int globalDoc) throws IOException {
+      if(needsScores || cscore) {
+        this.score = scorer.score();
+        this.collapseScore.score = score;
+      }
+
+      float val = functionValues.floatVal(contextDoc);
+
+      if(ord > -1) {
+        if(comp.test(val, ordVals[ord])) {
+          ords[ord] = globalDoc;
+          ordVals[ord] = val;
+          if(needsScores) {
+            scores[ord] = score;
+          }
+        }
+      } else if (this.collapsedSet.get(globalDoc)) {
+        //Elevated doc so do nothing
+      } else if(this.nullPolicy == CollapsingPostFilter.NULL_POLICY_COLLAPSE) {
+        if(comp.test(val, nullVal)) {
+          nullVal = val;
+          nullDoc = globalDoc;
+          if(needsScores) {
+            nullScore = score;
+          }
+        }
+      } else if(this.nullPolicy == CollapsingPostFilter.NULL_POLICY_EXPAND) {
+        this.collapsedSet.set(globalDoc);
+        if(needsScores) {
+          nullScores.add(score);
+        }
+      }
+    }
+  }
+
+  public static final class CollapseScore {
+    public float score;
   }
 
   private interface IntCompare {

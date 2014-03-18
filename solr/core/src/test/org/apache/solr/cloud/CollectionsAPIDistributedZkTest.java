@@ -18,6 +18,7 @@ package org.apache.solr.cloud;
  */
 
 import static org.apache.solr.cloud.OverseerCollectionProcessor.REPLICATION_FACTOR;
+import static org.apache.solr.common.cloud.ZkNodeProps.makeMap;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,6 +30,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -43,11 +45,11 @@ import javax.management.MBeanServer;
 import javax.management.MBeanServerFactory;
 import javax.management.ObjectName;
 
-import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.LuceneTestCase.Slow;
 import org.apache.lucene.util._TestUtil;
 import org.apache.solr.SolrTestCaseJ4;
 import org.apache.solr.client.solrj.SolrQuery;
+import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.embedded.JettySolrRunner;
@@ -73,7 +75,9 @@ import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.params.CollectionParams.CollectionAction;
+import org.apache.solr.common.params.MapSolrParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
+import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.common.util.StrUtils;
@@ -109,7 +113,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
   
   @BeforeClass
   public static void beforeThisClass2() throws Exception {
-    assumeFalse("FIXME: This test fails under Java 8 all the time, see SOLR-4711", Constants.JRE_IS_MINIMUM_JAVA8);
+
   }
   
   @Before
@@ -195,10 +199,12 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     testSolrJAPICalls();
     testNodesUsedByCreate();
     testCollectionsAPI();
+    testCollectionsAPIAddRemoveStress();
     testErrorHandling();
     deletePartiallyCreatedCollection();
     deleteCollectionRemovesStaleZkCollectionsNode();
-    
+    clusterPropTest();
+
     // last
     deleteCollectionWithDownNodes();
     if (DEBUG) {
@@ -391,7 +397,15 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     
     createNewSolrServer("", baseUrl).request(request);
     
-    cloudClient.getZkStateReader().updateClusterState(true);
+    long timeout = System.currentTimeMillis() + 10000;
+    while (cloudClient.getZkStateReader().getClusterState().hasCollection("halfdeletedcollection2")) {
+      if (System.currentTimeMillis() > timeout) {
+        throw new AssertionError("Timeout waiting to see removed collection leave clusterstate");
+      }
+      
+      Thread.sleep(200);
+      cloudClient.getZkStateReader().updateClusterState(true);
+    }
 
     assertFalse("Still found collection that should be gone", cloudClient.getZkStateReader().getClusterState().hasCollection("halfdeletedcollection2"));
     
@@ -617,11 +631,11 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     
     // create new collections rapid fire
     Map<String,List<Integer>> collectionInfos = new HashMap<String,List<Integer>>();
-    int cnt = random().nextInt(6) + 1;
+    int cnt = random().nextInt(TEST_NIGHTLY ? 6 : 3) + 1;
     
     for (int i = 0; i < cnt; i++) {
       int numShards = _TestUtil.nextInt(random(), 0, shardCount) + 1;
-      int replicationFactor = _TestUtil.nextInt(random(), 0, 3) + 2;
+      int replicationFactor = _TestUtil.nextInt(random(), 0, 3) + 1;
       int maxShardsPerNode = (((numShards * replicationFactor) / getCommonCloudSolrServer()
           .getZkStateReader().getClusterState().getLiveNodes().size())) + 1;
 
@@ -887,6 +901,80 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     
     checkNoTwoShardsUseTheSameIndexDir();
   }
+  
+  private void testCollectionsAPIAddRemoveStress() throws Exception {
+    
+    class CollectionThread extends Thread {
+      
+      private String name;
+
+      public CollectionThread(String name) {
+        this.name = name;
+      }
+      
+      public void run() {
+        // create new collections rapid fire
+        Map<String,List<Integer>> collectionInfos = new HashMap<String,List<Integer>>();
+        int cnt = random().nextInt(TEST_NIGHTLY ? 13 : 3) + 1;
+        
+        for (int i = 0; i < cnt; i++) {
+          String collectionName = "awholynewstresscollection_" + name + "_" + i;
+          int numShards = _TestUtil.nextInt(random(), 0, shardCount * 2) + 1;
+          int replicationFactor = _TestUtil.nextInt(random(), 0, 3) + 1;
+          int maxShardsPerNode = (((numShards * 2 * replicationFactor) / getCommonCloudSolrServer()
+              .getZkStateReader().getClusterState().getLiveNodes().size())) + 1;
+          
+          CloudSolrServer client = null;
+          try {
+            if (i == 0) {
+              client = createCloudClient(null);
+            } else if (i == 1) {
+              client = createCloudClient(collectionName);
+            }
+            
+            createCollection(collectionInfos, collectionName,
+                numShards, replicationFactor, maxShardsPerNode, client, null,
+                "conf1");
+            
+            // remove collection
+            ModifiableSolrParams params = new ModifiableSolrParams();
+            params.set("action", CollectionAction.DELETE.toString());
+            params.set("name", collectionName);
+            QueryRequest request = new QueryRequest(params);
+            request.setPath("/admin/collections");
+            
+            if (client == null) {
+              client = createCloudClient(null);
+            }
+            
+            client.request(request);
+            
+          } catch (SolrServerException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+          } catch (IOException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+          } finally {
+            if (client != null) client.shutdown();
+          }
+        }
+      }
+    }
+    List<Thread> threads = new ArrayList<Thread>();
+    int numThreads = TEST_NIGHTLY ? 6 : 2;
+    for (int i = 0; i < numThreads; i++) {
+      CollectionThread thread = new CollectionThread("collection" + i);
+      threads.add(thread);
+    }
+    
+    for (Thread thread : threads) {
+      thread.start();
+    }
+    for (Thread thread : threads) {
+      thread.join();
+    }
+  }
 
   private void checkInstanceDirs(JettySolrRunner jetty) {
     CoreContainer cores = ((SolrDispatchFilter) jetty.getDispatchFilter()
@@ -940,10 +1028,11 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
 
   private void collectStartTimes(String collectionName,
       Map<String,Long> urlToTime) throws SolrServerException, IOException {
-    Map<String,DocCollection> collections = getCommonCloudSolrServer().getZkStateReader()
-        .getClusterState().getCollectionStates();
-    if (collections.containsKey(collectionName)) {
-      Map<String,Slice> slices = collections.get(collectionName).getSlicesMap();
+    ClusterState clusterState = getCommonCloudSolrServer().getZkStateReader()
+        .getClusterState();
+//    Map<String,DocCollection> collections = clusterState.getCollectionStates();
+    if (clusterState.hasCollection(collectionName)) {
+      Map<String,Slice> slices = clusterState.getSlicesMap(collectionName);
 
       Iterator<Entry<String,Slice>> it = slices.entrySet().iterator();
       while (it.hasNext()) {
@@ -967,13 +1056,13 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
       }
     } else {
       throw new IllegalArgumentException("Could not find collection in :"
-          + collections.keySet());
+          + clusterState.getCollections());
     }
   }
 
   private String getUrlFromZk(String collection) {
     ClusterState clusterState = getCommonCloudSolrServer().getZkStateReader().getClusterState();
-    Map<String,Slice> slices = clusterState.getCollectionStates().get(collection).getSlicesMap();
+    Map<String,Slice> slices = clusterState.getSlicesMap(collection);
     
     if (slices == null) {
       throw new SolrException(ErrorCode.BAD_REQUEST, "Could not find collection:" + collection);
@@ -1028,9 +1117,9 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     while (System.currentTimeMillis() < timeoutAt) {
       getCommonCloudSolrServer().getZkStateReader().updateClusterState(true);
       ClusterState clusterState = getCommonCloudSolrServer().getZkStateReader().getClusterState();
-      Map<String,DocCollection> collections = clusterState
-          .getCollectionStates();
-      if (!collections.containsKey(collectionName)) {
+//      Map<String,DocCollection> collections = clusterState
+//          .getCollectionStates();
+      if (! clusterState.hasCollection(collectionName)) {
         found = false;
         break;
       }
@@ -1111,5 +1200,20 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     
     // insurance
     DirectUpdateHandler2.commitOnClose = true;
+  }
+
+  private void clusterPropTest() throws Exception {
+      Map m = makeMap(
+          "action", CollectionAction.CLUSTERPROP.toString().toLowerCase(Locale.ROOT),
+          "name", "legacyCloud",
+          "val", "true");
+      SolrParams params = new MapSolrParams(m);
+      SolrRequest request = new QueryRequest(params);
+      request.setPath("/admin/collections");
+    CloudSolrServer client = createCloudClient(null);
+    client.request(request);
+
+    assertEquals("cluster property not set", "true", client.getZkStateReader().getClusterProps().get("legacyCloud"));
+    client.shutdown();
   }
 }

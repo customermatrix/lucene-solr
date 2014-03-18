@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
  */
 
 public abstract class ElectionContext {
-  private static Logger log = LoggerFactory.getLogger(ElectionContext.class);
+  static Logger log = LoggerFactory.getLogger(ElectionContext.class);
   final String electionPath;
   final ZkNodeProps leaderProps;
   final String id;
@@ -71,7 +71,11 @@ public abstract class ElectionContext {
     }
   }
 
-  abstract void runLeaderProcess(boolean weAreReplacement) throws KeeperException, InterruptedException, IOException;
+  abstract void runLeaderProcess(boolean weAreReplacement, int pauseTime) throws KeeperException, InterruptedException, IOException;
+
+  public void checkIfIamLeaderFired() {}
+
+  public void joinedElectionFired() {}
 }
 
 class ShardLeaderElectionContextBase extends ElectionContext {
@@ -102,7 +106,7 @@ class ShardLeaderElectionContextBase extends ElectionContext {
   }
 
   @Override
-  void runLeaderProcess(boolean weAreReplacement) throws KeeperException,
+  void runLeaderProcess(boolean weAreReplacement, int pauseBeforeStart) throws KeeperException,
       InterruptedException, IOException {
     
     zkClient.makePath(leaderPath, ZkStateReader.toJSON(leaderProps),
@@ -137,7 +141,7 @@ final class ShardLeaderElectionContext extends ShardLeaderElectionContextBase {
         zkController.getZkStateReader());
     this.zkController = zkController;
     this.cc = cc;
-    syncStrategy = new SyncStrategy(cc.getUpdateShardHandler());
+    syncStrategy = new SyncStrategy(cc);
   }
   
   @Override
@@ -150,7 +154,7 @@ final class ShardLeaderElectionContext extends ShardLeaderElectionContextBase {
    * weAreReplacement: has someone else been the leader already?
    */
   @Override
-  void runLeaderProcess(boolean weAreReplacement) throws KeeperException,
+  void runLeaderProcess(boolean weAreReplacement, int pauseBeforeStart) throws KeeperException,
       InterruptedException, IOException {
     log.info("Running the leader process for shard " + shardId);
     
@@ -191,11 +195,22 @@ final class ShardLeaderElectionContext extends ShardLeaderElectionContextBase {
       // we are going to attempt to be the leader
       // first cancel any current recovery
       core.getUpdateHandler().getSolrCoreState().cancelRecovery();
+      
+      if (weAreReplacement) {
+        // wait a moment for any floating updates to finish
+        try {
+          Thread.sleep(2500);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new SolrException(ErrorCode.SERVICE_UNAVAILABLE, e);
+        }
+      }
+      
       boolean success = false;
       try {
-        success = syncStrategy.sync(zkController, core, leaderProps);
-      } catch (Throwable t) {
-        SolrException.log(log, "Exception while trying to sync", t);
+        success = syncStrategy.sync(zkController, core, leaderProps, weAreReplacement);
+      } catch (Exception e) {
+        SolrException.log(log, "Exception while trying to sync", e);
         success = false;
       }
       
@@ -253,12 +268,13 @@ final class ShardLeaderElectionContext extends ShardLeaderElectionContextBase {
         core.close();
       }
     }
-    
+    boolean success = false;
     try {
-      super.runLeaderProcess(weAreReplacement);
-    } catch (Throwable t) {
-      SolrException.log(log, "There was a problem trying to register as the leader", t);
-      cancelElection();
+      super.runLeaderProcess(weAreReplacement, 0);
+      success = true;
+    } catch (Exception e) {
+      SolrException.log(log, "There was a problem trying to register as the leader", e);
+  
       try {
         core = cc.getCore(coreName);
         if (core == null) {
@@ -272,9 +288,16 @@ final class ShardLeaderElectionContext extends ShardLeaderElectionContextBase {
         // we could not publish ourselves as leader - rejoin election
         rejoinLeaderElection(leaderSeqPath, core);
       } finally {
-        if (core != null) {
-          core.close();
+        try {
+          if (!success) {
+            cancelElection();
+          }
+        } finally {
+          if (core != null) {
+            core.close();
+          }
         }
+        
       }
     }
     
@@ -371,11 +394,7 @@ final class ShardLeaderElectionContext extends ShardLeaderElectionContextBase {
     
     cancelElection();
     
-    try {
-      core.getUpdateHandler().getSolrCoreState().doRecovery(cc, core.getCoreDescriptor());
-    } catch (Throwable t) {
-      SolrException.log(log, "Error trying to start recovery", t);
-    }
+    core.getUpdateHandler().getSolrCoreState().doRecovery(cc, core.getCoreDescriptor());
     
     leaderElector.joinElection(this, true);
   }
@@ -413,10 +432,10 @@ final class OverseerElectionContext extends ElectionContext {
   
   private final SolrZkClient zkClient;
   private Overseer overseer;
-
+  public static final String PATH = "/overseer_elect";
 
   public OverseerElectionContext(SolrZkClient zkClient, Overseer overseer, final String zkNodeName) {
-    super(zkNodeName, "/overseer_elect", "/overseer_elect/leader", null, zkClient);
+    super(zkNodeName,PATH , PATH+"/leader", null, zkClient);
     this.overseer = overseer;
     this.zkClient = zkClient;
     try {
@@ -430,15 +449,22 @@ final class OverseerElectionContext extends ElectionContext {
   }
 
   @Override
-  void runLeaderProcess(boolean weAreReplacement) throws KeeperException,
+  void runLeaderProcess(boolean weAreReplacement, int pauseBeforeStart) throws KeeperException,
       InterruptedException {
-    
+    log.info("I am going to be the leader {}", id);
     final String id = leaderSeqPath
         .substring(leaderSeqPath.lastIndexOf("/") + 1);
     ZkNodeProps myProps = new ZkNodeProps("id", id);
-    
+
     zkClient.makePath(leaderPath, ZkStateReader.toJSON(myProps),
         CreateMode.EPHEMERAL, true);
+    if(pauseBeforeStart >0){
+      try {
+        Thread.sleep(pauseBeforeStart);
+      } catch (InterruptedException e) {
+        log.warn("Wait interrupted ", e);
+      }
+    }
     
     overseer.start(id);
   }
@@ -447,4 +473,16 @@ final class OverseerElectionContext extends ElectionContext {
     super.cancelElection();
     overseer.close();
   }
+  
+  @Override
+  public void joinedElectionFired() {
+    overseer.close();
+  }
+  
+  @Override
+  public void checkIfIamLeaderFired() {
+    // leader changed - close the overseer
+    overseer.close();
+  }
+
 }

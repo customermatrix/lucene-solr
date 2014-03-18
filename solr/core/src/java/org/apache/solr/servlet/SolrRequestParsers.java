@@ -51,7 +51,6 @@ import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.ContentStream;
 import org.apache.solr.common.util.ContentStreamBase;
 import org.apache.solr.common.util.FastInputStream;
-import org.apache.solr.core.Config;
 import org.apache.solr.core.SolrConfig;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.request.SolrQueryRequest;
@@ -90,40 +89,24 @@ public class SolrRequestParsers
    * Pass in an xml configuration.  A null configuration will enable
    * everything with maximum values.
    */
-  public SolrRequestParsers( Config globalConfig ) {
+  public SolrRequestParsers( SolrConfig globalConfig ) {
     final int multipartUploadLimitKB, formUploadLimitKB;
     if( globalConfig == null ) {
       multipartUploadLimitKB = formUploadLimitKB = Integer.MAX_VALUE; 
       enableRemoteStreams = true;
       handleSelect = true;
       addHttpRequestToContext = false;
-    } else if (globalConfig instanceof SolrConfig) {
-      multipartUploadLimitKB = ((SolrConfig) globalConfig).getMultipartUploadLimitKB();
-      
-      formUploadLimitKB = ((SolrConfig) globalConfig).getFormUploadLimitKB();
-      
-      enableRemoteStreams = ((SolrConfig) globalConfig).isEnableRemoteStreams();
-  
-      // Let this filter take care of /select?xxx format
-      handleSelect = ((SolrConfig) globalConfig).isHandleSelect();
-      
-      addHttpRequestToContext = ((SolrConfig) globalConfig).isAddHttpRequestToContext();
     } else {
-      multipartUploadLimitKB = globalConfig.getInt( 
-          "requestDispatcher/requestParsers/@multipartUploadLimitInKB", 2048 );
+      multipartUploadLimitKB = globalConfig.getMultipartUploadLimitKB();
       
-      formUploadLimitKB = globalConfig.getInt( 
-          "requestDispatcher/requestParsers/@formdataUploadLimitInKB", 2048 );
+      formUploadLimitKB = globalConfig.getFormUploadLimitKB();
       
-      enableRemoteStreams = globalConfig.getBool( 
-          "requestDispatcher/requestParsers/@enableRemoteStreaming", false ); 
+      enableRemoteStreams = globalConfig.isEnableRemoteStreams();
   
       // Let this filter take care of /select?xxx format
-      handleSelect = globalConfig.getBool( 
-          "requestDispatcher/@handleSelect", true ); 
+      handleSelect = globalConfig.isHandleSelect();
       
-      addHttpRequestToContext = globalConfig.getBool( 
-          "requestDispatcher/requestParsers/@addHttpRequestToContext", false ); 
+      addHttpRequestToContext = globalConfig.isAddHttpRequestToContext();
     }
     init(multipartUploadLimitKB, formUploadLimitKB);
   }
@@ -596,7 +579,7 @@ public class SolrRequestParsers
       if (!isFormData(req)) {
         throw new SolrException( ErrorCode.BAD_REQUEST, "Not application/x-www-form-urlencoded content: "+req.getContentType() );
       }
-      
+
       final Map<String,String[]> map = new HashMap<String, String[]>();
       
       // also add possible URL parameters and include into the map (parsed using UTF-8):
@@ -612,7 +595,7 @@ public class SolrRequestParsers
         throw new SolrException(ErrorCode.BAD_REQUEST, "application/x-www-form-urlencoded content length (" +
           totalLength + " bytes) exceeds upload limit of " + uploadLimitKB + " KB");
       }
-      
+
       // get query String from request body, using the charset given in content-type:
       final String cs = ContentStreamBase.getCharsetFromContentType(req.getContentType());
       final Charset charset = (cs == null) ? IOUtils.CHARSET_UTF_8 : Charset.forName(cs);
@@ -692,7 +675,10 @@ public class SolrRequestParsers
         if (ServletFileUpload.isMultipartContent(req)) {
           return multipart.parseParamsAndFillStreams(req, streams);
         }
-        return raw.parseParamsAndFillStreams(req, streams);
+        if (req.getContentType() != null) {
+          return raw.parseParamsAndFillStreams(req, streams);
+        }
+        throw new SolrException(ErrorCode.UNSUPPORTED_MEDIA_TYPE, "Must specify a Content-Type header with POST requests");
       }
       throw new SolrException(ErrorCode.BAD_REQUEST, "Unsupported method: " + method + " for request " + req);
     }

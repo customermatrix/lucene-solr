@@ -17,6 +17,8 @@ package org.apache.solr.handler.admin;
  * limitations under the License.
  */
 
+import com.google.common.collect.ImmutableSet;
+import org.apache.commons.lang.StringUtils;
 import org.apache.solr.client.solrj.SolrResponse;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.impl.HttpSolrServer;
@@ -32,6 +34,7 @@ import org.apache.solr.common.cloud.ImplicitDocRouter;
 import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
+import org.apache.solr.common.params.CollectionParams;
 import org.apache.solr.common.params.CollectionParams.CollectionAction;
 import org.apache.solr.common.params.CoreAdminParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
@@ -50,7 +53,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import static org.apache.solr.cloud.Overseer.QUEUE_OPERATION;
 import static org.apache.solr.cloud.OverseerCollectionProcessor.COLL_CONF;
@@ -65,6 +70,8 @@ import static org.apache.solr.cloud.OverseerCollectionProcessor.SHARDS_PROP;
 import static org.apache.solr.common.cloud.ZkNodeProps.makeMap;
 import static org.apache.solr.common.cloud.ZkStateReader.COLLECTION_PROP;
 import static org.apache.solr.common.cloud.ZkStateReader.SHARD_ID_PROP;
+import static org.apache.solr.common.params.CollectionParams.CollectionAction.ADDROLE;
+import static org.apache.solr.common.params.CollectionParams.CollectionAction.REMOVEROLE;
 
 public class CollectionsHandler extends RequestHandlerBase {
   protected static Logger log = LoggerFactory.getLogger(CollectionsHandler.class);
@@ -161,7 +168,8 @@ public class CollectionsHandler extends RequestHandlerBase {
       case DELETESHARD: {
         this.handleDeleteShardAction(req, rsp);
         break;
-      }case CREATESHARD: {
+      }
+      case CREATESHARD: {
         this.handleCreateShard(req, rsp);
         break;
       }
@@ -169,7 +177,20 @@ public class CollectionsHandler extends RequestHandlerBase {
         this.handleRemoveReplica(req, rsp);
         break;
       }
-
+      case MIGRATE: {
+        this.handleMigrate(req, rsp);
+        break;
+      } case ADDROLE:{
+        handleRole(ADDROLE, req, rsp);
+        break;
+      } case REMOVEROLE:{
+        handleRole(REMOVEROLE, req, rsp);
+        break;
+      }
+      case CLUSTERPROP: {
+        this.handleProp(req, rsp);
+        break;
+      }
       default: {
           throw new RuntimeException("Unknown action: " + action);
       }
@@ -177,8 +198,35 @@ public class CollectionsHandler extends RequestHandlerBase {
 
     rsp.setHttpCaching(false);
   }
-  
-  public static long DEFAULT_ZK_TIMEOUT = 60*1000;
+
+  private void handleProp(SolrQueryRequest req, SolrQueryResponse rsp) throws KeeperException, InterruptedException {
+    req.getParams().required().check("name");
+    String name = req.getParams().get("name");
+    if(!OverseerCollectionProcessor.KNOWN_CLUSTER_PROPS.contains(name)){
+      throw new SolrException(ErrorCode.BAD_REQUEST, "Not a known cluster property "+ name);
+    }
+
+    Map<String,Object> props = ZkNodeProps.makeMap(
+        Overseer.QUEUE_OPERATION, CollectionAction.CLUSTERPROP.toString().toLowerCase(Locale.ROOT) );
+    copyIfNotNull(req.getParams(),props,
+        "name",
+        "val");
+    handleResponse(CollectionAction.CLUSTERPROP.toString().toLowerCase(Locale.ROOT),new ZkNodeProps(props),rsp);
+
+  }
+
+  static Set<String> KNOWN_ROLES = ImmutableSet.of("overseer");
+
+  private void handleRole(CollectionAction action, SolrQueryRequest req, SolrQueryResponse rsp) throws KeeperException, InterruptedException {
+    req.getParams().required().check("role", "node");
+    Map<String, Object> map = ZkNodeProps.makeMap(Overseer.QUEUE_OPERATION, action.toString().toLowerCase(Locale.ROOT));
+    copyIfNotNull(req.getParams(), map,"role", "node");
+    ZkNodeProps m = new ZkNodeProps(map);
+    if(!KNOWN_ROLES.contains(m.getStr("role"))) throw new SolrException(ErrorCode.BAD_REQUEST,"Unknown role. Supported roles are ,"+ KNOWN_ROLES);
+    handleResponse(action.toString().toLowerCase(Locale.ROOT), m, rsp);
+  }
+
+  public static long DEFAULT_ZK_TIMEOUT = 180*1000;
 
   private void handleResponse(String operation, ZkNodeProps m,
                               SolrQueryResponse rsp) throws KeeperException, InterruptedException {
@@ -314,6 +362,7 @@ public class CollectionsHandler extends RequestHandlerBase {
         SHARDS_PROP,
         "router.");
 
+    copyPropertiesIfNotNull(req.getParams(), props);
 
     ZkNodeProps m = new ZkNodeProps(props);
     handleResponse(OverseerCollectionProcessor.CREATECOLLECTION, m, rsp);
@@ -338,6 +387,7 @@ public class CollectionsHandler extends RequestHandlerBase {
 
     Map<String, Object> map = makeMap(QUEUE_OPERATION, CREATESHARD);
     copyIfNotNull(req.getParams(),map,COLLECTION_PROP, SHARD_ID_PROP, REPLICATION_FACTOR,CREATE_NODE_SET);
+    copyPropertiesIfNotNull(req.getParams(), map);
     ZkNodeProps m = new ZkNodeProps(map);
     handleResponse(CREATESHARD, m, rsp);
   }
@@ -368,7 +418,18 @@ public class CollectionsHandler extends RequestHandlerBase {
     }
 
   }
-  
+
+  private void copyPropertiesIfNotNull(SolrParams params, Map<String, Object> props) {
+    Iterator<String> iter =  params.getParameterNamesIterator();
+    while (iter.hasNext()) {
+      String param = iter.next();
+      if (param.startsWith(OverseerCollectionProcessor.COLL_PROP_PREFIX)) {
+        props.put(param, params.get(param));
+      }
+    }
+  }
+
+
   private void handleDeleteShardAction(SolrQueryRequest req,
       SolrQueryResponse rsp) throws InterruptedException, KeeperException {
     log.info("Deleting Shard : " + req.getParamString());
@@ -416,10 +477,21 @@ public class CollectionsHandler extends RequestHandlerBase {
     if (rangesStr != null)  {
       props.put(CoreAdminParams.RANGES, rangesStr);
     }
+    copyPropertiesIfNotNull(req.getParams(), props);
 
     ZkNodeProps m = new ZkNodeProps(props);
 
     handleResponse(OverseerCollectionProcessor.SPLITSHARD, m, rsp, DEFAULT_ZK_TIMEOUT * 5);
+  }
+
+  private void handleMigrate(SolrQueryRequest req, SolrQueryResponse rsp) throws KeeperException, InterruptedException {
+    log.info("Migrate action invoked: " + req.getParamString());
+    req.getParams().required().check("collection", "split.key", "target.collection");
+    Map<String,Object> props = new HashMap<String,Object>();
+    props.put(Overseer.QUEUE_OPERATION, OverseerCollectionProcessor.MIGRATE);
+    copyIfNotNull(req.getParams(), props, "collection", "split.key", "target.collection", "forward.timeout");
+    ZkNodeProps m = new ZkNodeProps(props);
+    handleResponse(OverseerCollectionProcessor.MIGRATE, m, rsp, DEFAULT_ZK_TIMEOUT * 20);
   }
 
   public static ModifiableSolrParams params(String... params) {

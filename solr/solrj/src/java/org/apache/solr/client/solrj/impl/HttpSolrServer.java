@@ -510,9 +510,12 @@ public class HttpSolrServer extends SolrServer {
       if (respBody != null && shouldClose) {
         try {
           respBody.close();
-        } catch (Throwable t) {} // ignore
-        if (!success) {
-          method.abort();
+        } catch (IOException e) {
+          log.error("", e);
+        } finally {
+          if (!success) {
+            method.abort();
+          }
         }
       }
     }
@@ -592,7 +595,7 @@ public class HttpSolrServer extends SolrServer {
    * </p>
    */
   public void setFollowRedirects(boolean followRedirects) {
-    this.followRedirects = true;
+    this.followRedirects = followRedirects;
     HttpClientUtil.setFollowRedirects(httpClient,  followRedirects);
   }
   

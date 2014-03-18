@@ -124,9 +124,11 @@ public abstract class CoreAdminParams
     REQUESTSYNCSHARD,
     CREATEALIAS,
     DELETEALIAS,
+    REQUESTBUFFERUPDATES,
     REQUESTAPPLYUPDATES,
     LOAD_ON_STARTUP,
-    TRANSIENT;
+    TRANSIENT,
+    OVERSEEROP;
     
     public static CoreAdminAction get( String p )
     {

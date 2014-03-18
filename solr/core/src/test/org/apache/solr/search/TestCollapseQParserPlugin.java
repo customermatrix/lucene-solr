@@ -95,6 +95,40 @@ public class TestCollapseQParserPlugin extends SolrTestCaseJ4 {
         "//result/doc[4]/float[@name='id'][.='6.0']"
     );
 
+    // Test value source collapse criteria
+    params = new ModifiableSolrParams();
+    params.add("q", "*:*");
+    params.add("fq", "{!collapse field=group_s nullPolicy=collapse min=field(test_ti)}");
+    params.add("sort", "test_ti desc");
+    assertQ(req(params), "*[count(//doc)=3]",
+        "//result/doc[1]/float[@name='id'][.='4.0']",
+        "//result/doc[2]/float[@name='id'][.='1.0']",
+        "//result/doc[3]/float[@name='id'][.='5.0']"
+    );
+
+    // Test value source collapse criteria with cscore function
+    params = new ModifiableSolrParams();
+    params.add("q", "*:*");
+    params.add("fq", "{!collapse field=group_s nullPolicy=collapse min=cscore()}");
+    params.add("defType", "edismax");
+    params.add("bf", "field(test_ti)");
+    assertQ(req(params), "*[count(//doc)=3]",
+        "//result/doc[1]/float[@name='id'][.='4.0']",
+        "//result/doc[2]/float[@name='id'][.='1.0']",
+        "//result/doc[3]/float[@name='id'][.='5.0']"
+    );
+
+    // Test value source collapse criteria with compound cscore function
+    params = new ModifiableSolrParams();
+    params.add("q", "*:*");
+    params.add("fq", "{!collapse field=group_s nullPolicy=collapse min=sum(cscore(),field(test_ti))}");
+    params.add("defType", "edismax");
+    params.add("bf", "field(test_ti)");
+    assertQ(req(params), "*[count(//doc)=3]",
+        "//result/doc[1]/float[@name='id'][.='4.0']",
+        "//result/doc[2]/float[@name='id'][.='1.0']",
+        "//result/doc[3]/float[@name='id'][.='5.0']"
+    );
 
     //Test collapse by score with elevation
 
@@ -106,9 +140,10 @@ public class TestCollapseQParserPlugin extends SolrTestCaseJ4 {
     params.add("qf", "term_s");
     params.add("qt", "/elevate");
     assertQ(req(params), "*[count(//doc)=4]",
-                         "//result/doc[1]/float[@name='id'][.='1.0']");
-
-
+                         "//result/doc[1]/float[@name='id'][.='1.0']",
+                         "//result/doc[2]/float[@name='id'][.='2.0']",
+                         "//result/doc[3]/float[@name='id'][.='3.0']",
+                         "//result/doc[4]/float[@name='id'][.='6.0']");
 
 
     //Test collapse by min int field and sort
@@ -251,6 +286,14 @@ public class TestCollapseQParserPlugin extends SolrTestCaseJ4 {
     params.add("facet.field","{!ex=test_ti}test_ti");
     params.add("facet.mincount", "1");
     assertQ(req(params), "*[count(//doc)=1]", "*[count(//lst[@name='facet_fields']/lst[@name='test_ti']/int)=2]");
+
+    // SOLR-5230 - ensure CollapsingFieldValueCollector.finish() is called
+    params = new ModifiableSolrParams();
+    params.add("q", "*:*");
+    params.add("fq", "{!collapse field=group_s}");
+    params.add("group", "true");
+    params.add("group.field", "id");
+    assertQ(req(params), "*[count(//doc)=2]");
 
   }
 }

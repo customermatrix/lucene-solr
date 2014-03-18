@@ -18,16 +18,14 @@
 package org.apache.solr.client.solrj.embedded;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.EnumSet;
 import java.util.LinkedList;
-import java.util.Map;
 import java.util.Random;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.net.URL;
-import java.net.MalformedURLException;
 
 import javax.servlet.DispatcherType;
 import javax.servlet.Filter;
@@ -93,6 +91,8 @@ public class JettySolrRunner {
 
   /** Maps servlet holders (i.e. factories: class + init params) to path specs */
   private SortedMap<ServletHolder,String> extraServlets = new TreeMap<ServletHolder,String>();
+  private SortedMap<Class,String> extraRequestFilters;
+  private LinkedList<FilterHolder> extraFilters;
 
   private SSLConfig sslConfig;
 
@@ -167,31 +167,37 @@ public class JettySolrRunner {
   public JettySolrRunner(String solrHome, String context, int port,
       String solrConfigFilename, String schemaFileName, boolean stopAtShutdown,
       SortedMap<ServletHolder,String> extraServlets) {
-    if (null != extraServlets) { this.extraServlets.putAll(extraServlets); }
-    this.init(solrHome, context, port, stopAtShutdown);
-    this.solrConfigFilename = solrConfigFilename;
-    this.schemaFilename = schemaFileName;
+    this (solrHome, context, port, solrConfigFilename, schemaFileName,
+      stopAtShutdown, extraServlets, null, null);
   }
   
   public JettySolrRunner(String solrHome, String context, int port,
       String solrConfigFilename, String schemaFileName, boolean stopAtShutdown,
       SortedMap<ServletHolder,String> extraServlets, SSLConfig sslConfig) {
+    this (solrHome, context, port, solrConfigFilename, schemaFileName,
+      stopAtShutdown, extraServlets, sslConfig, null);
+  }
+
+  /**
+   * Constructor taking an ordered list of additional (filter holder -> path spec) mappings.
+   * Filters are placed after the DebugFilter but before the SolrDispatchFilter.
+   */
+  public JettySolrRunner(String solrHome, String context, int port,
+      String solrConfigFilename, String schemaFileName, boolean stopAtShutdown,
+      SortedMap<ServletHolder,String> extraServlets, SSLConfig sslConfig,
+      SortedMap<Class,String> extraRequestFilters) {
     if (null != extraServlets) { this.extraServlets.putAll(extraServlets); }
-    this.init(solrHome, context, port, stopAtShutdown);
+    if (null != extraRequestFilters) {
+      this.extraRequestFilters = new TreeMap<Class,String>(extraRequestFilters.comparator());
+      this.extraRequestFilters.putAll(extraRequestFilters);
+    }
     this.solrConfigFilename = solrConfigFilename;
     this.schemaFilename = schemaFileName;
     this.sslConfig = sslConfig;
+
+    this.init(solrHome, context, port, stopAtShutdown);
   }
   
-  public static class SSLConfig {
-    public boolean useSsl;
-    public boolean clientAuth;
-    public String keyStore;
-    public String keyStorePassword;
-    public String trustStore;
-    public String trustStorePassword;
-  }
-
   private void init(String solrHome, String context, int port, boolean stopAtShutdown) {
     this.context = context;
     server = new Server(port);
@@ -215,7 +221,7 @@ public class JettySolrRunner {
       // the server as well as any client actions taken by this JVM in
       // talking to that server, but for the purposes of testing that should 
       // be good enough
-      final boolean useSsl = sslConfig == null ? false : sslConfig.useSsl;
+      final boolean useSsl = sslConfig == null ? false : sslConfig.isSSLMode();
       final SslContextFactory sslcontext = new SslContextFactory(false);
       sslInit(useSsl, sslcontext);
 
@@ -227,6 +233,7 @@ public class JettySolrRunner {
           : new SelectChannelConnector();
         c.setReuseAddress(true);
         c.setLowResourcesMaxIdleTime(1500);
+        c.setSoLingerTime(0);
         connector = c;
         threadPool = (QueuedThreadPool) c.getThreadPool();
       } else if ("Socket".equals(connectorName)) {
@@ -234,6 +241,7 @@ public class JettySolrRunner {
           ? new SslSocketConnector(sslcontext)
           : new SocketConnector();
         c.setReuseAddress(true);
+        c.setSoLingerTime(0);
         connector = c;
         threadPool = (QueuedThreadPool) c.getThreadPool();
       } else {
@@ -307,6 +315,13 @@ public class JettySolrRunner {
 //        SolrDispatchFilter filter = new SolrDispatchFilter();
 //        FilterHolder fh = new FilterHolder(filter);
         debugFilter = root.addFilter(DebugFilter.class, "*", EnumSet.of(DispatcherType.REQUEST) );
+        if (extraRequestFilters != null) {
+          extraFilters = new LinkedList<FilterHolder>();
+          for (Class filterClass : extraRequestFilters.keySet()) {
+            extraFilters.add(root.addFilter(filterClass, extraRequestFilters.get(filterClass),
+              EnumSet.of(DispatcherType.REQUEST)));
+          }
+        }
         dispatchFilter = root.addFilter(SolrDispatchFilter.class, "*", EnumSet.of(DispatcherType.REQUEST) );
         for (ServletHolder servletHolder : extraServlets.keySet()) {
           String pathSpec = extraServlets.get(servletHolder);
@@ -330,23 +345,22 @@ public class JettySolrRunner {
 
   private void sslInit(final boolean useSsl, final SslContextFactory sslcontext) {
     if (useSsl && sslConfig != null) {
-      if (null != sslConfig.keyStore) {
-        sslcontext.setKeyStorePath(sslConfig.keyStore);
+      if (null != sslConfig.getKeyStore()) {
+        sslcontext.setKeyStorePath(sslConfig.getKeyStore());
       }
-      if (null != sslConfig.keyStorePassword) {
-        sslcontext.setKeyStorePassword(System
-            .getProperty("solr.javax.net.ssl.keyStorePassword"));
+      if (null != sslConfig.getKeyStorePassword()) {
+        sslcontext.setKeyStorePassword(sslConfig.getKeyStorePassword());
       }
-      if (null != sslConfig.trustStore) {
+      if (null != sslConfig.getTrustStore()) {
         sslcontext.setTrustStore(System
-            .getProperty("solr.javax.net.ssl.trustStore"));
+            .getProperty(sslConfig.getTrustStore()));
       }
-      if (null != sslConfig.trustStorePassword) {
-        sslcontext.setTrustStorePassword(sslConfig.trustStorePassword);
+      if (null != sslConfig.getTrustStorePassword()) {
+        sslcontext.setTrustStorePassword(sslConfig.getTrustStorePassword());
       }
-      sslcontext.setNeedClientAuth(sslConfig.clientAuth);
+      sslcontext.setNeedClientAuth(sslConfig.isClientAuthMode());
     } else {
-      boolean jettySsl = Boolean.getBoolean("tests.jettySsl");
+      boolean jettySsl = Boolean.getBoolean(System.getProperty("tests.jettySsl"));
 
       if (jettySsl) {
         if (null != System.getProperty("javax.net.ssl.keyStore")) {
@@ -443,6 +457,11 @@ public class JettySolrRunner {
     //server.destroy();
     if (server.getState().equals(Server.FAILED)) {
       filter.destroy();
+      if (extraFilters != null) {
+        for (FilterHolder f : extraFilters) {
+          f.getFilter().destroy();
+        }
+      }
     }
     
     server.join();

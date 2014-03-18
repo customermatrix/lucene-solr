@@ -17,18 +17,42 @@
 
 package org.apache.solr;
 
-import com.carrotsearch.randomizedtesting.RandomizedContext;
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
-import com.carrotsearch.randomizedtesting.rules.SystemPropertiesRestoreRule;
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.regex.Pattern;
+
+import javax.xml.xpath.XPathExpressionException;
+
 import org.apache.commons.codec.Charsets;
 import org.apache.commons.io.FileUtils;
 import org.apache.lucene.analysis.MockAnalyzer;
 import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.LuceneTestCase;
-import org.apache.lucene.util._TestUtil;
 import org.apache.lucene.util.QuickPatchThreadsFilter;
+import org.apache.lucene.util._TestUtil;
+import org.apache.solr.client.solrj.impl.HttpClientConfigurer;
+import org.apache.solr.client.solrj.impl.HttpClientUtil;
 import org.apache.solr.client.solrj.util.ClientUtils;
+import org.apache.solr.cloud.IpTables;
+import org.apache.solr.common.SolrDocument;
+import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.SolrInputField;
@@ -54,6 +78,7 @@ import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.servlet.DirectSolrConnection;
 import org.apache.solr.util.AbstractSolrTestCase;
 import org.apache.solr.util.RevertDefaultThreadHandlerRule;
+import org.apache.solr.util.SSLTestConfig;
 import org.apache.solr.util.TestHarness;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -68,25 +93,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xml.sax.SAXException;
 
-import javax.xml.xpath.XPathExpressionException;
-import java.io.File;
-import java.io.IOException;
-import java.io.StringWriter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.logging.ConsoleHandler;
-import java.util.logging.Handler;
-import java.util.logging.Level;
-import java.util.regex.Pattern;
-
-import static com.google.common.base.Preconditions.checkNotNull;
+import com.carrotsearch.randomizedtesting.RandomizedContext;
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
+import com.carrotsearch.randomizedtesting.rules.SystemPropertiesRestoreRule;
 
 /**
  * A junit4 Solr test harness that extends LuceneTestCaseJ4. To change which core is used when loading the schema and solrconfig.xml, simply
@@ -100,8 +109,12 @@ import static com.google.common.base.Preconditions.checkNotNull;
 })
 public abstract class SolrTestCaseJ4 extends LuceneTestCase {
   private static String coreName = ConfigSolrXmlOld.DEFAULT_DEFAULT_CORE_NAME;
-  public static int DEFAULT_CONNECTION_TIMEOUT = 15000;  // default socket connection timeout in ms
+  public static int DEFAULT_CONNECTION_TIMEOUT = 45000;  // default socket connection timeout in ms
 
+  // these are meant to be accessed sequentially, but are volatile just to ensure any test
+  // thread will read the latest value
+  protected static volatile boolean ALLOW_SSL = true;
+  protected static volatile SSLTestConfig sslConfig;
 
   @ClassRule
   public static TestRule solrClassRules = 
@@ -124,6 +137,14 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
     startTrackingZkClients();
     ignoreException("ignore_exception");
     newRandomConfig();
+    
+    sslConfig = buildSSLConfig();
+    //will use ssl specific or default depending on sslConfig
+    HttpClientUtil.setConfigurer(sslConfig.getHttpClientConfigurer());
+    if(isSSLMode()) {
+      // SolrCloud tests should usually clear this
+      System.setProperty("urlScheme", "https");
+    }
   }
 
   @AfterClass
@@ -139,6 +160,22 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
     System.clearProperty("tests.shardhandler.randomSeed");
     System.clearProperty("enable.update.log");
     System.clearProperty("useCompoundFile");
+    System.clearProperty("urlScheme");
+    
+    if(isSSLMode()) {
+      HttpClientUtil.setConfigurer(new HttpClientConfigurer());
+    }
+    // clean up static
+    sslConfig = null;
+    
+    // reset SSL
+    ALLOW_SSL = true;
+    
+    IpTables.unblockAllPorts();
+  }
+  
+  protected static boolean isSSLMode() {
+    return sslConfig != null && sslConfig.isSSLMode();
   }
 
   private static boolean changedFactory = false;
@@ -165,6 +202,28 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
     } else {
       System.clearProperty("solr.directoryFactory");
     }
+  }
+
+  private static SSLTestConfig buildSSLConfig() {
+    // test has been disabled
+    if (!ALLOW_SSL) {
+      return new SSLTestConfig();
+    }
+    
+    final boolean trySsl = random().nextBoolean();
+    boolean trySslClientAuth = random().nextBoolean();
+    if (Constants.MAC_OS_X) {
+      trySslClientAuth = false;
+    }
+    
+    log.info("Randomized ssl ({}) and clientAuth ({})", trySsl,
+        trySslClientAuth);
+    
+    return new SSLTestConfig(trySsl, trySslClientAuth);
+  }
+  
+  protected static String buildUrl(final int port, final String context) {
+    return (isSSLMode() ? "https" : "http") + "://127.0.0.1:" + port + context;
   }
 
   /**
@@ -666,9 +725,10 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
    * Validates a query matches some JSON test expressions using the default double delta tolerance.
    * @see JSONTestUtil#DEFAULT_DELTA
    * @see #assertJQ(SolrQueryRequest,double,String...)
+   * @return The request response as a JSON String if all test patterns pass
    */
-  public static void assertJQ(SolrQueryRequest req, String... tests) throws Exception {
-    assertJQ(req, JSONTestUtil.DEFAULT_DELTA, tests);
+  public static String assertJQ(SolrQueryRequest req, String... tests) throws Exception {
+    return assertJQ(req, JSONTestUtil.DEFAULT_DELTA, tests);
   }
   /**
    * Validates a query matches some JSON test expressions and closes the
@@ -683,8 +743,9 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
    * @param req Solr request to execute
    * @param delta tolerance allowed in comparing float/double values
    * @param tests JSON path expression + '==' + expected value
+   * @return The request response as a JSON String if all test patterns pass
    */
-  public static void assertJQ(SolrQueryRequest req, double delta, String... tests) throws Exception {
+  public static String assertJQ(SolrQueryRequest req, double delta, String... tests) throws Exception {
     SolrParams params =  null;
     try {
       params = req.getParams();
@@ -732,6 +793,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
           }
         }
       }
+      return response;
     } finally {
       // restore the params
       if (params != null && params != req.getParams()) req.setParams(params);
@@ -864,7 +926,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
    */
   public static XmlDoc doc(String... fieldsAndValues) {
     XmlDoc d = new XmlDoc();
-    d.xml = TestHarness.makeSimpleDoc(fieldsAndValues).toString();
+    d.xml = TestHarness.makeSimpleDoc(fieldsAndValues);
     return d;
   }
 
@@ -1625,6 +1687,30 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
       throw new RuntimeException("XPath is invalid", e2);
     }
   }
+                                                         
+  /**
+   * Fails if the number of documents in the given SolrDocumentList differs
+   * from the given number of expected values, or if any of the values in the
+   * given field don't match the expected values in the same order.
+   */
+  public static void assertFieldValues(SolrDocumentList documents, String fieldName, Object... expectedValues) {
+    if (documents.size() != expectedValues.length) {
+      fail("Number of documents (" + documents.size()
+          + ") is different from number of expected values (" + expectedValues.length);
+    }
+    for (int docNum = 1 ; docNum <= documents.size() ; ++docNum) {
+      SolrDocument doc = documents.get(docNum - 1);
+      Object expected = expectedValues[docNum - 1];
+      Object actual = doc.get(fieldName);
+      if (null != expected && null != actual) {
+        if ( ! expected.equals(actual)) {
+          fail( "Unexpected " + fieldName + " field value in document #" + docNum
+              + ": expected=[" + expected + "], actual=[" + actual + "]");
+        }
+      }
+    }
+  }
+
   public static void copyMinConf(File dstRoot) throws IOException {
     copyMinConf(dstRoot, null);
   }
@@ -1662,11 +1748,18 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
   // the stock files in there. Seems to be indicated for some tests when we remove the default, hard-coded
   // solr.xml from being automatically synthesized from SolrConfigXmlOld.DEFAULT_SOLR_XML.
   public static void copySolrHomeToTemp(File dstRoot, String collection) throws IOException {
+    copySolrHomeToTemp(dstRoot, collection, false);
+  }
+  public static void copySolrHomeToTemp(File dstRoot, String collection, boolean newStyle) throws IOException {
     if (!dstRoot.exists()) {
       assertTrue("Failed to make subdirectory ", dstRoot.mkdirs());
     }
 
-    FileUtils.copyFile(new File(SolrTestCaseJ4.TEST_HOME(), "solr.xml"), new File(dstRoot, "solr.xml"));
+    if (newStyle) {
+      FileUtils.copyFile(new File(SolrTestCaseJ4.TEST_HOME(), "solr-no-core.xml"), new File(dstRoot, "solr.xml"));
+    } else {
+      FileUtils.copyFile(new File(SolrTestCaseJ4.TEST_HOME(), "solr.xml"), new File(dstRoot, "solr.xml"));
+    }
 
     File subHome = new File(dstRoot, collection + File.separator + "conf");
     String top = SolrTestCaseJ4.TEST_HOME() + "/collection1/conf";

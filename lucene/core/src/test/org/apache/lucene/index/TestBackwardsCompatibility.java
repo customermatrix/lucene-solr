@@ -164,7 +164,9 @@ public class TestBackwardsCompatibility extends LuceneTestCase {
                                     "42.cfs",
                                     "42.nocfs",
                                     "45.cfs",
-                                    "45.nocfs"
+                                    "45.nocfs",
+                                    "461.cfs",
+                                    "461.nocfs",
   };
   
   final String[] unsupportedNames = {"19.cfs",
@@ -208,7 +210,6 @@ public class TestBackwardsCompatibility extends LuceneTestCase {
   @BeforeClass
   public static void beforeClass() throws Exception {
     assertFalse("test infra is broken!", LuceneTestCase.OLD_FORMAT_IMPERSONATION_IS_ACTIVE);
-    assertFalse("test infra is broken!", LuceneTestCase.PREFLEX_IMPERSONATION_IS_ACTIVE);
     List<String> names = new ArrayList<String>(oldNames.length + oldSingleSegmentNames.length);
     names.addAll(Arrays.asList(oldNames));
     names.addAll(Arrays.asList(oldSingleSegmentNames));

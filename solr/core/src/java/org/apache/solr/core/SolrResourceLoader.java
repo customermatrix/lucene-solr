@@ -79,7 +79,7 @@ public class SolrResourceLoader implements ResourceLoader,Closeable
 
   static final String project = "solr";
   static final String base = "org.apache" + "." + project;
-  static final String[] packages = {"","analysis.","schema.","handler.","search.","update.","core.","response.","request.","update.processor.","util.", "spelling.", "handler.component.", "handler.dataimport." };
+  static final String[] packages = {"","analysis.","schema.","handler.","search.","update.","core.","response.","request.","update.processor.","util.", "spelling.", "handler.component.", "handler.dataimport.", "spelling.suggest.", "spelling.suggest.fst." };
 
   protected URLClassLoader classLoader;
   private final String instanceDir;
@@ -679,8 +679,8 @@ public class SolrResourceLoader implements ResourceLoader,Closeable
     for (SolrInfoMBean bean : arr) {
       try {
         infoRegistry.put(bean.getName(), bean);
-      } catch (Throwable t) {
-        log.warn("could not register MBean '" + bean.getName() + "'.", t);
+      } catch (Exception e) {
+        log.warn("could not register MBean '" + bean.getName() + "'.", e);
       }
     }
   }

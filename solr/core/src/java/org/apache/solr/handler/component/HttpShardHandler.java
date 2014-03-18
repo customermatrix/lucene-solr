@@ -165,7 +165,7 @@ public class HttpShardHandler extends ShardHandler {
         }
         catch( ConnectException cex ) {
           srsp.setException(cex); //????
-        } catch (Throwable th) {
+        } catch (Exception th) {
           srsp.setException(th);
           if (th instanceof SolrException) {
             srsp.setResponseCode(((SolrException)th).code());
@@ -377,8 +377,6 @@ public class HttpShardHandler extends ShardHandler {
                 sliceShardsStr.append('|');
               }
               String url = ZkCoreNodeProps.getCoreUrl(replica);
-              if (url.startsWith("http://"))
-                url = url.substring(7);
               sliceShardsStr.append(url);
             }
 

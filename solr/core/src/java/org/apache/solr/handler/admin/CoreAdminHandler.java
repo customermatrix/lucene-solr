@@ -214,7 +214,20 @@ public class CoreAdminHandler extends RequestHandlerBase {
           this.handleRequestApplyUpdatesAction(req, rsp);
           break;
         }
-        
+        case REQUESTBUFFERUPDATES:  {
+          this.handleRequestBufferUpdatesAction(req, rsp);
+          break;
+        }
+        case OVERSEEROP:{
+          ZkController zkController = coreContainer.getZkController();
+          if(zkController != null){
+            String op = req.getParams().get("op");
+            if("leader".equals(op)){
+              zkController.forceOverSeer();
+            } else if ("rejoin".equals(op)) zkController.rejoinOverseerElection();
+          }
+          break;
+        }
         default: {
           this.handleCustomAction(req, rsp);
           break;
@@ -282,9 +295,10 @@ public class CoreAdminHandler extends RequestHandlerBase {
           DocRouter.Range currentRange = slice.getRange();
           ranges = currentRange != null ? router.partitionRange(partitions, currentRange) : null;
         }
-        Map m = (Map) collection.get(DOC_ROUTER);
-        if (m != null)  {
-          routeFieldName = (String) m.get("field");
+        Object routerObj = collection.get(DOC_ROUTER); // for back-compat with Solr 4.4
+        if (routerObj != null && routerObj instanceof Map) {
+          Map routerProps = (Map) routerObj;
+          routeFieldName = (String) routerProps.get("field");
         }
       }
 
@@ -426,9 +440,6 @@ public class CoreAdminHandler extends RequestHandlerBase {
       .put(CoreAdminParams.COLLECTION, CoreDescriptor.CORE_COLLECTION)
       .put(CoreAdminParams.ROLES, CoreDescriptor.CORE_ROLES)
       .put(CoreAdminParams.CORE_NODE_NAME, CoreDescriptor.CORE_NODE_NAME)
-      .put(CoreAdminParams.SHARD_STATE, CloudDescriptor.SHARD_STATE)
-      .put(CoreAdminParams.SHARD_RANGE, CloudDescriptor.SHARD_RANGE)
-      .put(CoreAdminParams.SHARD_PARENT, CloudDescriptor.SHARD_PARENT)
       .put(ZkStateReader.NUM_SHARDS_PROP, CloudDescriptor.NUM_SHARDS)
       .build();
 
@@ -722,6 +733,11 @@ public class CoreAdminHandler extends RequestHandlerBase {
   protected void handleReloadAction(SolrQueryRequest req, SolrQueryResponse rsp) {
     SolrParams params = req.getParams();
     String cname = params.get(CoreAdminParams.CORE);
+
+    if(!coreContainer.getCoreNames().contains(cname)) {
+      throw new SolrException(ErrorCode.BAD_REQUEST, "Core with core name [" + cname + "] does not exist.");
+    }
+
     try {
       coreContainer.reload(cname);
     } catch (Exception ex) {
@@ -763,13 +779,16 @@ public class CoreAdminHandler extends RequestHandlerBase {
             }  catch (InterruptedException e) {
               Thread.currentThread().interrupt();
               SolrException.log(log, "", e);
-            } catch (Throwable t) {
-              SolrException.log(log, "", t);
+            } catch (Throwable e) {
+              SolrException.log(log, "", e);
+              if (e instanceof Error) {
+                throw (Error) e;
+              }
             }
             
             core.getUpdateHandler().getSolrCoreState().doRecovery(coreContainer, core.getCoreDescriptor());
           } else {
-            SolrException.log(log, "Cound not find core to call recovery:" + cname);
+            SolrException.log(log, "Could not find core to call recovery:" + cname);
           }
         } finally {
           // no recoveryStrat close for now
@@ -802,14 +821,14 @@ public class CoreAdminHandler extends RequestHandlerBase {
     try {
       core = coreContainer.getCore(cname);
       if (core != null) {
-        syncStrategy = new SyncStrategy(core.getCoreDescriptor().getCoreContainer().getUpdateShardHandler());
+        syncStrategy = new SyncStrategy(core.getCoreDescriptor().getCoreContainer());
         
         Map<String,Object> props = new HashMap<String,Object>();
         props.put(ZkStateReader.BASE_URL_PROP, zkController.getBaseUrl());
         props.put(ZkStateReader.CORE_NAME_PROP, cname);
         props.put(ZkStateReader.NODE_NAME_PROP, zkController.getNodeName());
         
-        boolean success = syncStrategy.sync(zkController, core, new ZkNodeProps(props));
+        boolean success = syncStrategy.sync(zkController, core, new ZkNodeProps(props), true);
         // solrcloud_debug
         if (log.isDebugEnabled()) {
           try {
@@ -978,6 +997,7 @@ public class CoreAdminHandler extends RequestHandlerBase {
     SolrParams params = req.getParams();
     String cname = params.get(CoreAdminParams.NAME, "");
     SolrCore core = coreContainer.getCore(cname);
+    log.info("Applying buffered updates on core: " + cname);
     try {
       UpdateLog updateLog = core.getUpdateHandler().getUpdateLog();
       if (updateLog.getState() != UpdateLog.State.BUFFERING)  {
@@ -1001,7 +1021,7 @@ public class CoreAdminHandler extends RequestHandlerBase {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       log.warn("Recovery was interrupted", e);
-    } catch (Throwable e) {
+    } catch (Exception e) {
       if (e instanceof SolrException)
         throw (SolrException)e;
       else
@@ -1012,6 +1032,31 @@ public class CoreAdminHandler extends RequestHandlerBase {
         core.close();
     }
     
+  }
+
+  private void handleRequestBufferUpdatesAction(SolrQueryRequest req, SolrQueryResponse rsp) {
+    SolrParams params = req.getParams();
+    String cname = params.get(CoreAdminParams.NAME, "");
+    SolrCore core = coreContainer.getCore(cname);
+    log.info("Starting to buffer updates on core:" + cname);
+    try {
+      UpdateLog updateLog = core.getUpdateHandler().getUpdateLog();
+      if (updateLog.getState() != UpdateLog.State.ACTIVE)  {
+        throw new SolrException(ErrorCode.SERVER_ERROR, "Core " + cname + " not in active state");
+      }
+      updateLog.bufferUpdates();
+      rsp.add("core", cname);
+      rsp.add("status", "BUFFERING");
+    } catch (Throwable e) {
+      if (e instanceof SolrException)
+        throw (SolrException)e;
+      else
+        throw new SolrException(ErrorCode.SERVER_ERROR, "Could not start buffering updates", e);
+    } finally {
+      if (req != null) req.close();
+      if (core != null)
+        core.close();
+    }
   }
 
   /**

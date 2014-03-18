@@ -24,6 +24,7 @@ import org.apache.lucene.analysis.Tokenizer;
 import org.apache.lucene.analysis.standard.std31.UAX29URLEmailTokenizerImpl31;
 import org.apache.lucene.analysis.standard.std34.UAX29URLEmailTokenizerImpl34;
 import org.apache.lucene.analysis.standard.std36.UAX29URLEmailTokenizerImpl36;
+import org.apache.lucene.analysis.standard.std40.UAX29URLEmailTokenizerImpl40;
 import org.apache.lucene.analysis.tokenattributes.OffsetAttribute;
 import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
@@ -32,7 +33,7 @@ import org.apache.lucene.util.Version;
 
 /**
  * This class implements Word Break rules from the Unicode Text Segmentation 
- * algorithm, as specified in 
+ * algorithm, as specified in                 `
  * <a href="http://unicode.org/reports/tr29/">Unicode Standard Annex #29</a> 
  * URLs and email addresses are also tokenized according to the relevant RFCs.
  * <p/>
@@ -120,8 +121,10 @@ public final class UAX29URLEmailTokenizer extends Tokenizer {
 
   private StandardTokenizerInterface getScannerFor(Version matchVersion) {
     // best effort NPE if you dont call reset
-    if (matchVersion.onOrAfter(Version.LUCENE_40)) {
+    if (matchVersion.onOrAfter(Version.LUCENE_47)) {
       return new UAX29URLEmailTokenizerImpl(input);
+    } else if (matchVersion.onOrAfter(Version.LUCENE_40)) {
+      return new UAX29URLEmailTokenizerImpl40(input);
     } else if (matchVersion.onOrAfter(Version.LUCENE_36)) {
       return new UAX29URLEmailTokenizerImpl36(input);
     } else if (matchVersion.onOrAfter(Version.LUCENE_34)) {

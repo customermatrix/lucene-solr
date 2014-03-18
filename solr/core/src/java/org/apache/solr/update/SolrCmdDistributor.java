@@ -25,7 +25,6 @@ import java.util.List;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.impl.HttpSolrServer;
-import org.apache.solr.client.solrj.impl.HttpSolrServer.RemoteSolrException;
 import org.apache.solr.client.solrj.request.AbstractUpdateRequest;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.common.SolrException;
@@ -40,10 +39,13 @@ import org.slf4j.LoggerFactory;
 
 
 public class SolrCmdDistributor {
-  private static final int MAX_RETRIES_ON_FORWARD = 15;
+  private static final int MAX_RETRIES_ON_FORWARD = 25;
   public static Logger log = LoggerFactory.getLogger(SolrCmdDistributor.class);
   
   private StreamingSolrServers servers;
+  
+  private int retryPause = 500;
+  private int maxRetriesOnForward = MAX_RETRIES_ON_FORWARD;
   
   private List<Error> allErrors = new ArrayList<Error>();
   private List<Error> errors = new ArrayList<Error>();
@@ -54,6 +56,12 @@ public class SolrCmdDistributor {
   
   public SolrCmdDistributor(UpdateShardHandler updateShardHandler) {
     servers = new StreamingSolrServers(updateShardHandler);
+  }
+  
+  public SolrCmdDistributor(StreamingSolrServers servers, int maxRetriesOnForward, int retryPause) {
+    this.servers = servers;
+    this.maxRetriesOnForward = maxRetriesOnForward;
+    this.retryPause = retryPause;
   }
   
   public void finish() {
@@ -87,32 +95,30 @@ public class SolrCmdDistributor {
         
         // this can happen in certain situations such as shutdown
         if (isRetry) {
-          if (rspCode == 404 || rspCode == 403 || rspCode == 503
-              || rspCode == 500) {
+          if (rspCode == 404 || rspCode == 403 || rspCode == 503) {
             doRetry = true;
           }
           
           // if its a connect exception, lets try again
-          if (err.e instanceof ConnectException) {
-            doRetry = true;
-          } else if (err.e instanceof SolrServerException) {
+          if (err.e instanceof SolrServerException) {
             if (((SolrServerException) err.e).getRootCause() instanceof ConnectException) {
               doRetry = true;
             }
-          } else if (err.e instanceof RemoteSolrException) {
-            Exception cause = (RemoteSolrException) err.e.getCause();
-            if (cause != null && cause instanceof ConnectException) {
-              doRetry = true;
-            }
           }
-          if (err.req.retries < MAX_RETRIES_ON_FORWARD && doRetry) {
+          
+          if (err.e instanceof ConnectException) {
+            doRetry = true;
+          }
+          
+          if (err.req.retries < maxRetriesOnForward && doRetry) {
             err.req.retries++;
             
             SolrException.log(SolrCmdDistributor.log, "forwarding update to "
                 + oldNodeUrl + " failed - retrying ... retries: "
-                + err.req.retries);
+                + err.req.retries + " " + err.req.cmdString + " params:"
+                + err.req.uReq.getParams() + " rsp:" + rspCode, err.e);
             try {
-              Thread.sleep(500);
+              Thread.sleep(retryPause);
             } catch (InterruptedException e) {
               Thread.currentThread().interrupt();
               log.warn(null, e);
@@ -158,7 +164,7 @@ public class SolrCmdDistributor {
         uReq.deleteByQuery(cmd.query);
       }
       
-      submit(new Req(node, uReq, sync));
+      submit(new Req(cmd.toString(), node, uReq, sync));
     }
   }
   
@@ -172,7 +178,7 @@ public class SolrCmdDistributor {
       UpdateRequest uReq = new UpdateRequest();
       uReq.setParams(params);
       uReq.add(cmd.solrDoc, cmd.commitWithin, cmd.overwrite);
-      submit(new Req(node, uReq, synchronous));
+      submit(new Req(cmd.toString(), node, uReq, synchronous));
     }
     
   }
@@ -189,10 +195,10 @@ public class SolrCmdDistributor {
     
     addCommit(uReq, cmd);
     
-    log.debug("Distrib commit to:" + nodes + " params:" + params);
+    log.debug("Distrib commit to: {} params: {}", nodes, params);
     
     for (Node node : nodes) {
-      submit(new Req(node, uReq, false));
+      submit(new Req(cmd.toString(), node, uReq, false));
     }
     
   }
@@ -220,7 +226,11 @@ public class SolrCmdDistributor {
       
       return;
     }
-    
+    if (log.isDebugEnabled()) {
+      log.debug("sending update to "
+          + req.node.getUrl() + " retry:"
+          + req.retries + " " + req.cmdString + " params:" + req.uReq.getParams());
+    }
     try {
       SolrServer solrServer = servers.getSolrServer(req);
       NamedList<Object> rsp = solrServer.request(req.uReq);
@@ -241,11 +251,13 @@ public class SolrCmdDistributor {
     public UpdateRequest uReq;
     public int retries;
     public boolean synchronous;
+    public String cmdString;
     
-    public Req(Node node, UpdateRequest uReq, boolean synchronous) {
+    public Req(String cmdString, Node node, UpdateRequest uReq, boolean synchronous) {
       this.node = node;
       this.uReq = uReq;
       this.synchronous = synchronous;
+      this.cmdString = cmdString;
     }
   }
     
@@ -259,7 +271,7 @@ public class SolrCmdDistributor {
   
   public static class Error {
     public Exception e;
-    public int statusCode;
+    public int statusCode = -1;
     public Req req;
   }
   
@@ -372,7 +384,7 @@ public class SolrCmdDistributor {
         log.warn(null, e);
         return true;
       }
-      
+     
       this.nodeProps = leaderProps;
       
       return true;

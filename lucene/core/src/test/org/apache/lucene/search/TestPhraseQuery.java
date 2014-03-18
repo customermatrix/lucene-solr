@@ -224,7 +224,7 @@ public class TestPhraseQuery extends LuceneTestCase {
     Directory directory = newDirectory();
     Analyzer stopAnalyzer = new MockAnalyzer(random(), MockTokenizer.SIMPLE, true, MockTokenFilter.ENGLISH_STOPSET);
     RandomIndexWriter writer = new RandomIndexWriter(random(), directory, 
-        newIndexWriterConfig( Version.LUCENE_40, stopAnalyzer));
+        newIndexWriterConfig(TEST_VERSION_CURRENT, stopAnalyzer));
     Document doc = new Document();
     doc.add(newTextField("field", "the stop words are here", Field.Store.YES));
     writer.addDocument(doc);
@@ -690,5 +690,17 @@ public class TestPhraseQuery extends LuceneTestCase {
 
     reader.close();
     dir.close();
+  }
+  
+  public void testNegativeSlop() throws Exception {
+    PhraseQuery query = new PhraseQuery();
+    query.add(new Term("field", "two"));
+    query.add(new Term("field", "one"));
+    try {
+      query.setSlop(-2);
+      fail("didn't get expected exception");
+    } catch (IllegalArgumentException expected) {
+      // expected exception
+    }
   }
 }

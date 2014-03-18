@@ -424,7 +424,7 @@ public class TestUAX29URLEmailTokenizer extends BaseTokenStreamTestCase {
   }
 
   public void testUnicodeWordBreaks() throws Exception {
-    WordBreakTestUnicode_6_1_0 wordBreakTest = new WordBreakTestUnicode_6_1_0();
+    WordBreakTestUnicode_6_3_0 wordBreakTest = new WordBreakTestUnicode_6_3_0();
     wordBreakTest.test(a);
   }
   
@@ -451,6 +451,54 @@ public class TestUAX29URLEmailTokenizer extends BaseTokenStreamTestCase {
     checkOneTerm(a, "ザ", "ザ"); // katakana
     checkOneTerm(a, "壹゙", "壹゙"); // ideographic
     checkOneTerm(a, "아゙",  "아゙"); // hangul
+  }
+
+  /**
+   * Multiple consecutive chars in \p{Word_Break = MidLetter},
+   * \p{Word_Break = MidNumLet}, and/or \p{Word_Break = MidNum}
+   * should trigger a token split.
+   */
+  public void testMid() throws Exception {
+    // ':' is in \p{WB:MidLetter}, which should trigger a split unless there is a Letter char on both sides
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "A:B", new String[] { "A:B" });
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "A::B", new String[] { "A", "B" });
+
+    // '.' is in \p{WB:MidNumLet}, which should trigger a split unless there is a Letter or Numeric char on both sides
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "1.2", new String[] { "1.2" });
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "A.B", new String[] { "A.B" });
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "1..2", new String[] { "1", "2" });
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "A..B", new String[] { "A", "B" });
+
+    // ',' is in \p{WB:MidNum}, which should trigger a split unless there is a Numeric char on both sides
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "1,2", new String[] { "1,2" });
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "1,,2", new String[] { "1", "2" });
+
+    // Mixed consecutive \p{WB:MidLetter} and \p{WB:MidNumLet} should trigger a split
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "A.:B", new String[] { "A", "B" });
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "A:.B", new String[] { "A", "B" });
+
+    // Mixed consecutive \p{WB:MidNum} and \p{WB:MidNumLet} should trigger a split
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "1,.2", new String[] { "1", "2" });
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "1.,2", new String[] { "1", "2" });
+
+    // '_' is in \p{WB:ExtendNumLet}
+
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "A:B_A:B", new String[] { "A:B_A:B" });
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "A:B_A::B", new String[] { "A:B_A", "B" });
+
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "1.2_1.2", new String[] { "1.2_1.2" });
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "A.B_A.B", new String[] { "A.B_A.B" });
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "1.2_1..2", new String[] { "1.2_1", "2" });
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "A.B_A..B", new String[] { "A.B_A", "B" });
+
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "1,2_1,2", new String[] { "1,2_1,2" });
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "1,2_1,,2", new String[] { "1,2_1", "2" });
+
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "C_A.:B", new String[] { "C_A", "B" });
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "C_A:.B", new String[] { "C_A", "B" });
+
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "3_1,.2", new String[] { "3_1", "2" });
+    BaseTokenStreamTestCase.assertAnalyzesTo(a, "3_1.,2", new String[] { "3_1", "2" });
   }
 
   /** @deprecated remove this and sophisticated backwards layer in 5.0 */
@@ -497,6 +545,22 @@ public class TestUAX29URLEmailTokenizer extends BaseTokenStreamTestCase {
       }
     };
     assertAnalyzesTo(a, "this is just a t\u08E6st lucene@apache.org", // new combining mark in 6.1
+        new String[] { "this", "is", "just", "a", "t", "st", "lucene@apache.org" });
+  };
+
+  /** @deprecated uses older unicode (6.1). simple test to make sure its basically working */
+  @Deprecated
+  public void testVersion40() throws Exception {
+    Analyzer a = new Analyzer() {
+      @Override
+      protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
+        Tokenizer tokenizer = new UAX29URLEmailTokenizer(Version.LUCENE_40, reader);
+        return new TokenStreamComponents(tokenizer);
+      }
+    };
+    // U+061C is a new combining mark in 6.3, found using "[[\p{WB:Format}\p{WB:Extend}]&[^\p{Age:6.2}]]"
+    // on the online UnicodeSet utility: <http://unicode.org/cldr/utility/list-unicodeset.jsp>
+    assertAnalyzesTo(a, "this is just a t\u061Cst lucene@apache.org",
         new String[] { "this", "is", "just", "a", "t", "st", "lucene@apache.org" });
   };
 

@@ -40,9 +40,7 @@ public class ConfigSolrXml extends ConfigSolr {
       checkForIllegalConfig();
       fillPropMap();
       config.substituteProperties();
-      log.info("Config-defined core root directory: {}", get(CfgProp.SOLR_COREROOTDIRECTORY, ""));
-      String coreRoot = get(CfgProp.SOLR_COREROOTDIRECTORY, config.getResourceLoader().getInstanceDir());
-      coresLocator = new CorePropertiesLocator(coreRoot);
+      coresLocator = new CorePropertiesLocator(getCoreRootDirectory());
     }
     catch (IOException e) {
       throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, e);
@@ -103,6 +101,8 @@ public class ConfigSolrXml extends ConfigSolr {
   
   private void fillPropMap() {
     propMap.put(CfgProp.SOLR_ADMINHANDLER, doSub("solr/str[@name='adminHandler']"));
+    propMap.put(CfgProp.SOLR_COLLECTIONSHANDLER, doSub("solr/str[@name='collectionsHandler']"));
+    propMap.put(CfgProp.SOLR_INFOHANDLER, doSub("solr/str[@name='infoHandler']"));
     propMap.put(CfgProp.SOLR_CORELOADTHREADS, doSub("solr/int[@name='coreLoadThreads']"));
     propMap.put(CfgProp.SOLR_COREROOTDIRECTORY, doSub("solr/str[@name='coreRootDirectory']"));
     propMap.put(CfgProp.SOLR_DISTRIBUPDATECONNTIMEOUT, doSub("solr/solrcloud/int[@name='distribUpdateConnTimeout']"));

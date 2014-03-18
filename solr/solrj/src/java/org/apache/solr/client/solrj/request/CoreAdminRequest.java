@@ -379,7 +379,8 @@ public class CoreAdminRequest extends SolrRequest
 
   public static class Unload extends CoreAdminRequest {
     protected boolean deleteIndex;
-    private boolean deleteDataDir;
+    protected boolean deleteDataDir;
+    protected boolean deleteInstanceDir;
 
     public Unload(boolean deleteIndex) {
       action = CoreAdminAction.UNLOAD;
@@ -398,11 +399,24 @@ public class CoreAdminRequest extends SolrRequest
      this.deleteDataDir = deleteDataDir; 
     }
 
+    public void setDeleteInstanceDir(boolean deleteInstanceDir){
+        this.deleteInstanceDir = deleteInstanceDir;
+    }
+
+    public boolean isDeleteDataDir() {
+      return deleteDataDir;
+    }
+
+    public boolean isDeleteInstanceDir() {
+      return deleteInstanceDir;
+    }
+
     @Override
     public SolrParams getParams() {
       ModifiableSolrParams params = (ModifiableSolrParams) super.getParams();
       params.set(CoreAdminParams.DELETE_INDEX, deleteIndex);
       params.set(CoreAdminParams.DELETE_DATA_DIR, deleteDataDir);
+      params.set(CoreAdminParams.DELETE_INSTANCE_DIR, deleteInstanceDir);
       return params;
     }
 
@@ -497,11 +511,15 @@ public class CoreAdminRequest extends SolrRequest
     return unloadCore(name, false, server);
   }
 
-  public static CoreAdminResponse unloadCore( String name, boolean deleteIndex, SolrServer server ) throws SolrServerException, IOException
-  {
+  public static CoreAdminResponse unloadCore(String name, boolean deleteIndex, SolrServer server) throws SolrServerException, IOException {
+    return unloadCore(name, deleteIndex, false, server);
+  }
+
+  public static CoreAdminResponse unloadCore(String name, boolean deleteIndex, boolean deleteInstanceDir, SolrServer server) throws SolrServerException, IOException {
     Unload req = new Unload(deleteIndex);
-    req.setCoreName( name );
-    return req.process( server );
+    req.setCoreName(name);
+    req.setDeleteInstanceDir(deleteInstanceDir);
+    return req.process(server);
   }
 
   public static CoreAdminResponse renameCore(String coreName, String newName, SolrServer server ) throws SolrServerException, IOException

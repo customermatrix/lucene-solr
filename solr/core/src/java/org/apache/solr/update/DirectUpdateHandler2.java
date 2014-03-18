@@ -57,6 +57,7 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -155,6 +156,24 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
 
   @Override
   public int addDoc(AddUpdateCommand cmd) throws IOException {
+    try {
+      return addDoc0(cmd);
+    } catch (SolrException e) {
+      throw e;
+    } catch (RuntimeException t) {
+      throw new SolrException(SolrException.ErrorCode.SERVER_ERROR,
+          String.format(Locale.ROOT, "Exception writing document id %s to the index; possible analysis error.",
+          cmd.getPrintableId()), t);
+    }
+  }
+
+  /**
+   * This is the implementation of {@link #addDoc0(AddUpdateCommand)}. It is factored out to allow an exception
+   * handler to decorate RuntimeExceptions with information about the document being handled.
+   * @param cmd the command.
+   * @return the count.
+   */
+  private int addDoc0(AddUpdateCommand cmd) throws IOException {
     int rc = -1;
     RefCounted<IndexWriter> iw = solrCoreState.getIndexWriter(core);
     try {
@@ -754,6 +773,9 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
         }
       } catch (Throwable th) {
         log.error("Error in final commit", th);
+        if (th instanceof OutOfMemoryError) {
+          throw (OutOfMemoryError) th;
+        }
       }
 
       // we went through the normal process to commit, so we don't have to artificially
@@ -762,6 +784,9 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
         if (ulog != null) ulog.close(false);
       }  catch (Throwable th) {
         log.error("Error closing log files", th);
+        if (th instanceof OutOfMemoryError) {
+          throw (OutOfMemoryError) th;
+        }
       }
 
       if (writer != null) writer.close();
@@ -845,6 +870,10 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
     lst.add("cumulative_deletesById", deleteByIdCommandsCumulative.get());
     lst.add("cumulative_deletesByQuery", deleteByQueryCommandsCumulative.get());
     lst.add("cumulative_errors", numErrorsCumulative.get());
+    if (this.ulog != null) {
+      lst.add("transaction_logs_total_size", ulog.getTotalLogsSize());
+      lst.add("transaction_logs_total_number", ulog.getTotalLogsNumber());
+    }
     return lst;
   }
 

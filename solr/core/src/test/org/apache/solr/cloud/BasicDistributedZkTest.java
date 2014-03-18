@@ -329,6 +329,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     handle.put("explain", SKIPVAL);
     handle.put("debug", UNORDERED);
     handle.put("time", SKIPVAL);
+    handle.put("track", SKIP);
     query(false, new Object[] {"q","now their fox sat had put","fl","*,score",CommonParams.DEBUG_QUERY, "true"});
     query(false, new Object[] {"q", "id:[1 TO 5]", CommonParams.DEBUG_QUERY, "true"});
     query(false, new Object[] {"q", "id:[1 TO 5]", CommonParams.DEBUG, CommonParams.TIMING});
@@ -396,6 +397,8 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
       fail("Expected SolrCore create to fail");
     } catch (Exception e) {
       
+    } finally {
+      server.shutdown();
     }
     
     long timeout = System.currentTimeMillis() + 15000;
@@ -437,7 +440,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
         // each replica should also give the same numDocs
         ArrayList<String> replicaAlts = new ArrayList<String>(replicaJetties.size() * 2);
         for (CloudJettyRunner replicaJetty : shardToJetty.get(shard)) {
-          String replica = removeProtocol(replicaJetty.url);
+          String replica = replicaJetty.url;
           query.set("shards", replica);
 
           // replicas already shuffled, use this in the alternative check below
@@ -481,7 +484,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
           ArrayList<String> replicas = new ArrayList<String>(7);
           for (CloudJettyRunner replicaJetty : shardToJetty.get(shard)) {
             if (0 == random().nextInt(3) || 0 == replicas.size()) {
-              replicas.add(removeProtocol(replicaJetty.url));
+              replicas.add(replicaJetty.url);
             }
           }
           Collections.shuffle(replicas, random());
@@ -529,6 +532,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     
     executor.shutdown();
     executor.awaitTermination(120, TimeUnit.SECONDS);
+    server.shutdown();
     
     ChaosMonkey.stop(cloudJettys.get(0).jetty);
     printLayout();
@@ -613,7 +617,9 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
           ((HttpSolrServer) clients.get(clientIndex)).getBaseURL().length()
               - DEFAULT_COLLECTION.length() - 1);
       
-      createNewSolrServer("", baseUrl).request(request);
+      SolrServer aClient = createNewSolrServer("", baseUrl);
+      aClient.request(request);
+      aClient.shutdown();
     } else {
       client.request(request);
     }
@@ -748,7 +754,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     NamedList uhandler = (NamedList) uhandlerCat.get("updateHandler");
     NamedList stats = (NamedList) uhandler.get("stats");
     Long commits = (Long) stats.get("commits");
-
+    server.shutdown();
     return commits;
   }
 
@@ -757,7 +763,6 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     System.clearProperty("numShards");
     List<SolrServer> collectionClients = new ArrayList<SolrServer>();
     SolrServer client = clients.get(0);
-    otherCollectionClients.put(oneInstanceCollection2, collectionClients);
     final String baseUrl = ((HttpSolrServer) client).getBaseURL().substring(
         0,
         ((HttpSolrServer) client).getBaseURL().length()
@@ -773,10 +778,10 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
       pending.remove(future);
     }
     
-    SolrServer client1 = createNewSolrServer(oneInstanceCollection2 + "1", baseUrl);
-    SolrServer client2 = createNewSolrServer(oneInstanceCollection2 + "2", baseUrl);
-    SolrServer client3 = createNewSolrServer(oneInstanceCollection2 + "3", baseUrl);
-    SolrServer client4 = createNewSolrServer(oneInstanceCollection2 + "4", baseUrl);
+    SolrServer client1 = collectionClients.get(0);
+    SolrServer client2 = collectionClients.get(1);
+    SolrServer client3 = collectionClients.get(2);
+    SolrServer client4 = collectionClients.get(3);
     
 
     // no one should be recovering
@@ -837,6 +842,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     String leader = props.getCoreUrl();
     
     server.request(unloadCmd);
+    server.shutdown();
     
     int tries = 50;
     while (leader.equals(zkStateReader.getLeaderUrl(oneInstanceCollection2, "slice1", 10000))) {
@@ -844,6 +850,10 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
       if (tries-- == 0) {
         fail("Leader never changed");
       }
+    }
+
+    for (SolrServer aClient : collectionClients) {
+      aClient.shutdown();
     }
 
   }
@@ -862,6 +872,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     SolrQuery query = new SolrQuery("*:*");
     long oneDocs = client1.query(query).getResults().getNumFound();
     assertEquals(3, oneDocs);
+    client1.shutdown();
   }
   
   private void testUpdateByCollectionName() throws SolrServerException, IOException {
@@ -877,13 +888,13 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     // test hitting an update url
     SolrServer client1 = createNewSolrServer(oneInstanceCollection, baseUrl);
     client1.commit();
+    client1.shutdown();
   }
 
   private void testANewCollectionInOneInstance() throws Exception {
     log.info("### STARTING testANewCollectionInOneInstance");
     List<SolrServer> collectionClients = new ArrayList<SolrServer>();
     SolrServer client = clients.get(0);
-    otherCollectionClients.put(oneInstanceCollection , collectionClients);
     final String baseUrl = ((HttpSolrServer) client).getBaseURL().substring(
         0,
         ((HttpSolrServer) client).getBaseURL().length()
@@ -899,12 +910,12 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
       if (future == null) return;
       pending.remove(future);
     }
-    
-    SolrServer client1 = createNewSolrServer(oneInstanceCollection + "1", baseUrl);
-    SolrServer client2 = createNewSolrServer(oneInstanceCollection + "2", baseUrl);
-    SolrServer client3 = createNewSolrServer(oneInstanceCollection + "3", baseUrl);
-    SolrServer client4 = createNewSolrServer(oneInstanceCollection + "4", baseUrl);
-    
+   
+    SolrServer client1 = collectionClients.get(0);
+    SolrServer client2 = collectionClients.get(1);
+    SolrServer client3 = collectionClients.get(2);
+    SolrServer client4 = collectionClients.get(3);
+ 
     waitForRecoveriesToFinish(oneInstanceCollection, getCommonCloudSolrServer().getZkStateReader(), false);
     assertAllActive(oneInstanceCollection, getCommonCloudSolrServer().getZkStateReader());
     
@@ -931,6 +942,9 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
 //    System.out.println("All Docs:" + allDocs);
     
     assertEquals(3, allDocs);
+    for(SolrServer newCollectionClient:collectionClients) {
+      newCollectionClient.shutdown();
+    }
   }
 
   private void createCollection(String collection,
@@ -982,7 +996,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     pending.add(completionService.submit(call));
  
     
-    collectionClients.add(createNewSolrServer(collection, baseUrl));
+    collectionClients.add(createNewSolrServer(collection + num, baseUrl));
   }
 
   private void testMultipleCollections() throws Exception {
@@ -1169,18 +1183,22 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     if (commondCloudSolrServer != null) {
       commondCloudSolrServer.shutdown();
     }
+    if (otherCollectionClients != null) {
+      for (List<SolrServer> clientList : otherCollectionClients.values()) {
+        for (SolrServer client : clientList) {
+          client.shutdown();
+        }
+      }
+    }
+    otherCollectionClients = null;
+    List<Runnable> tasks = executor.shutdownNow();
+    assertTrue(tasks.isEmpty());
+    
     System.clearProperty("numShards");
     System.clearProperty("zkHost");
     System.clearProperty("solr.xml.persist");
     
     // insurance
     DirectUpdateHandler2.commitOnClose = true;
-  }
-
-  /**
-   * Given a URL as a string, removes the leading protocol from that string
-   */
-  private static String removeProtocol(String url) {
-    return url.replaceFirst("^[^:/]{1,20}:/+","");
   }
 }

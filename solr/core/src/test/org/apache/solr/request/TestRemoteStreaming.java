@@ -27,6 +27,7 @@ import org.apache.solr.client.solrj.request.QueryRequest;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
+import org.apache.solr.common.SolrException.ErrorCode;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -48,6 +49,11 @@ public class TestRemoteStreaming extends SolrJettyTestBase {
 
   private static final File solrHomeDirectory = new File(TEMP_DIR, "TestRemoteStreaming");
 
+  static {
+    // does not yet work with ssl - uses raw URL
+    ALLOW_SSL = false;
+  }
+  
   @BeforeClass
   public static void beforeTest() throws Exception {
     //this one has handleSelect=true which a test here needs
@@ -103,14 +109,18 @@ public class TestRemoteStreaming extends SolrJettyTestBase {
     return null;
   }
 
-  /** Do a select query with the stream.url. Solr should NOT access that URL, and so the data should be there. */
+  /** Do a select query with the stream.url. Solr should fail */
   @Test
   public void testNoUrlAccess() throws Exception {
     SolrQuery query = new SolrQuery();
     query.setQuery( "*:*" );//for anything
     query.add("stream.url",makeDeleteAllUrl());
-    getSolrServer().query(query);
-    assertTrue(searchFindsIt());//still there
+    try {
+      getSolrServer().query(query);
+      fail();
+    } catch (SolrException se) {
+      assertSame(ErrorCode.BAD_REQUEST, ErrorCode.getErrorCode(se.code()));
+    }
   }
 
   /** SOLR-3161
