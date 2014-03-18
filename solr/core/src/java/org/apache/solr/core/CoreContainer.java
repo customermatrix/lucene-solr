@@ -18,6 +18,7 @@
 package org.apache.solr.core;
 
 import com.google.common.collect.Maps;
+import org.apache.lucene.util.NamedThreadFactory;
 import org.apache.solr.cloud.ZkController;
 import org.apache.solr.cloud.ZkSolrResourceLoader;
 import org.apache.solr.common.SolrException;
@@ -58,10 +59,9 @@ import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-
-import com.google.common.collect.Maps;
 
 
 /**
@@ -321,22 +321,35 @@ public class CoreContainer {
   public void shutdown() {
     log.info("Shutting down CoreContainer instance="
         + System.identityHashCode(this));
-    
+
     if (isZooKeeperAware()) {
-      try {
-        zkSys.getZkController().publishAndWaitForDownStates();
-      } catch (KeeperException e) {
-        log.error("", e);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        log.warn("", e);
-      }
+      executeZKTask(new Callable<Object>() {
+        @Override
+        public Object call() throws Exception {
+          try {
+            zkSys.getZkController().publishAndWaitForDownStates();
+          } catch (KeeperException e) {
+            log.error("", e);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("", e);
+          }
+          return null;
+        }
+      });
     }
+
     isShutDown = true;
 
     if (isZooKeeperAware()) {
-      zkSys.publishCoresAsDown(solrCores.getCores());
-      cancelCoreRecoveries();
+      executeZKTask(new Callable<Object>() {
+        @Override
+        public Object call() throws Exception {
+          zkSys.publishCoresAsDown(solrCores.getCores());
+          cancelCoreRecoveries();
+          return null;
+        }
+      });
     }
 
     try {
@@ -380,6 +393,22 @@ public class CoreContainer {
       }
     }
     org.apache.lucene.util.IOUtils.closeWhileHandlingException(loader); // best effort
+  }
+
+  private void executeZKTask(Callable<Object> task) {
+    ExecutorService zkExecutor = Executors.newSingleThreadExecutor(new NamedThreadFactory("executeZKTask"));
+    Future<Object> zkTask = null;
+    try {
+      zkTask = zkExecutor.submit(task);
+      zkTask.get(30, TimeUnit.SECONDS);
+    } catch (Exception e) {
+      log.error("", e);
+    } finally {
+      if (zkTask != null) {
+        zkTask.cancel(true);
+      }
+      zkExecutor.shutdownNow();
+    }
   }
 
   public void cancelCoreRecoveries() {
