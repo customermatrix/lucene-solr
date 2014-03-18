@@ -23,7 +23,6 @@ import org.apache.lucene.search.SortField;
 import org.apache.lucene.util.PriorityQueue;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.util.NamedList;
-import org.apache.solr.search.SolrIndexSearcher;
 
 import java.io.IOException;
 import java.util.ArrayList;

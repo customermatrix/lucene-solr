@@ -18,21 +18,31 @@ package org.apache.solr.search;
 
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.SortField;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.MapSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.schema.IndexSchema;
+import org.apache.solr.schema.SchemaField;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * <b>Note: This API is experimental and may change in non backward-compatible ways in the future</b>
- * 
+ *
  *
  */
 public abstract class QParser {
+  private final Logger logger = LoggerFactory.getLogger(QParser.class);
   protected String qstr;
   protected SolrParams params;
   protected SolrParams localParams;
@@ -67,7 +77,7 @@ public abstract class QParser {
         Map<Object,Collection<Object>> tagMap = (Map<Object, Collection<Object>>)req.getContext().get("tags");
         if (tagMap == null) {
           tagMap = new HashMap<Object,Collection<Object>>();
-          context.put("tags", tagMap);          
+          context.put("tags", tagMap);
         }
         if (tagStr.indexOf(',') >= 0) {
           List<String> tags = StrUtils.splitSmart(tagStr, ',');
@@ -209,9 +219,10 @@ public abstract class QParser {
 
   /**
    * @param useGlobalParams look up sort, start, rows in global params if not in local params
+   * @param schema
    * @return the sort specification
    */
-  public SortSpec getSort(boolean useGlobalParams) throws SyntaxError {
+  public SortSpec getSort(boolean useGlobalParams, IndexSchema schema) throws SyntaxError {
     getQuery(); // ensure query is parsed first
 
     String sortStr = null;
@@ -244,10 +255,26 @@ public abstract class QParser {
     int start = startS != null ? Integer.parseInt(startS) : 0;
     int rows = rowsS != null ? Integer.parseInt(rowsS) : 10;
 
-    SortSpec sort = QueryParsing.parseSortSpec(sortStr, req);
+    SortSpec sort = null;
+    try {
+      sort = QueryParsing.parseSortSpec(sortStr, req);
 
-    sort.setOffset(start);
-    sort.setCount(rows);
+      if (schema != null) {
+        Sort subSort = sort.getSort();
+        if (subSort != null && subSort.getSort() != null) {
+          for (SortField field : subSort.getSort()) {
+            SchemaField pmField = schema.getPMField(field.getField());
+            if (pmField != null) {
+              field.setField(pmField.getName());
+            }
+          }
+        }
+      }
+      sort.setOffset(start);
+      sort.setCount(rows);
+    } catch (Exception e) {
+      logger.warn("Invalid sort '" + sort + "' field requested", e);
+    }
     return sort;
   }
 
@@ -301,7 +328,7 @@ public abstract class QParser {
 
 
     String parserName;
-    
+
     if (localParams == null) {
       parserName = defaultParser;
     } else {

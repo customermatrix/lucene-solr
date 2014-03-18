@@ -55,6 +55,7 @@ public class ZkContainer {
   
   protected ZkController zkController;
   private SolrZkServer zkServer;
+  private String hostPort;
 
   private ExecutorService coreZkRegister = Executors.newFixedThreadPool(Integer.MAX_VALUE,
       new DefaultSolrThreadFactory("coreZkRegister") );
@@ -83,7 +84,7 @@ public class ZkContainer {
     return StringUtils.isNotBlank(test);
   }
 
-  public void initZooKeeper(final CoreContainer cc, String solrHome, String zkHost, int zkClientTimeout, String hostPort,
+  public void initZooKeeper(final CoreContainer cc, String solrHome, String zkHost, int zkClientTimeout, String hp,
                             String hostContext, String host, int leaderVoteWait, boolean genericCoreNodeNames) {
     ZkController zkController = null;
     
@@ -97,6 +98,8 @@ public class ZkContainer {
 
     String zkRun = System.getProperty("zkRun");
     
+    this.hostPort = System.getProperty("hostPort", hp);
+
     if (zkRun == null && zookeeperHost == null)
         return;  // not in zk mode
 

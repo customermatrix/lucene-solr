@@ -17,27 +17,25 @@
 
 package org.apache.solr.handler;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.Date;
-import java.util.Locale;
-
+import org.apache.commons.io.FileUtils;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.SolrCore;
-import org.apache.solr.util.plugin.SolrCoreAware;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.request.SolrRequestHandler;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.schema.DateField;
-
-import org.apache.commons.io.FileUtils;
-
+import org.apache.solr.util.plugin.SolrCoreAware;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.Date;
+import java.util.Locale;
 
 /**
  * Ping Request Handler for reporting SolrCore health to a Load Balancer.

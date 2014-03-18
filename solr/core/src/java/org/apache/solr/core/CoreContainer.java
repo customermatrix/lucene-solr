@@ -18,7 +18,7 @@
 package org.apache.solr.core;
 
 import com.google.common.collect.Maps;
-
+import org.apache.lucene.util.NamedThreadFactory;
 import org.apache.solr.cloud.ZkController;
 import org.apache.solr.cloud.ZkSolrResourceLoader;
 import org.apache.solr.common.SolrException;
@@ -87,9 +87,7 @@ public class CoreContainer {
   protected boolean shareSchema;
 
   protected ZkContainer zkSys = new ZkContainer();
-  private ShardHandlerFactory shardHandlerFactory;
-  
-  private UpdateShardHandler updateShardHandler;
+  protected ShardHandlerFactory shardHandlerFactory;
 
   protected UpdateShardHandler updateShardHandler;
 
@@ -220,7 +218,7 @@ public class CoreContainer {
 
     collectionsHandler = createHandler(cfg.getCollectionsHandlerClass(), CollectionsHandler.class);
     infoHandler        = createHandler(cfg.getInfoHandlerClass(), InfoHandler.class);
-    coreAdminHandler   = createHandler(initAdminHandler(), CoreAdminHandler.class);
+    coreAdminHandler   = createMultiCoreHandler();
 
     containerProperties = cfg.getSolrProperties("solr");
 
@@ -868,6 +866,10 @@ public class CoreContainer {
     return loader.newInstance(handlerClass, clazz, null, new Class[] { CoreContainer.class }, new Object[] { this });
   }
 
+  protected CoreAdminHandler createMultiCoreHandler() {
+    return createHandler(cfg.getCoreAdminHandlerClass(), CoreAdminHandler.class);
+  }
+
   public CoreAdminHandler getMultiCoreHandler() {
     return coreAdminHandler;
   }
@@ -994,10 +996,6 @@ public class CoreContainer {
 
   public IndexSchema getVirtualSchema(Collection<String> collections) {
     return null;
-  }
-
-  protected String initAdminHandler() {
-    return cfg.getCoreAdminHandlerClass();
   }
 
   protected void doStartupCoreCreation(CompletionService<SolrCore> completionService, Set<Future<SolrCore>> pending, final String name, final CoreDescriptor cd) {

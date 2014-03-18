@@ -18,7 +18,7 @@
 package org.apache.solr.handler.component;
 
 import org.apache.commons.lang.StringUtils;
-import org.apache.lucene.util.OpenBitSet;
+import org.apache.lucene.util.FixedBitSet;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.params.CommonParams;
