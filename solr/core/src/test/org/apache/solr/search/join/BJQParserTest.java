@@ -18,8 +18,10 @@
 package org.apache.solr.search.join;
 
 import org.apache.solr.SolrTestCaseJ4;
+import org.apache.solr.common.SolrException;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.search.SolrCache;
+import org.apache.solr.search.SyntaxError;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -71,12 +73,7 @@ public class BJQParserTest extends SolrTestCaseJ4 {
     }
     assertU(commit());
     assertQ(req("q", "*:*"), "//*[@numFound='" + i + "']");
-    /*
-     * dump docs well System.out.println(h.query(req("q","*:*",
-     * "sort","_docid_ asc", "fl",
-     * "parent_s,child_s,parentchild_s,grand_s,grand_child_s,grand_parentchild_s"
-     * , "wt","csv", "rows","1000"))); /
-     */
+
   }
 
   private static int id=0;
@@ -130,6 +127,12 @@ public class BJQParserTest extends SolrTestCaseJ4 {
   public void testFull() throws IOException, Exception {
     String childb = "{!parent which=\"parent_s:[* TO *]\"}child_s:l";
     assertQ(req("q", childb), sixParents);
+  }
+
+  @Test
+  public void testShouldThrowAnExceptionOnInvalidScoreMode() throws IOException, Exception {
+    String childb = "{!parent which=\"parent_s:[* TO *]\" scoreMode=invalidScoreMode}child_s:l";
+    assertQEx("Query should throw an exception due to invalid scoreMode", req("q", childb), SolrException.ErrorCode.BAD_REQUEST);
   }
   
   private static final String sixParents[] = new String[] {

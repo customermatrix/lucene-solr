@@ -18,6 +18,7 @@
 package org.apache.solr.search.join;
 
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.join.ScoreMode;
 import org.apache.lucene.search.join.ToChildBlockJoinQuery;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.request.SolrQueryRequest;
@@ -28,7 +29,7 @@ public class BlockJoinChildQParser extends BlockJoinParentQParser {
     super(qstr, localParams, params, req);
   }
 
-  protected Query createQuery(Query parentListQuery, Query query) {
+  protected Query createQuery(Query parentListQuery, Query query, ScoreMode scoreMode) {
     return new ToChildBlockJoinQuery(query, getFilter(parentListQuery), false);
   }
 

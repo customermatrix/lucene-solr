@@ -34,8 +34,11 @@ import org.apache.solr.search.SolrConstantScoreQuery;
 import org.apache.solr.search.SyntaxError;
 
 class BlockJoinParentQParser extends QParser {
-  /** implementation detail subject to change */
-  public String CACHE_NAME="perSegFilter";
+  /**
+   * implementation detail subject to change
+   */
+  public String CACHE_NAME = "perSegFilter";
+  public String SCORE_MODE = "scoreMode";
 
   protected String getParentFilterLocalParamName() {
     return "which";
@@ -53,18 +56,34 @@ class BlockJoinParentQParser extends QParser {
 
     String queryText = localParams.get(QueryParsing.V);
     // there is no child query, return parent filter from cache
-    if (queryText == null || queryText.length()==0) {
-                  SolrConstantScoreQuery wrapped = new SolrConstantScoreQuery(getFilter(parentQ));
-                  wrapped.setCache(false);
-                  return wrapped;
+    if (queryText == null || queryText.length() == 0) {
+      SolrConstantScoreQuery wrapped = new SolrConstantScoreQuery(getFilter(parentQ));
+      wrapped.setCache(false);
+      return wrapped;
     }
     QParser childrenParser = subQuery(queryText, null);
     Query childrenQuery = childrenParser.getQuery();
-    return createQuery(parentQ, childrenQuery);
+    return createQuery(parentQ, childrenQuery, parseScoreMode(localParams));
   }
 
-  protected Query createQuery(Query parentList, Query query) {
-    return new ToParentBlockJoinQuery(query, getFilter(parentList), ScoreMode.None);
+  private ScoreMode parseScoreMode(SolrParams localParams) throws SyntaxError {
+    String scoreModeText = localParams.get(SCORE_MODE, "none");
+
+    if ("avg".equals(scoreModeText)) {
+      return ScoreMode.Avg;
+    } else if ("max".equals(scoreModeText)) {
+      return ScoreMode.Max;
+    } else if ("total".equals(scoreModeText)) {
+      return ScoreMode.Total;
+    } else if ("none".equals(scoreModeText)) {
+      return ScoreMode.None;
+    } else {
+      throw new SyntaxError("parent - invalid scoreMode parameters: " + scoreModeText);
+    }
+  }
+
+  protected Query createQuery(Query parentList, Query query, ScoreMode scoreMode) {
+    return new ToParentBlockJoinQuery(query, getFilter(parentList), scoreMode);
   }
 
   protected Filter getFilter(Query parentList) {
