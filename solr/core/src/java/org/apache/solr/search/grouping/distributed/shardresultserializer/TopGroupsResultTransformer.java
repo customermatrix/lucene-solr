@@ -27,7 +27,6 @@ import org.apache.lucene.search.grouping.GroupDocs;
 import org.apache.lucene.search.grouping.TopGroups;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.CharsRef;
-import org.apache.lucene.util.UnicodeUtil;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.handler.component.ResponseBuilder;
 import org.apache.solr.handler.component.ShardDoc;
@@ -93,7 +92,7 @@ public class TopGroupsResultTransformer implements ShardResultTransformer<List<C
   public Map<String, ?> transformToNative(NamedList<NamedList> shardResponse, Sort groupSort, Sort sortWithinGroup, String shard) {
     Map<String, Object> result = new HashMap<String, Object>();
 
-    final IndexSchema schema = rb.req.getSearcher().getSchema();
+    final IndexSchema schema = rb.req.getSchema();
 
     for (Map.Entry<String, NamedList> entry : shardResponse) {
       String key = entry.getKey();
