@@ -335,7 +335,7 @@ sammy.get
                 );
 
                 var core_data = cores[current_core];
-                var core_basepath = $( '#' + current_core, app.menu_element ).attr( 'data-basepath' );
+                var core_basepath = $( '#' + current_core.replace(/\./g, '__'), app.menu_element ).attr( 'data-basepath' );
 
                 // core-data
 
