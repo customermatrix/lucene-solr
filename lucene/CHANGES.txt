@@ -3,6 +3,17 @@ Lucene Change Log
 For more information on past and future Lucene versions, please see:
 http://s.apache.org/luceneversions
 
+======================= Lucene 4.7.2 =======================
+
+Bug Fixes
+
+* LUCENE-5574: Closing a near-real-time reader no longer attempts to
+  delete unreferenced files if the original writer has been closed;
+  this could cause index corruption in certain cases where index files
+  were directly changed (deleted, overwritten, etc.) in the index
+  directory outside of Lucene.  (Simon Willnauer, Shai Erera, Robert
+  Muir, Mike McCandless)
+
 ======================= Lucene 4.7.1 =======================
 
 Changes in Runtime Behavior
@@ -45,6 +56,22 @@ Bug Fixes
 
 * LUCENE-5481: IndexWriter.forceMerge used to run a merge even if there was a
   single segment in the index. (Adrien Grand, Mike McCandless)
+
+* LUCENE-5538: Fix FastVectorHighlighter bug with index-time synonyms when the
+  query is more complex than a single phrase.  (Robert Muir)
+
+* LUCENE-5544: Exceptions during IndexWriter.rollback could leak file handles
+  and the write lock. (Robert Muir)
+
+* LUCENE-4978: Spatial RecursivePrefixTree queries could result in false-negatives for
+  indexed shapes within 1/2 maxDistErr from the edge of the query shape.  This meant
+  searching for a point by the same point as a query rarely worked.  (David Smiley)
+
+* LUCENE-5553: IndexReader#ReaderClosedListener is not always invoked when 
+  IndexReader#close() is called or if refCount is 0. If an exception is 
+  thrown during interal close or on any of the close listerns some or all
+  listerners might be missed. This can cause memory leaks if the core listeners
+  are used to clear caches. (Simon Willnauer)
 
 Build
 

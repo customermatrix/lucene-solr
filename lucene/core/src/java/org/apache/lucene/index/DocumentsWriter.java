@@ -17,6 +17,15 @@ package org.apache.lucene.index;
  * limitations under the License.
  */
 
+import java.io.Closeable;
+import java.io.IOException;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.index.DocumentsWriterFlushQueue.SegmentFlushTicket;
 import org.apache.lucene.index.DocumentsWriterPerThread.FlushedSegment;
@@ -99,7 +108,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * or none") added to the index.
  */
 
-final class DocumentsWriter {
+final class DocumentsWriter implements Closeable {
   private final Directory directory;
 
   private volatile boolean closed;
@@ -335,7 +344,8 @@ final class DocumentsWriter {
     return deleteQueue.anyChanges();
   }
 
-  void close() {
+  @Override
+  public void close() {
     closed = true;
     flushControl.setClosed();
   }

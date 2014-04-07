@@ -20,6 +20,30 @@ See the tutorial at http://lucene.apache.org/solr/tutorial.html
 
 $Id$
 
+==================  4.7.2  ==================
+
+Versions of Major Components
+---------------------
+Apache Tika 1.4
+Carrot2 3.8.0
+Velocity 1.7 and Velocity Tools 2.0
+Apache UIMA 2.3.1
+Apache ZooKeeper 3.4.5
+
+Detailed Change List
+----------------------
+
+Bug Fixes
+----------------------
+
+* SOLR-5951: Fixed SolrDispatchFilter to throw useful exception on startup if
+  SLF4j logging jars are missing.  (Uwe Schindler, Hossman, Shawn Heisey)
+
+* SOLR-5950: Maven config: make the org.slf4j:slf4j-api dependency transitive
+  (i.e., not optional) in all modules in which it's a dependency, including
+  solrj, except for the WAR, where it will remain optional.
+  (Uwe Schindler, Steve Rowe)
+
 ==================  4.7.1  ==================
 
 Versions of Major Components
@@ -56,6 +80,80 @@ Bug Fixes
 
 * SOLR-5866: UpdateShardHandler needs to use the system default scheme registry to
   properly handle https via javax.net.ssl.* properties. (Steve Davids via shalin)
+  
+* SOLR-5782: The full MapReduceIndexer help text does not display when using --help.
+  (Mark Miller, Wolfgang Hoschek)
+
+* SOLR-5824: Merge up Solr MapReduce contrib code to latest external changes.
+  Includes a few minor bug fixes.
+  (Mark Miller)
+
+* SOLR-5818: distrib search with custom comparator does not quite work correctly
+  (Ryan Ernst)
+
+* SOLR-5895: JavaBinLoader hides IOExceptions. (Mike Sokolov via shalin)
+
+* SOLR-5861: Recovery should not set onlyIfLeaderActive=true for slice in 'recovery'
+  state. (shalin)
+
+* SOLR-5423: CSV output doesn't include function field
+  (Arun Kumar, hossman, Steve Rowe)
+
+* SOLR-5550: shards.info is not returned by a short circuited distributed query.
+  (Timothy Potter, shalin)
+
+* SOLR-5777: Fix ordering of field values in JSON updates where
+  field name key is repeated (hossman)
+
+* SOLR-5734: We should use System.nanoTime rather than System.currentTimeMillis
+  when calculating elapsed time. (Mark Miller, Ramkumar Aiyengar)
+
+* SOLR-5760: ConcurrentUpdateSolrServer has a blockUntilFinished call when
+  streamDeletes is true that should be tucked into the if statement below it.
+  (Mark Miller, Gregory Chanan)
+
+* SOLR-5761: HttpSolrServer has a few fields that can be set via setters but
+  are not volatile. (Mark Miller, Gregory Chanan)
+
+* SOLR-5907: The hdfs write cache can cause a reader to see a corrupted state.
+  It now defaults to off, and if you were using solr.hdfs.blockcache.write.enabled
+  explicitly, you should set it to false.
+  (Mark Miller)
+
+* SOLR-5811: The Overseer will retry work items until success, which is a serious
+  problem if you hit a bad work item. (Mark Miller)
+
+* SOLR-5796: Increase how long we are willing to wait for a core to see the ZK
+  advertised leader in it's local state. (Timothy Potter, Mark Miller)  
+
+* SOLR-5834: Overseer threads are only being interrupted and not closed.
+  (hossman, Mark Miller)
+
+* SOLR-5839: ZookeeperInfoServlet does not trim path properly.
+  (Furkan KAMACI via Mark Miller)
+
+* SOLR-5874: Unsafe cast in CloudSolrServer's RouteException. Change
+  RouteException to handle Throwable rather than Exception.
+  (Mark Miller, David Arthur)
+
+* SOLR-5899: CloudSolrServer's RouteResponse and RouteException should be
+  publicly accessible. (Mark Miller, shalin)
+
+* SOLR-5905: CollapsingQParserPlugin throws a NPE if required 'field' param is missing.
+  (Spyros Kapnissis via shalin)
+
+* SOLR-5906: Collection create API ignores property.instanceDir parameter.
+  (Varun Thacker, shalin)
+
+* SOLR-5920: Distributed sort on DateField, BoolField and BCD{Int,Long,Str}Field
+  returns string cast exception (Eric Bus, AJ Lemke, hossman, Steve Rowe)
+
+Other Changes
+---------------------
+
+* SOLR-5796: Make how long we are willing to wait for a core to see the ZK
+  advertised leader in it's local state configurable. 
+  (Timothy Potter via Mark Miller)
 
 ==================  4.7.0 ==================
 

@@ -319,7 +319,6 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
 
   }
 
-
   protected void waitForCollection(ZkStateReader reader, String collection, int slices) throws Exception {
     // wait until shards have started registering...
     int cnt = 30;
@@ -1624,7 +1623,19 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
       Thread.sleep(2000);
     } while (retry);
   }
-  
+
+  void doQuery(String expectedDocs, String... queryParams) throws Exception {
+    Set<String> expectedIds = new HashSet<String>( StrUtils.splitSmart(expectedDocs, ",", true) );
+
+    QueryResponse rsp = cloudClient.query(params(queryParams));
+    Set<String> obtainedIds = new HashSet<String>();
+    for (SolrDocument doc : rsp.getResults()) {
+      obtainedIds.add((String) doc.get("id"));
+    }
+
+    assertEquals(expectedIds, obtainedIds);
+  }
+
   @Override
   @After
   public void tearDown() throws Exception {
@@ -1716,12 +1727,6 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
     } else {
       client.request(request);
     }
-
-  }
-
-  protected void runCollectionAdminCommand(ModifiableSolrParams params){
-
-   ;
 
   }
 
