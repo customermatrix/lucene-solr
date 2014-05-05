@@ -95,7 +95,6 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -349,7 +348,8 @@ public class QueryComponent extends SearchComponent
 
           CommandHandler commandHandler = topsGroupsActionBuilder.build();
           commandHandler.execute();
-          SearchGroupsResultTransformer serializer = new SearchGroupsResultTransformer(searcher);
+          //SEA-1039
+          SearchGroupsResultTransformer serializer = new SearchGroupsResultTransformer(rb);
           rsp.add("firstPhase", commandHandler.processResult(result, serializer));
           rsp.add("totalHitCount", commandHandler.getTotalHitCount());
           rb.setResult(result);

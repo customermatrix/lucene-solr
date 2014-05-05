@@ -62,7 +62,8 @@ public class SearchGroupShardResponseProcessor implements ShardResponseProcessor
       }
     }
     boolean tolerant = rb.req.getParams().getBool(ShardParams.SHARDS_TOLERANT, false);
-    SearchGroupsResultTransformer serializer = new SearchGroupsResultTransformer(rb.req.getSearcher());
+    //SEA-1039
+    SearchGroupsResultTransformer serializer = new SearchGroupsResultTransformer(rb);
     try {
       int maxElapsedTime = 0;
       int hitCountDuringFirstPhase = 0;

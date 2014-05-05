@@ -17,6 +17,17 @@ package org.apache.solr.search.grouping.distributed.shardresultserializer;
  * limitations under the License.
  */
 
+import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.grouping.SearchGroup;
+import org.apache.lucene.util.BytesRef;
+import org.apache.solr.common.util.NamedList;
+import org.apache.solr.handler.component.ResponseBuilder;
+import org.apache.solr.schema.FieldType;
+import org.apache.solr.schema.SchemaField;
+import org.apache.solr.search.grouping.Command;
+import org.apache.solr.search.grouping.distributed.command.Pair;
+import org.apache.solr.search.grouping.distributed.command.SearchGroupsFieldCommand;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -24,28 +35,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.grouping.SearchGroup;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.CharsRef;
-import org.apache.lucene.util.UnicodeUtil;
-import org.apache.solr.common.util.NamedList;
-import org.apache.solr.schema.FieldType;
-import org.apache.solr.schema.SchemaField;
-import org.apache.solr.search.SolrIndexSearcher;
-import org.apache.solr.search.grouping.Command;
-import org.apache.solr.search.grouping.distributed.command.Pair;
-import org.apache.solr.search.grouping.distributed.command.SearchGroupsFieldCommand;
-
 /**
  * Implementation for transforming {@link SearchGroup} into a {@link NamedList} structure and visa versa.
  */
 public class SearchGroupsResultTransformer implements ShardResultTransformer<List<Command>, Map<String, Pair<Integer, Collection<SearchGroup<BytesRef>>>>> {
 
-  private final SolrIndexSearcher searcher;
+  //SEA-1039
+  private final ResponseBuilder rb;
 
-  public SearchGroupsResultTransformer(SolrIndexSearcher searcher) {
-    this.searcher = searcher;
+  public SearchGroupsResultTransformer(ResponseBuilder rb) {
+    this.rb = rb;
   }
 
   /**
@@ -93,7 +92,7 @@ public class SearchGroupsResultTransformer implements ShardResultTransformer<Lis
           searchGroup.groupValue = rawSearchGroup.getKey() != null ? new BytesRef(rawSearchGroup.getKey()) : null;
           searchGroup.sortValues = rawSearchGroup.getValue().toArray(new Comparable[rawSearchGroup.getValue().size()]);
           for (int i = 0; i < searchGroup.sortValues.length; i++) {
-            SchemaField field = groupSort.getSort()[i].getField() != null ? searcher.getSchema().getFieldOrNull(groupSort.getSort()[i].getField()) : null;
+            SchemaField field = groupSort.getSort()[i].getField() != null ? rb.req.getSchema().getFieldOrNull(groupSort.getSort()[i].getField()) : null;
             if (field != null) {
               FieldType fieldType = field.getType();
               if (searchGroup.sortValues[i] != null) {
@@ -118,7 +117,7 @@ public class SearchGroupsResultTransformer implements ShardResultTransformer<Lis
       Object[] convertedSortValues = new Object[searchGroup.sortValues.length];
       for (int i = 0; i < searchGroup.sortValues.length; i++) {
         Object sortValue = searchGroup.sortValues[i];
-        SchemaField field = groupSort.getSort()[i].getField() != null ? searcher.getSchema().getFieldOrNull(groupSort.getSort()[i].getField()) : null;
+        SchemaField field = groupSort.getSort()[i].getField() != null ? rb.req.getSchema().getFieldOrNull(groupSort.getSort()[i].getField()) : null;
         if (field != null) {
           FieldType fieldType = field.getType();
           if (sortValue != null) {
