@@ -64,7 +64,13 @@ public final class TokenizerChain extends SolrAnalyzer {
     Tokenizer tk = tokenizer.create( aReader );
     TokenStream ts = tk;
     for (TokenFilterFactory filter : filters) {
-      ts = filter.create(ts);
+      //SEA-1098:begin
+      if (filter instanceof FieldNameAware) {
+        ts = ((FieldNameAware)filter).create(ts,fieldName);
+        //SEA-1098:end
+      } else {
+        ts = filter.create(ts);
+      }
     }
     return new TokenStreamComponents(tk, ts);
   }
