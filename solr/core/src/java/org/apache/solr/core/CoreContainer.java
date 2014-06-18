@@ -62,6 +62,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Throwables.propagate;
 
 
 /**
@@ -376,6 +377,11 @@ public class CoreContainer {
             updateShardHandler.close();
           }
         } finally {
+          try {
+            Thread.sleep(5000);
+          } catch (InterruptedException e) {
+            throw propagate(e);
+          }
           // we want to close zk stuff last
           zkSys.close();
         }
