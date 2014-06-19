@@ -62,7 +62,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Throwables.propagate;
 
 
 /**
@@ -377,13 +376,16 @@ public class CoreContainer {
             updateShardHandler.close();
           }
         } finally {
+          int timeout = Integer.parseInt(System.getProperty("solr.shutdown.zk.delay", "0"));
           try {
-            Thread.sleep(5000);
+            if (timeout > 0) {
+              Thread.sleep(timeout);
+            }
           } catch (InterruptedException e) {
-            throw propagate(e);
+            log.error("", e);
+          } finally {
+            zkSys.close();
           }
-          // we want to close zk stuff last
-          zkSys.close();
         }
       }
     }
