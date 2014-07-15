@@ -3,6 +3,13 @@ Lucene Change Log
 For more information on past and future Lucene versions, please see:
 http://s.apache.org/luceneversions
 
+======================= Lucene 4.7.3 =======================
+
+Bug Fixes
+
+* LUCENE-5639: Fix PositionLengthAttribute implementation in Token class.
+  (Uwe Schindler, Robert Muir)
+
 ======================= Lucene 4.7.2 =======================
 
 Bug Fixes
@@ -13,6 +20,9 @@ Bug Fixes
   were directly changed (deleted, overwritten, etc.) in the index
   directory outside of Lucene.  (Simon Willnauer, Shai Erera, Robert
   Muir, Mike McCandless)
+
+* LUCENE-5570: Don't let FSDirectory.sync() create new zero-byte files, instead throw
+  exception if a file is missing.  (Uwe Schindler, Mike McCandless, Robert Muir)
 
 ======================= Lucene 4.7.1 =======================
 
@@ -113,7 +123,7 @@ New Features
   AnalyzingInfixSuggester but boosts suggestions that matched tokens
   with lower positions.  (Remi Melisson via Mike McCandless)
 
-* LUCENE-4399: When sorting by String (SortField.STRING), you can now
+* LUCENE-5399: When sorting by String (SortField.STRING), you can now
   specify whether missing values should be sorted first (the default),
   using SortField.setMissingValue(SortField.STRING_FIRST), or last,
   using SortField.setMissingValue(SortField.STRING_LAST). (Rob Muir,

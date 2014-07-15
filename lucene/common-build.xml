@@ -51,7 +51,7 @@
   
   <property name="name" value="${ant.project.name}"/>
   <property name="tests.luceneMatchVersion" value="4.7"/>
-  <property name="dev.version.base" value="4.7.1"/>
+  <property name="dev.version.base" value="4.7"/>
   <property name="dev.version.suffix" value="SNAPSHOT"/>
   <property name="dev.version" value="${dev.version.base}-${dev.version.suffix}"/>
   <property name="version" value="${dev.version}"/>
@@ -2197,7 +2197,7 @@ ${ant.project.name}.test.dependencies=${test.classpath.list}
   <property name="forbidden-sysout-excludes" value=""/>
   
   <target name="-install-forbidden-apis" unless="forbidden-apis.loaded" depends="ivy-availability-check,ivy-configure">
-    <ivy:cachepath organisation="de.thetaphi" module="forbiddenapis" revision="1.4.1"
+    <ivy:cachepath organisation="de.thetaphi" module="forbiddenapis" revision="1.5.1"
       inline="true" conf="default" transitive="true" pathid="forbidden-apis.classpath"/>
     <taskdef name="forbidden-apis" classname="de.thetaphi.forbiddenapis.AntTask" classpathref="forbidden-apis.classpath"/>
     <property name="forbidden-apis.loaded" value="true"/>
