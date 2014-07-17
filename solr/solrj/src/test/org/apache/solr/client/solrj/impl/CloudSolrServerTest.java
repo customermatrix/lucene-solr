@@ -52,6 +52,7 @@ import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.ShardParams;
 import org.apache.solr.common.util.NamedList;
+import org.apache.zookeeper.KeeperException;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -318,8 +319,7 @@ public class CloudSolrServerTest extends AbstractFullDistribZkTestBase {
     SolrInputDocument doc = getDoc(fields);
     indexDoc(doc);
   }
-  
-  @BadApple // bug url: https://issues.apache.org/jira/browse/SOLR-5880
+
   public void testShutdown() throws MalformedURLException {
     CloudSolrServer server = new CloudSolrServer("[ff01::114]:33332");
     try {
@@ -333,4 +333,20 @@ public class CloudSolrServerTest extends AbstractFullDistribZkTestBase {
     }
   }
 
+  public void testWrongZkChrootTest() throws MalformedURLException {
+    CloudSolrServer server = null;
+    try {
+      server = new CloudSolrServer(zkServer.getZkAddress() + "/xyz/foo");
+      server.setDefaultCollection(DEFAULT_COLLECTION);
+      server.setZkClientTimeout(1000*60);
+      server.connect();
+      fail("Expected exception");
+    } catch(SolrException e) {
+      assertTrue(e.getCause() instanceof KeeperException);
+    } finally {
+      server.shutdown();
+    }
+    // see SOLR-6146 - this test will fail by virtue of the zkClient tracking performed
+    // in the afterClass method of the base class
+  }
 }

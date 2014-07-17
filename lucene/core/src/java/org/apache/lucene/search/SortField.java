@@ -20,6 +20,9 @@ package org.apache.lucene.search;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.StringHelper;
 
+import java.io.IOException;
+import java.util.Comparator;
+
 /**
  * Stores information about how to sort documents by terms in an individual
  * field.  Fields must be indexed in order to sort by them.

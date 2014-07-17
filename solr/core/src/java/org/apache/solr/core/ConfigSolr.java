@@ -17,6 +17,7 @@ package org.apache.solr.core;
  * limitations under the License.
  */
 
+import com.google.common.base.Charsets;
 import com.google.common.io.ByteStreams;
 
 import org.apache.commons.io.IOUtils;
