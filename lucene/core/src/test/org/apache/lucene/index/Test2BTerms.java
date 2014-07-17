@@ -17,31 +17,37 @@ package org.apache.lucene.index;
  * limitations under the License.
  */
 
-import org.apache.lucene.util.*;
-import org.apache.lucene.util.LuceneTestCase.SuppressCodecs;
-import org.apache.lucene.store.*;
-import org.apache.lucene.search.*;
-import org.apache.lucene.analysis.*;
-import org.apache.lucene.analysis.tokenattributes.*;
-import org.apache.lucene.document.*;
-import org.apache.lucene.index.FieldInfo.IndexOptions;
-import org.junit.Ignore;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
-import org.apache.lucene.analysis.*;
-import org.apache.lucene.analysis.tokenattributes.*;
+import org.apache.lucene.analysis.MockAnalyzer;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
+import org.apache.lucene.analysis.tokenattributes.TermToBytesRefAttribute;
 import org.apache.lucene.codecs.Codec;
-import org.apache.lucene.document.*;
+import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldType;
+import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.FieldInfo.IndexOptions;
-import org.apache.lucene.search.*;
-import org.apache.lucene.store.*;
-import org.apache.lucene.util.*;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.store.BaseDirectoryWrapper;
+import org.apache.lucene.store.MockDirectoryWrapper;
+import org.apache.lucene.util.Attribute;
+import org.apache.lucene.util.AttributeFactory;
+import org.apache.lucene.util.AttributeImpl;
+import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.LuceneTestCase.Monster;
 import org.apache.lucene.util.LuceneTestCase.SuppressCodecs;
+import org.apache.lucene.util.LuceneTestCase;
+import org.apache.lucene.util.TestUtil;
+import org.apache.lucene.util.TimeUnits;
+
+import com.carrotsearch.randomizedtesting.annotations.TimeoutSuite;
 
 // NOTE: this test will fail w/ PreFlexRW codec!  (Because
 // this test uses full binary term space, but PreFlex cannot
@@ -51,11 +57,13 @@ import org.apache.lucene.util.LuceneTestCase.SuppressCodecs;
 // disk (but, should run successfully).  Best to run w/
 // -Dtests.codec=Standard, and w/ plenty of RAM, eg:
 //
-//   ant test -Dtest.slow=true -Dtests.heapsize=8g
+//   ant test -Dtests.monster=true -Dtests.heapsize=8g
 //
 //   java -server -Xmx8g -d64 -cp .:lib/junit-4.10.jar:./build/classes/test:./build/classes/test-framework:./build/classes/java -Dlucene.version=4.0-dev -Dtests.directory=MMapDirectory -DtempDir=build -ea org.junit.runner.JUnitCore org.apache.lucene.index.Test2BTerms
 //
 @SuppressCodecs({ "SimpleText", "Memory", "Direct" })
+@Monster("very slow, use 8g heap")
+@TimeoutSuite(millis = 6 * TimeUnits.HOUR)
 public class Test2BTerms extends LuceneTestCase {
 
   private final static int TOKEN_LEN = 5;
@@ -159,7 +167,6 @@ public class Test2BTerms extends LuceneTestCase {
     }
   }
 
-  @Ignore("Very slow. Enable manually by removing @Ignore.")
   public void test2BTerms() throws IOException {
 
     if ("Lucene3x".equals(Codec.getDefault().getName())) {

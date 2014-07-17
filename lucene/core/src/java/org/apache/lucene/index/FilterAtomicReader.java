@@ -344,6 +344,16 @@ public class FilterAtomicReader extends AtomicReader {
   }
 
   @Override
+  public void addCoreClosedListener(CoreClosedListener listener) {
+    in.addCoreClosedListener(listener);
+  }
+
+  @Override
+  public void removeCoreClosedListener(CoreClosedListener listener) {
+    in.removeCoreClosedListener(listener);
+  }
+
+  @Override
   public Bits getLiveDocs() {
     ensureOpen();
     return in.getLiveDocs();
@@ -414,6 +424,12 @@ public class FilterAtomicReader extends AtomicReader {
   public SortedDocValues getSortedDocValues(String field) throws IOException {
     ensureOpen();
     return in.getSortedDocValues(field);
+  }
+  
+  @Override
+  public SortedNumericDocValues getSortedNumericDocValues(String field) throws IOException {
+    ensureOpen();
+    return in.getSortedNumericDocValues(field);
   }
 
   @Override

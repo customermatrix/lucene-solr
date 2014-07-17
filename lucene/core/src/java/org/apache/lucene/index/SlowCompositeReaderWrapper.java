@@ -78,6 +78,16 @@ public final class SlowCompositeReaderWrapper extends AtomicReader {
   }
 
   @Override
+  public void addCoreClosedListener(CoreClosedListener listener) {
+    addCoreClosedListenerAsReaderClosedListener(in, listener);
+  }
+
+  @Override
+  public void removeCoreClosedListener(CoreClosedListener listener) {
+    removeCoreClosedListenerAsReaderClosedListener(in, listener);
+  }
+
+  @Override
   public Fields fields() {
     ensureOpen();
     return fields;
@@ -99,6 +109,12 @@ public final class SlowCompositeReaderWrapper extends AtomicReader {
   public BinaryDocValues getBinaryDocValues(String field) throws IOException {
     ensureOpen();
     return MultiDocValues.getBinaryValues(in, field);
+  }
+  
+  @Override
+  public SortedNumericDocValues getSortedNumericDocValues(String field) throws IOException {
+    ensureOpen();
+    return MultiDocValues.getSortedNumericValues(in, field);
   }
 
   @Override
@@ -130,7 +146,7 @@ public final class SlowCompositeReaderWrapper extends AtomicReader {
       AtomicReaderContext context = in.leaves().get(i);
       SortedDocValues v = context.reader().getSortedDocValues(field);
       if (v == null) {
-        v = DocValues.EMPTY_SORTED;
+        v = DocValues.emptySorted();
       }
       values[i] = v;
       starts[i] = context.docBase;
@@ -169,7 +185,7 @@ public final class SlowCompositeReaderWrapper extends AtomicReader {
       AtomicReaderContext context = in.leaves().get(i);
       SortedSetDocValues v = context.reader().getSortedSetDocValues(field);
       if (v == null) {
-        v = DocValues.EMPTY_SORTED_SET;
+        v = DocValues.emptySortedSet();
       }
       values[i] = v;
       starts[i] = context.docBase;

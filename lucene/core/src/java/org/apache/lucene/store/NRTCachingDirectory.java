@@ -30,7 +30,7 @@ import org.apache.lucene.util.IOUtils;
 //   - let subclass dictate policy...?
 //   - rename to MergeCacheingDir?  NRTCachingDir
 
-// :Post-Release-Update-Version.LUCENE_XY: (in <pre> block in javadoc below)
+// :Post-Release-Update-Version.LUCENE_X_Y: (in <pre> block in javadoc below)
 /**
  * Wraps a {@link RAMDirectory}
  * around any provided delegate directory, to
@@ -51,7 +51,7 @@ import org.apache.lucene.util.IOUtils;
  * <pre class="prettyprint">
  *   Directory fsDir = FSDirectory.open(new File("/path/to/index"));
  *   NRTCachingDirectory cachedFSDir = new NRTCachingDirectory(fsDir, 5.0, 60.0);
- *   IndexWriterConfig conf = new IndexWriterConfig(Version.LUCENE_48, analyzer);
+ *   IndexWriterConfig conf = new IndexWriterConfig(Version.LUCENE_4_9, analyzer);
  *   IndexWriter writer = new IndexWriter(cachedFSDir, conf);
  * </pre>
  *
@@ -148,8 +148,8 @@ public class NRTCachingDirectory extends Directory {
 
   /** Returns how many bytes are being used by the
    *  RAMDirectory cache */
-  public long sizeInBytes()  {
-    return cache.sizeInBytes();
+  public long cacheRamBytesUsed()  {
+    return cache.ramBytesUsed();
   }
 
   @Override
@@ -232,22 +232,6 @@ public class NRTCachingDirectory extends Directory {
       return delegate.openInput(name, context);
     }
   }
-
-  @Override
-  public synchronized IndexInputSlicer createSlicer(final String name, final IOContext context) throws IOException {
-    ensureOpen();
-    if (VERBOSE) {
-      System.out.println("nrtdir.openInput name=" + name);
-    }
-    if (cache.fileExists(name)) {
-      if (VERBOSE) {
-        System.out.println("  from cache");
-      }
-      return cache.createSlicer(name, context);
-    } else {
-      return delegate.createSlicer(name, context);
-    }
-  }
   
   /** Close this directory, which flushes any cached files
    *  to the delegate and then closes the delegate. */
@@ -277,7 +261,7 @@ public class NRTCachingDirectory extends Directory {
       bytes = context.flushInfo.estimatedSegmentSize;
     }
 
-    return !name.equals(IndexFileNames.SEGMENTS_GEN) && (bytes <= maxMergeSizeBytes) && (bytes + cache.sizeInBytes()) <= maxCachedBytes;
+    return !name.equals(IndexFileNames.SEGMENTS_GEN) && (bytes <= maxMergeSizeBytes) && (bytes + cache.ramBytesUsed()) <= maxCachedBytes;
   }
 
   private final Object uncacheLock = new Object();

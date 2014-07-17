@@ -98,11 +98,11 @@ class CrankyStoredFieldsFormat extends StoredFieldsFormat {
     // per doc/field methods: lower probability since they are invoked so many times.
 
     @Override
-    public void startDocument(int numFields) throws IOException {
+    public void startDocument() throws IOException {
       if (random.nextInt(10000) == 0) {
         throw new IOException("Fake IOException from StoredFieldsWriter.startDocument()");
       }
-      delegate.startDocument(numFields);
+      delegate.startDocument();
     }
     
     @Override

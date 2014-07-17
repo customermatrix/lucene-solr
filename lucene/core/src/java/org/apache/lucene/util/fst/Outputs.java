@@ -21,6 +21,8 @@ import java.io.IOException;
 
 import org.apache.lucene.store.DataInput;
 import org.apache.lucene.store.DataOutput;
+import org.apache.lucene.util.Accountable;
+import org.apache.lucene.util.RamUsageEstimator;
 
 /**
  * Represents the outputs for an FST, providing the basic
@@ -63,11 +65,24 @@ public abstract class Outputs<T> {
    *  #write(Object, DataOutput)}. */
   public abstract T read(DataInput in) throws IOException;
 
+  /** Skip the output; defaults to just calling {@link #read}
+   *  and discarding the result. */
+  public void skipOutput(DataInput in) throws IOException {
+    read(in);
+  }
+
   /** Decode an output value previously written with {@link
    *  #writeFinalOutput(Object, DataOutput)}.  By default this
    *  just calls {@link #read(DataInput)}. */
   public T readFinalOutput(DataInput in) throws IOException {
     return read(in);
+  }
+  
+  /** Skip the output previously written with {@link #writeFinalOutput};
+   *  defaults to just calling {@link #readFinalOutput} and discarding
+   *  the result. */
+  public void skipFinalOutput(DataInput in) throws IOException {
+    skipOutput(in);
   }
 
   /** NOTE: this output is compared with == so you must
@@ -81,5 +96,11 @@ public abstract class Outputs<T> {
 
   public T merge(T first, T second) {
     throw new UnsupportedOperationException();
+  }
+
+  /** Return memory usage for the provided output.
+   *  @see Accountable */
+  public long ramBytesUsed(T output) {
+    return RamUsageEstimator.shallowSizeOf(output);
   }
 }

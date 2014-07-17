@@ -30,7 +30,9 @@ import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.QueryWrapperFilter;
+import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
+import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.InfoStream;
 
@@ -49,7 +51,7 @@ import org.apache.lucene.util.InfoStream;
  * track which BufferedDeletes packets to apply to any given
  * segment. */
 
-class BufferedUpdatesStream {
+class BufferedUpdatesStream implements Accountable {
 
   // TODO: maybe linked list?
   private final List<FrozenBufferedUpdates> updates = new ArrayList<>();
@@ -110,7 +112,8 @@ class BufferedUpdatesStream {
     return numTerms.get();
   }
 
-  public long bytesUsed() {
+  @Override
+  public long ramBytesUsed() {
     return bytesUsed.get();
   }
 
@@ -339,7 +342,13 @@ class BufferedUpdatesStream {
     }
 
     if (infoStream.isEnabled("BD")) {
-      infoStream.message("BD", "prune sis=" + segmentInfos + " minGen=" + minGen + " packetCount=" + updates.size());
+      Directory dir;
+      if (segmentInfos.size() > 0) {
+        dir = segmentInfos.info(0).info.dir;
+      } else {
+        dir = null;
+      }
+      infoStream.message("BD", "prune sis=" + segmentInfos.toString(dir) + " minGen=" + minGen + " packetCount=" + updates.size());
     }
     final int limit = updates.size();
     for(int delIDX=0;delIDX<limit;delIDX++) {

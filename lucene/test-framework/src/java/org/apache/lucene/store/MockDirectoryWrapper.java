@@ -80,7 +80,7 @@ public class MockDirectoryWrapper extends BaseDirectoryWrapper {
   private Set<String> unSyncedFiles;
   private Set<String> createdFiles;
   private Set<String> openFilesForWrite = new HashSet<>();
-  Set<String> openLocks = Collections.synchronizedSet(new HashSet<String>());
+  Map<String,Exception> openLocks = Collections.synchronizedMap(new HashMap<String,Exception>());
   volatile boolean crashed;
   private ThrottledIndexOutput throttledOutput;
   private Throttling throttling = Throttling.SOMETIMES;
@@ -219,7 +219,7 @@ public class MockDirectoryWrapper extends BaseDirectoryWrapper {
 
   public synchronized final long sizeInBytes() throws IOException {
     if (in instanceof RAMDirectory)
-      return ((RAMDirectory) in).sizeInBytes();
+      return ((RAMDirectory) in).ramBytesUsed();
     else {
       // hack
       long size = 0;
@@ -304,7 +304,6 @@ public class MockDirectoryWrapper extends BaseDirectoryWrapper {
         // Totally truncate the file to zero bytes
         deleteFile(name, true);
         IndexOutput out = in.createOutput(name, LuceneTestCase.newIOContext(randomState));
-        out.setLength(0);
         out.close();
       }
       if (LuceneTestCase.VERBOSE) {
@@ -525,10 +524,6 @@ public class MockDirectoryWrapper extends BaseDirectoryWrapper {
     }
     //System.out.println(Thread.currentThread().getName() + ": MDW: create " + name);
     IndexOutput delegateOutput = in.createOutput(name, LuceneTestCase.newIOContext(randomState, context));
-    if (randomState.nextInt(10) == 0){
-      // once in a while wrap the IO in a Buffered IO with random buffer sizes
-      delegateOutput = new BufferedIndexOutputWrapper(1+randomState.nextInt(BufferedIndexOutput.DEFAULT_BUFFER_SIZE), delegateOutput);
-    } 
     final IndexOutput io = new MockIndexOutputWrapper(this, delegateOutput, name);
     addFileHandle(io, name, Handle.Output);
     openFilesForWrite.add(name);
@@ -612,7 +607,7 @@ public class MockDirectoryWrapper extends BaseDirectoryWrapper {
       return sizeInBytes();
     long size = 0;
     for(final RAMFile file: ((RAMDirectory)in).fileMap.values()) {
-      size += file.getSizeInBytes();
+      size += file.ramBytesUsed();
     }
     return size;
   }
@@ -666,14 +661,20 @@ public class MockDirectoryWrapper extends BaseDirectoryWrapper {
       // print the first one as its very verbose otherwise
       Exception cause = null;
       Iterator<Exception> stacktraces = openFileHandles.values().iterator();
-      if (stacktraces.hasNext())
+      if (stacktraces.hasNext()) {
         cause = stacktraces.next();
+      }
       // RuntimeException instead of IOException because
       // super() does not throw IOException currently:
       throw new RuntimeException("MockDirectoryWrapper: cannot close: there are still open files: " + openFiles, cause);
     }
     if (openLocks.size() > 0) {
-      throw new RuntimeException("MockDirectoryWrapper: cannot close: there are still open locks: " + openLocks);
+      Exception cause = null;
+      Iterator<Exception> stacktraces = openLocks.values().iterator();
+      if (stacktraces.hasNext()) {
+        cause = stacktraces.next();
+      }
+      throw new RuntimeException("MockDirectoryWrapper: cannot close: there are still open locks: " + openLocks, cause);
     }
 
     isOpen = false;
@@ -947,97 +948,7 @@ public class MockDirectoryWrapper extends BaseDirectoryWrapper {
     // randomize the IOContext here?
     in.copy(to, src, dest, context);
   }
-
-  @Override
-  public IndexInputSlicer createSlicer(final String name, IOContext context)
-      throws IOException {
-    maybeYield();
-    if (!LuceneTestCase.slowFileExists(in, name)) {
-      throw randomState.nextBoolean() ? new FileNotFoundException(name) : new NoSuchFileException(name);
-    }
-    // cannot open a file for input if it's still open for
-    // output, except for segments.gen and segments_N
-    if (openFilesForWrite.contains(name) && !name.startsWith("segments")) {
-      throw (IOException) fillOpenTrace(new IOException("MockDirectoryWrapper: file \"" + name + "\" is still open for writing"), name, false);
-    }
-    
-    final IndexInputSlicer delegateHandle = in.createSlicer(name, context);
-    final IndexInputSlicer handle = new IndexInputSlicer() {
-      
-      private boolean isClosed;
-      @Override
-      public void close() throws IOException {
-        if (!isClosed) {
-          delegateHandle.close();
-          MockDirectoryWrapper.this.removeOpenFile(this, name);
-          isClosed = true;
-        }
-      }
-
-      @Override
-      public IndexInput openSlice(String sliceDescription, long offset, long length) throws IOException {
-        maybeYield();
-        IndexInput ii = new MockIndexInputWrapper(MockDirectoryWrapper.this, name, delegateHandle.openSlice(sliceDescription, offset, length));
-        addFileHandle(ii, name, Handle.Input);
-        return ii;
-      }
-
-      @Override
-      public IndexInput openFullSlice() throws IOException {
-        maybeYield();
-        IndexInput ii = new MockIndexInputWrapper(MockDirectoryWrapper.this, name, delegateHandle.openFullSlice());
-        addFileHandle(ii, name, Handle.Input);
-        return ii;
-      }
-      
-    };
-    addFileHandle(handle, name, Handle.Slice);
-    return handle;
-  }
   
-  final class BufferedIndexOutputWrapper extends BufferedIndexOutput {
-    private final IndexOutput io;
-    
-    public BufferedIndexOutputWrapper(int bufferSize, IndexOutput io) {
-      super(bufferSize);
-      this.io = io;
-    }
-    
-    @Override
-    public long length() throws IOException {
-      return io.length();
-    }
-    
-    @Override
-    protected void flushBuffer(byte[] b, int offset, int len) throws IOException {
-      io.writeBytes(b, offset, len);
-    }
-
-    @Override
-    public void seek(long pos) throws IOException {
-      flush();
-      io.seek(pos);
-    }
-
-    @Override
-    public void flush() throws IOException {
-      try {
-        super.flush();
-      } finally { 
-        io.flush();
-      }
-    }
-    
-    @Override
-    public void close() throws IOException {
-      try {
-        super.close();
-      } finally {
-        io.close();
-      }
-    }
-  }
-
   /** Use this when throwing fake {@code IOException},
    *  e.g. from {@link MockDirectoryWrapper.Failure}. */
   public static class FakeIOException extends IOException {

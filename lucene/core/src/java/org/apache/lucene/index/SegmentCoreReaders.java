@@ -17,20 +17,6 @@ package org.apache.lucene.index;
  * limitations under the License.
  */
 
-import org.apache.lucene.codecs.Codec;
-import org.apache.lucene.codecs.DocValuesProducer;
-import org.apache.lucene.codecs.FieldsProducer;
-import org.apache.lucene.codecs.PostingsFormat;
-import org.apache.lucene.codecs.StoredFieldsReader;
-import org.apache.lucene.codecs.TermVectorsReader;
-import org.apache.lucene.index.SegmentReader.CoreClosedListener;
-import org.apache.lucene.store.AlreadyClosedException;
-import org.apache.lucene.store.CompoundFileDirectory;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.util.CloseableThreadLocal;
-import org.apache.lucene.util.IOUtils;
-
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
@@ -39,10 +25,28 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.lucene.codecs.Codec;
+import org.apache.lucene.codecs.DocValuesProducer;
+import org.apache.lucene.codecs.FieldsProducer;
+import org.apache.lucene.codecs.PostingsFormat;
+import org.apache.lucene.codecs.StoredFieldsReader;
+import org.apache.lucene.codecs.TermVectorsReader;
+import org.apache.lucene.index.AtomicReader.CoreClosedListener;
+import org.apache.lucene.store.AlreadyClosedException;
+import org.apache.lucene.store.CompoundFileDirectory;
+import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.IOContext;
+import org.apache.lucene.util.Accountable;
+import org.apache.lucene.util.CloseableThreadLocal;
+import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.util.RamUsageEstimator;
+
 /** Holds core readers that are shared (unchanged) when
  * SegmentReader is cloned or reopened */
-final class SegmentCoreReaders {
-  
+final class SegmentCoreReaders implements Accountable {
+
+  private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(SegmentCoreReaders.class);
+
   // Counts how many other readers share the core objects
   // (freqStream, proxStream, tis, etc.) of this reader;
   // when coreRef drops to 0, these core objects may be
@@ -156,18 +160,23 @@ final class SegmentCoreReaders {
     throw new AlreadyClosedException("SegmentCoreReaders is already closed");
   }
 
-  NumericDocValues getNormValues(FieldInfo fi) throws IOException {
-    assert normsProducer != null;
-
+  NumericDocValues getNormValues(FieldInfos infos, String field) throws IOException {
     Map<String,Object> normFields = normsLocal.get();
 
-    NumericDocValues norms = (NumericDocValues) normFields.get(fi.name);
-    if (norms == null) {
+    NumericDocValues norms = (NumericDocValues) normFields.get(field);
+    if (norms != null) {
+      return norms;
+    } else {
+      FieldInfo fi = infos.fieldInfo(field);
+      if (fi == null || !fi.hasNorms()) {
+        // Field does not exist or does not index norms
+        return null;
+      }
+      assert normsProducer != null;
       norms = normsProducer.getNumeric(fi);
-      normFields.put(fi.name, norms);
+      normFields.put(field, norms);
+      return norms;
     }
-
-    return norms;
   }
 
   void decRef() throws IOException {
@@ -212,9 +221,10 @@ final class SegmentCoreReaders {
     coreClosedListeners.remove(listener);
   }
 
-  /** Returns approximate RAM bytes used */
+  @Override
   public long ramBytesUsed() {
-    return ((normsProducer!=null) ? normsProducer.ramBytesUsed() : 0) +
+    return BASE_RAM_BYTES_USED +
+        ((normsProducer!=null) ? normsProducer.ramBytesUsed() : 0) +
         ((fields!=null) ? fields.ramBytesUsed() : 0) + 
         ((fieldsReaderOrig!=null)? fieldsReaderOrig.ramBytesUsed() : 0) + 
         ((termVectorsReaderOrig!=null) ? termVectorsReaderOrig.ramBytesUsed() : 0);

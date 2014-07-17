@@ -28,9 +28,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import org.apache.lucene.codecs.BlockTreeTermsReader;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.PostingsFormat;
+import org.apache.lucene.codecs.blocktree.FieldReader;
+import org.apache.lucene.codecs.blocktree.Stats;
 import org.apache.lucene.codecs.lucene3x.Lucene3xSegmentInfoFormat;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.CheckIndex.Status.DocValuesStatus;
@@ -46,6 +47,7 @@ import org.apache.lucene.util.CommandLineUtil;
 import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.LongBitSet;
 import org.apache.lucene.util.StringHelper;
+
 
 /**
  * Basic tool and API to check the health of an index and
@@ -252,7 +254,7 @@ public class CheckIndex {
        *  tree terms dictionary (this is only set if the
        *  {@link PostingsFormat} for this segment uses block
        *  tree. */
-      public Map<String,BlockTreeTermsReader.Stats> blockTreeStats = null;
+      public Map<String,Stats> blockTreeStats = null;
     }
 
     /**
@@ -310,6 +312,9 @@ public class CheckIndex {
       
       /** Total number of sorted fields */
       public long totalSortedFields;
+      
+      /** Total number of sortednumeric fields */
+      public long totalSortedNumericFields;
       
       /** Total number of sortedset fields */
       public long totalSortedSetFields;
@@ -776,6 +781,30 @@ public class CheckIndex {
       final boolean hasPositions = terms.hasPositions();
       final boolean hasPayloads = terms.hasPayloads();
       final boolean hasOffsets = terms.hasOffsets();
+      
+      BytesRef bb = terms.getMin();
+      BytesRef minTerm;
+      if (bb != null) {
+        assert bb.isValid();
+        minTerm = BytesRef.deepCopyOf(bb);
+      } else {
+        minTerm = null;
+      }
+
+      BytesRef maxTerm;
+      bb = terms.getMax();
+      if (bb != null) {
+        assert bb.isValid();
+        maxTerm = BytesRef.deepCopyOf(bb);
+        if (minTerm == null) {
+          throw new RuntimeException("field \"" + field + "\" has null minTerm but non-null maxTerm");
+        }
+      } else {
+        maxTerm = null;
+        if (minTerm != null) {
+          throw new RuntimeException("field \"" + field + "\" has non-null minTerm but null maxTerm");
+        }
+      }
 
       // term vectors cannot omit TF:
       final boolean expectedHasFreqs = (isVectors || fieldInfo.getIndexOptions().compareTo(IndexOptions.DOCS_AND_FREQS) >= 0);
@@ -837,6 +866,20 @@ public class CheckIndex {
             throw new RuntimeException("terms out of order: lastTerm=" + lastTerm + " term=" + term);
           }
           lastTerm.copyBytes(term);
+        }
+
+        if (minTerm == null) {
+          // We checked this above:
+          assert maxTerm == null;
+          throw new RuntimeException("field=\"" + field + "\": invalid term: term=" + term + ", minTerm=" + minTerm);
+        }
+        
+        if (term.compareTo(minTerm) < 0) {
+          throw new RuntimeException("field=\"" + field + "\": invalid term: term=" + term + ", minTerm=" + minTerm);
+        }
+        
+        if (term.compareTo(maxTerm) > 0) {
+          throw new RuntimeException("field=\"" + field + "\": invalid term: term=" + term + ", maxTerm=" + maxTerm);
         }
         
         final int docFreq = termsEnum.docFreq();
@@ -1085,6 +1128,10 @@ public class CheckIndex {
           }
         }
       }
+
+      if (minTerm != null && status.termCount + status.delTermCount == 0) {
+        throw new RuntimeException("field=\"" + field + "\": minTerm is non-null yet we saw no terms: " + minTerm);
+      }
       
       final Terms fieldTerms = fields.terms(field);
       if (fieldTerms == null) {
@@ -1095,8 +1142,8 @@ public class CheckIndex {
         // docs got deleted and then merged away):
         
       } else {
-        if (fieldTerms instanceof BlockTreeTermsReader.FieldReader) {
-          final BlockTreeTermsReader.Stats stats = ((BlockTreeTermsReader.FieldReader) fieldTerms).computeStats();
+        if (fieldTerms instanceof FieldReader) {
+          final Stats stats = ((FieldReader) fieldTerms).computeStats();
           assert stats != null;
           if (status.blockTreeStats == null) {
             status.blockTreeStats = new HashMap<>();
@@ -1238,7 +1285,7 @@ public class CheckIndex {
     }
     
     if (verbose && status.blockTreeStats != null && infoStream != null && status.termCount > 0) {
-      for(Map.Entry<String,BlockTreeTermsReader.Stats> ent : status.blockTreeStats.entrySet()) {
+      for(Map.Entry<String,Stats> ent : status.blockTreeStats.entrySet()) {
         infoStream.println("      field \"" + ent.getKey() + "\":");
         infoStream.println("      " + ent.getValue().toString().replace("\n", "\n      "));
       }
@@ -1366,6 +1413,7 @@ public class CheckIndex {
                              + status.totalBinaryFields + " BINARY; " 
                              + status.totalNumericFields + " NUMERIC; "
                              + status.totalSortedFields + " SORTED; "
+                             + status.totalSortedNumericFields + " SORTED_NUMERIC; "
                              + status.totalSortedSetFields + " SORTED_SET]");
     } catch (Throwable e) {
       msg(infoStream, "ERROR [" + String.valueOf(e.getMessage()) + "]");
@@ -1378,12 +1426,11 @@ public class CheckIndex {
   }
   
   private static void checkBinaryDocValues(String fieldName, AtomicReader reader, BinaryDocValues dv, Bits docsWithField) {
-    BytesRef scratch = new BytesRef();
     for (int i = 0; i < reader.maxDoc(); i++) {
-      dv.get(i, scratch);
-      assert scratch.isValid();
-      if (docsWithField.get(i) == false && scratch.length > 0) {
-        throw new RuntimeException("dv for field: " + fieldName + " is missing but has value=" + scratch + " for doc: " + i);
+      final BytesRef term = dv.get(i);
+      assert term.isValid();
+      if (docsWithField.get(i) == false && term.length > 0) {
+        throw new RuntimeException("dv for field: " + fieldName + " is missing but has value=" + term + " for doc: " + i);
       }
     }
   }
@@ -1416,16 +1463,15 @@ public class CheckIndex {
       throw new RuntimeException("dv for field: " + fieldName + " has holes in its ords, valueCount=" + dv.getValueCount() + " but only used: " + seenOrds.cardinality());
     }
     BytesRef lastValue = null;
-    BytesRef scratch = new BytesRef();
     for (int i = 0; i <= maxOrd; i++) {
-      dv.lookupOrd(i, scratch);
-      assert scratch.isValid();
+      final BytesRef term = dv.lookupOrd(i);
+      assert term.isValid();
       if (lastValue != null) {
-        if (scratch.compareTo(lastValue) <= 0) {
-          throw new RuntimeException("dv for field: " + fieldName + " has ords out of order: " + lastValue + " >=" + scratch);
+        if (term.compareTo(lastValue) <= 0) {
+          throw new RuntimeException("dv for field: " + fieldName + " has ords out of order: " + lastValue + " >=" + term);
         }
       }
-      lastValue = BytesRef.deepCopyOf(scratch);
+      lastValue = BytesRef.deepCopyOf(term);
     }
   }
   
@@ -1487,16 +1533,39 @@ public class CheckIndex {
     }
     
     BytesRef lastValue = null;
-    BytesRef scratch = new BytesRef();
     for (long i = 0; i <= maxOrd; i++) {
-      dv.lookupOrd(i, scratch);
-      assert scratch.isValid();
+      final BytesRef term = dv.lookupOrd(i);
+      assert term.isValid();
       if (lastValue != null) {
-        if (scratch.compareTo(lastValue) <= 0) {
-          throw new RuntimeException("dv for field: " + fieldName + " has ords out of order: " + lastValue + " >=" + scratch);
+        if (term.compareTo(lastValue) <= 0) {
+          throw new RuntimeException("dv for field: " + fieldName + " has ords out of order: " + lastValue + " >=" + term);
         }
       }
-      lastValue = BytesRef.deepCopyOf(scratch);
+      lastValue = BytesRef.deepCopyOf(term);
+    }
+  }
+  
+  private static void checkSortedNumericDocValues(String fieldName, AtomicReader reader, SortedNumericDocValues ndv, Bits docsWithField) {
+    for (int i = 0; i < reader.maxDoc(); i++) {
+      ndv.setDocument(i);
+      int count = ndv.count();
+      if (docsWithField.get(i)) {
+        if (count == 0) {
+          throw new RuntimeException("dv for field: " + fieldName + " is not marked missing but has zero count for doc: " + i);
+        }
+        long previous = Long.MIN_VALUE;
+        for (int j = 0; j < count; j++) {
+          long value = ndv.valueAt(j);
+          if (value < previous) {
+            throw new RuntimeException("values out of order: " + value + " < " + previous + " for doc: " + i);
+          }
+          previous = value;
+        }
+      } else {
+        if (count != 0) {
+          throw new RuntimeException("dv for field: " + fieldName + " is marked missing but has count=" + count + " for doc: " + i);
+        }
+      }
     }
   }
 
@@ -1522,7 +1591,18 @@ public class CheckIndex {
         checkSortedDocValues(fi.name, reader, reader.getSortedDocValues(fi.name), docsWithField);
         if (reader.getBinaryDocValues(fi.name) != null ||
             reader.getNumericDocValues(fi.name) != null ||
+            reader.getSortedNumericDocValues(fi.name) != null ||
             reader.getSortedSetDocValues(fi.name) != null) {
+          throw new RuntimeException(fi.name + " returns multiple docvalues types!");
+        }
+        break;
+      case SORTED_NUMERIC:
+        status.totalSortedNumericFields++;
+        checkSortedNumericDocValues(fi.name, reader, reader.getSortedNumericDocValues(fi.name), docsWithField);
+        if (reader.getBinaryDocValues(fi.name) != null ||
+            reader.getNumericDocValues(fi.name) != null ||
+            reader.getSortedSetDocValues(fi.name) != null ||
+            reader.getSortedDocValues(fi.name) != null) {
           throw new RuntimeException(fi.name + " returns multiple docvalues types!");
         }
         break;
@@ -1531,6 +1611,7 @@ public class CheckIndex {
         checkSortedSetDocValues(fi.name, reader, reader.getSortedSetDocValues(fi.name), docsWithField);
         if (reader.getBinaryDocValues(fi.name) != null ||
             reader.getNumericDocValues(fi.name) != null ||
+            reader.getSortedNumericDocValues(fi.name) != null ||
             reader.getSortedDocValues(fi.name) != null) {
           throw new RuntimeException(fi.name + " returns multiple docvalues types!");
         }
@@ -1540,6 +1621,7 @@ public class CheckIndex {
         checkBinaryDocValues(fi.name, reader, reader.getBinaryDocValues(fi.name), docsWithField);
         if (reader.getNumericDocValues(fi.name) != null ||
             reader.getSortedDocValues(fi.name) != null ||
+            reader.getSortedNumericDocValues(fi.name) != null ||
             reader.getSortedSetDocValues(fi.name) != null) {
           throw new RuntimeException(fi.name + " returns multiple docvalues types!");
         }
@@ -1549,6 +1631,7 @@ public class CheckIndex {
         checkNumericDocValues(fi.name, reader, reader.getNumericDocValues(fi.name), docsWithField);
         if (reader.getBinaryDocValues(fi.name) != null ||
             reader.getSortedDocValues(fi.name) != null ||
+            reader.getSortedNumericDocValues(fi.name) != null ||
             reader.getSortedSetDocValues(fi.name) != null) {
           throw new RuntimeException(fi.name + " returns multiple docvalues types!");
         }
@@ -1628,6 +1711,7 @@ public class CheckIndex {
 
           // Only agg stats if the doc is live:
           final boolean doStats = liveDocs == null || liveDocs.get(j);
+
           if (doStats) {
             status.docCount++;
           }

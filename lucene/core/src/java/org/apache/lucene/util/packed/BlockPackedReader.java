@@ -17,25 +17,26 @@ package org.apache.lucene.util.packed;
  * limitations under the License.
  */
 
+import static org.apache.lucene.util.BitUtil.zigZagDecode;
 import static org.apache.lucene.util.packed.AbstractBlockPackedWriter.BPV_SHIFT;
 import static org.apache.lucene.util.packed.AbstractBlockPackedWriter.MAX_BLOCK_SIZE;
 import static org.apache.lucene.util.packed.AbstractBlockPackedWriter.MIN_BLOCK_SIZE;
 import static org.apache.lucene.util.packed.AbstractBlockPackedWriter.MIN_VALUE_EQUALS_0;
 import static org.apache.lucene.util.packed.BlockPackedReaderIterator.readVLong;
-import static org.apache.lucene.util.packed.BlockPackedReaderIterator.zigZagDecode;
 import static org.apache.lucene.util.packed.PackedInts.checkBlockSize;
 import static org.apache.lucene.util.packed.PackedInts.numBlocks;
 
 import java.io.IOException;
 
 import org.apache.lucene.store.IndexInput;
+import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.LongValues;
 
 /**
  * Provides random access to a stream written with {@link BlockPackedWriter}.
  * @lucene.internal
  */
-public final class BlockPackedReader extends LongValues {
+public final class BlockPackedReader extends LongValues implements Accountable {
 
   private final int blockShift, blockMask;
   private final long valueCount;
@@ -86,7 +87,7 @@ public final class BlockPackedReader extends LongValues {
     return (minValues == null ? 0 : minValues[block]) + subReaders[block].get(idx);
   }
 
-  /** Returns approximate RAM bytes used */
+  @Override
   public long ramBytesUsed() {
     long size = 0;
     for (PackedInts.Reader reader : subReaders) {

@@ -31,7 +31,10 @@ import java.io.IOException;
  */
 public abstract class IndexOutput extends DataOutput implements Closeable {
 
-  /** Forces any buffered output to be written. */
+  /** Forces any buffered output to be written. 
+   * @deprecated Lucene never calls this method.
+   */
+  @Deprecated
   public abstract void flush() throws IOException;
 
   /** Closes this stream to further operations. */
@@ -40,33 +43,20 @@ public abstract class IndexOutput extends DataOutput implements Closeable {
 
   /** Returns the current position in this file, where the next write will
    * occur.
-   * @see #seek(long)
    */
   public abstract long getFilePointer();
-
-  /** Sets current position in this file, where the next write will occur.
-   * @see #getFilePointer()
-   * @deprecated (4.1) This method will be removed in Lucene 5.0
-   */
-  @Deprecated
-  public abstract void seek(long pos) throws IOException;
 
   /** Returns the current checksum of bytes written so far */
   public abstract long getChecksum() throws IOException;
 
-  /** The number of bytes in the file. */
-  public abstract long length() throws IOException;
-
-  /** Set the file length. By default, this method does
-   * nothing (it's optional for a Directory to implement
-   * it).  But, certain Directory implementations (for
-   * example @see FSDirectory) can use this to inform the
-   * underlying IO system to pre-allocate the file to the
-   * specified size.  If the length is longer than the
-   * current file length, the bytes added to the file are
-   * undefined.  Otherwise the file is truncated.
-   * @param length file length
+  /** The number of bytes in the file.
+   * 
+   * @deprecated Use {@link #getFilePointer} instead; this
+   * method will be removed in Lucene5.0.
    */
-  public void setLength(long length) throws IOException {}
+  @Deprecated
+  public long length() throws IOException {
+    return getFilePointer();
+  }
 
 }

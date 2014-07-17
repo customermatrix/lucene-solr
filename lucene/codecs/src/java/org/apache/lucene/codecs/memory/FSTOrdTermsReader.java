@@ -840,10 +840,10 @@ public class FSTOrdTermsReader extends FieldsProducer {
   
   @Override
   public long ramBytesUsed() {
-    long ramBytesUsed = 0;
+    long ramBytesUsed = postingsReader.ramBytesUsed();
     for (TermsReader r : fields.values()) {
       if (r.index != null) {
-        ramBytesUsed += r.index.sizeInBytes();
+        ramBytesUsed += r.index.ramBytesUsed();
         ramBytesUsed += RamUsageEstimator.sizeOf(r.metaBytesBlock);
         ramBytesUsed += RamUsageEstimator.sizeOf(r.metaLongsBlock);
         ramBytesUsed += RamUsageEstimator.sizeOf(r.skipInfo);

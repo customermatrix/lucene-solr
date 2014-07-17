@@ -72,7 +72,7 @@ import org.junit.BeforeClass;
 // don't use 3.x codec, its unrealistic since it means
 // we won't even be running the actual code, only the impostor
 // Sep codec cannot yet handle the offsets we add when changing indexes!
-@SuppressCodecs({"Lucene3x", "MockFixedIntBlock", "MockVariableIntBlock", "MockSep", "MockRandom", "Lucene40", "Lucene41", "Appending", "Lucene42", "Lucene45"})
+@SuppressCodecs({"Lucene3x", "MockFixedIntBlock", "MockVariableIntBlock", "MockSep", "MockRandom", "Lucene40", "Lucene41", "Appending", "Lucene42", "Lucene45", "Lucene46"})
 public class TestBackwardsCompatibility3x extends LuceneTestCase {
 
   // Uncomment these cases & run them on an older Lucene
@@ -198,8 +198,7 @@ public class TestBackwardsCompatibility3x extends LuceneTestCase {
           System.out.println("TEST: got expected exc:");
           e.printStackTrace(System.out);
         }
-        // Make sure exc message includes a path=
-        assertTrue("got exc message: " + e.getMessage(), e.getMessage().indexOf("path=\"") != -1);
+        // TODO: test *SOMEWHERE ELSE* that exc message includes a path=
       } finally {
         // we should fail to open IW, and so it should be null when we get here.
         // However, if the test fails (i.e., IW did not fail on open), we need
@@ -422,19 +421,18 @@ public class TestBackwardsCompatibility3x extends LuceneTestCase {
             (byte)(id >>> 24), (byte)(id >>> 16),(byte)(id >>> 8),(byte)id
         };
         BytesRef expectedRef = new BytesRef(bytes);
-        BytesRef scratch = new BytesRef();
         
-        dvBytesDerefFixed.get(i, scratch);
+        BytesRef scratch = dvBytesDerefFixed.get(i);
         assertEquals(expectedRef, scratch);
-        dvBytesDerefVar.get(i, scratch);
+        scratch = dvBytesDerefVar.get(i);
         assertEquals(expectedRef, scratch);
-        dvBytesSortedFixed.get(i, scratch);
+        scratch = dvBytesSortedFixed.get(i);
         assertEquals(expectedRef, scratch);
-        dvBytesSortedVar.get(i, scratch);
+        scratch = dvBytesSortedVar.get(i);
         assertEquals(expectedRef, scratch);
-        dvBytesStraightFixed.get(i, scratch);
+        scratch = dvBytesStraightFixed.get(i);
         assertEquals(expectedRef, scratch);
-        dvBytesStraightVar.get(i, scratch);
+        scratch = dvBytesStraightVar.get(i);
         assertEquals(expectedRef, scratch);
         
         assertEquals((double)id, Double.longBitsToDouble(dvDouble.get(i)), 0D);
@@ -579,9 +577,7 @@ public class TestBackwardsCompatibility3x extends LuceneTestCase {
       addNoProxDoc(writer);
       writer.close();
 
-      writer = new IndexWriter(dir,
-        conf.setMergePolicy(doCFS ? NoMergePolicy.COMPOUND_FILES : NoMergePolicy.NO_COMPOUND_FILES)
-      );
+      writer = new IndexWriter(dir, conf.setMergePolicy(NoMergePolicy.INSTANCE));
       Term searchTerm = new Term("id", "7");
       writer.deleteDocuments(searchTerm);
       writer.close();

@@ -155,7 +155,7 @@ public final class BloomFilteringPostingsFormat extends PostingsFormat {
     return new BloomFilteredFieldsProducer(state);
   }
   
-  public class BloomFilteredFieldsProducer extends FieldsProducer {
+  static class BloomFilteredFieldsProducer extends FieldsProducer {
     private FieldsProducer delegateFieldsProducer;
     HashMap<String,FuzzySet> bloomsByFieldName = new HashMap<>();
     
@@ -305,6 +305,16 @@ public final class BloomFilteringPostingsFormat extends PostingsFormat {
       @Override
       public boolean hasPayloads() {
         return delegateTerms.hasPayloads();
+      }
+
+      @Override
+      public BytesRef getMin() throws IOException {
+        return delegateTerms.getMin();
+      }
+
+      @Override
+      public BytesRef getMax() throws IOException {
+        return delegateTerms.getMax();
       }
     }
     

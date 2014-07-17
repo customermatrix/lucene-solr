@@ -175,7 +175,7 @@ public class TestIndexWriterThreadsToSegments extends LuceneTestCase {
     iwc.setMaxThreadStates(maxThreadStates);
 
     // Never trigger merges (so we can simplistically count flushed segments):
-    iwc.setMergePolicy(NoMergePolicy.NO_COMPOUND_FILES);
+    iwc.setMergePolicy(NoMergePolicy.INSTANCE);
 
     final IndexWriter w = new IndexWriter(dir, iwc);
 
@@ -276,9 +276,9 @@ public class TestIndexWriterThreadsToSegments extends LuceneTestCase {
     Directory dir = newDirectory();
     IndexWriterConfig iwc = new IndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()));
     iwc.setRAMBufferSizeMB(.2);
-    Codec codec = Codec.forName("Lucene46");
+    Codec codec = Codec.forName("Lucene49");
     iwc.setCodec(codec);
-    iwc.setMergePolicy(NoMergePolicy.NO_COMPOUND_FILES);
+    iwc.setMergePolicy(NoMergePolicy.INSTANCE);
     final IndexWriter w = new IndexWriter(dir, iwc);
     final CountDownLatch startingGun = new CountDownLatch(1);
     Thread[] threads = new Thread[2];
@@ -325,7 +325,7 @@ public class TestIndexWriterThreadsToSegments extends LuceneTestCase {
             segSeen.add(segName);
             SegmentInfo si = new Lucene46SegmentInfoFormat().getSegmentInfoReader().read(dir, segName, IOContext.DEFAULT);
             si.setCodec(codec);
-            SegmentCommitInfo sci = new SegmentCommitInfo(si, 0, -1, -1);
+            SegmentCommitInfo sci = new SegmentCommitInfo(si, 0, -1, -1, -1);
             SegmentReader sr = new SegmentReader(sci, 1, IOContext.DEFAULT);
             try {
               thread0Count += sr.docFreq(new Term("field", "threadID0"));

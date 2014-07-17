@@ -25,7 +25,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -36,16 +35,16 @@ import org.apache.lucene.store.DataOutput;
 import org.apache.lucene.store.InputStreamDataInput;
 import org.apache.lucene.store.OutputStreamDataOutput;
 import org.apache.lucene.store.RAMOutputStream;
+import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.IntsRef;
 import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.lucene.util.fst.Builder.UnCompiledNode;
 import org.apache.lucene.util.packed.GrowableWriter;
 import org.apache.lucene.util.packed.PackedInts;
-//import java.io.Writer;
-//import java.io.OutputStreamWriter;
 
 // TODO: break this into WritableFST and ReadOnlyFST.. then
 // we can have subclasses of ReadOnlyFST to handle the
@@ -70,7 +69,11 @@ import org.apache.lucene.util.packed.PackedInts;
  *
  * @lucene.experimental
  */
-public final class FST<T> {
+public final class FST<T> implements Accountable {
+
+  private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(FST.class);
+  private static final long ARC_SHALLOW_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(Arc.class);
+
   /** Specifies allowed range of each int input label for
    *  this FST. */
   public static enum INPUT_TYPE {BYTE1, BYTE2, BYTE4};
@@ -392,15 +395,38 @@ public final class FST<T> {
     return inputType;
   }
 
-  /** Returns bytes used to represent the FST */
-  public long sizeInBytes() {
-    long size = bytes.getPosition();
+  private long ramBytesUsed(Arc<T>[] arcs) {
+    long size = 0;
+    if (arcs != null) {
+      size += RamUsageEstimator.shallowSizeOf(arcs);
+      for (Arc<T> arc : arcs) {
+        if (arc != null) {
+          size += ARC_SHALLOW_RAM_BYTES_USED;
+          if (arc.output != null && arc.output != outputs.getNoOutput()) {
+            size += outputs.ramBytesUsed(arc.output);
+          }
+          if (arc.nextFinalOutput != null && arc.nextFinalOutput != outputs.getNoOutput()) {
+            size += outputs.ramBytesUsed(arc.nextFinalOutput);
+          }
+        }
+      }
+    }
+    return size;
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    long size = BASE_RAM_BYTES_USED;
+    size += bytes.ramBytesUsed();
     if (packed) {
       size += nodeRefToAddress.ramBytesUsed();
     } else if (nodeAddress != null) {
       size += nodeAddress.ramBytesUsed();
       size += inCounts.ramBytesUsed();
     }
+    size += ramBytesUsed(cachedRootArcs);
+    size += ramBytesUsed(assertingCachedRootArcs);
+    size += RamUsageEstimator.sizeOf(bytesPerArc);
     return size;
   }
 
@@ -893,10 +919,10 @@ public final class FST<T> {
           // skip this arc:
           readLabel(in);
           if (arc.flag(BIT_ARC_HAS_OUTPUT)) {
-            outputs.read(in);
+            outputs.skipOutput(in);
           }
           if (arc.flag(BIT_ARC_HAS_FINAL_OUTPUT)) {
-            outputs.readFinalOutput(in);
+            outputs.skipFinalOutput(in);
           }
           if (arc.flag(BIT_STOP_NODE)) {
           } else if (arc.flag(BIT_TARGET_NEXT)) {
@@ -1252,11 +1278,11 @@ public final class FST<T> {
       readLabel(in);
 
       if (flag(flags, BIT_ARC_HAS_OUTPUT)) {
-        outputs.read(in);
+        outputs.skipOutput(in);
       }
 
       if (flag(flags, BIT_ARC_HAS_FINAL_OUTPUT)) {
-        outputs.readFinalOutput(in);
+        outputs.skipFinalOutput(in);
       }
 
       if (!flag(flags, BIT_STOP_NODE) && !flag(flags, BIT_TARGET_NEXT)) {
@@ -1330,9 +1356,6 @@ public final class FST<T> {
     /** Returns true if this reader uses reversed bytes
      *  under-the-hood. */
     public abstract boolean reversed();
-
-    /** Skips bytes. */
-    public abstract void skipBytes(int count);
   }
 
   private static class ArcAndState<T> {

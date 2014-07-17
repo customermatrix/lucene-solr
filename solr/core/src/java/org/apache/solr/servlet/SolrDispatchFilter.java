@@ -417,16 +417,11 @@ public class SolrDispatchFilter extends BaseSolrFilter {
                 SolrRequestInfo.setRequestInfo(new SolrRequestInfo(solrReq, solrRsp));
                 this.execute( req, handler, solrReq, solrRsp );
                 HttpCacheHeaderUtil.checkHttpCachingVeto(solrRsp, resp, reqMethod);
-              // add info to http headers
-              //TODO: See SOLR-232 and SOLR-267.  
-                /*try {
-                  NamedList solrRspHeader = solrRsp.getResponseHeader();
-                 for (int i=0; i<solrRspHeader.size(); i++) {
-                   ((javax.servlet.http.HttpServletResponse) response).addHeader(("Solr-" + solrRspHeader.getName(i)), String.valueOf(solrRspHeader.getVal(i)));
-                 }
-                } catch (ClassCastException cce) {
-                  log.log(Level.WARNING, "exception adding response header log information", cce);
-                }*/
+                Iterator<Entry<String, String>> headers = solrRsp.httpHeaders();
+                while (headers.hasNext()) {
+                  Entry<String, String> entry = headers.next();
+                  resp.addHeader(entry.getKey(), entry.getValue());
+                }
                QueryResponseWriter responseWriter = core.getQueryResponseWriter(solrReq);
                writeResponse(solrRsp, response, responseWriter, solrReq, reqMethod);
             }
@@ -437,8 +432,16 @@ public class SolrDispatchFilter extends BaseSolrFilter {
       } 
       catch (Throwable ex) {
         sendError( core, solrReq, request, (HttpServletResponse)response, ex );
-        if (ex instanceof Error) {
-          throw (Error) ex;
+        // walk the the entire cause chain to search for an Error
+        Throwable t = ex;
+        while (t != null) {
+          if (t instanceof Error)  {
+            if (t != ex)  {
+              log.error("An Error was wrapped in another exception - please report complete stacktrace on SOLR-6161", ex);
+            }
+            throw (Error) t;
+          }
+          t = t.getCause();
         }
         return;
       } finally {

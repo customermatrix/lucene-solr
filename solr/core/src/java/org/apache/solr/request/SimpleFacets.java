@@ -368,8 +368,7 @@ public class SimpleFacets {
    * @see FacetParams#FACET_QUERY
    */
   public int getGroupedFacetQueryCount(Query facetQuery) throws IOException {
-    GroupingSpecification groupingSpecification = rb.getGroupingSpec();
-    String groupField  = groupingSpecification != null ? groupingSpecification.getFields()[0] : null;
+    String groupField = params.get(GroupParams.GROUP_FIELD);
     if (groupField == null) {
       throw new SolrException (
           SolrException.ErrorCode.BAD_REQUEST,
@@ -740,7 +739,7 @@ public class SimpleFacets {
 
     SortedDocValues si = FieldCache.DEFAULT.getTermsIndex(searcher.getAtomicReader(), fieldName);
 
-    final BytesRef br = new BytesRef();
+    BytesRef br = new BytesRef();
 
     final BytesRef prefixRef;
     if (prefix == null) {
@@ -825,7 +824,7 @@ public class SimpleFacets {
           long pair = sorted[i];
           int c = (int)(pair >>> 32);
           int tnum = Integer.MAX_VALUE - (int)pair;
-          si.lookupOrd(startTermIndex+tnum, br);
+          br = si.lookupOrd(startTermIndex+tnum);
           ft.indexedToReadable(br, charsRef);
           if (termValidator.validate(fieldName, charsRef.toString())) {
             res.add(charsRef.toString(), c);
@@ -846,7 +845,7 @@ public class SimpleFacets {
           int c = counts[i];
           if (c<mincount || --off>=0) continue;
           if (--lim<0) break;
-          si.lookupOrd(startTermIndex+i, br);
+          br = si.lookupOrd(startTermIndex+i);
           ft.indexedToReadable(br, charsRef);
           if (termValidator.validate(fieldName, charsRef.toString())) {
             res.add(charsRef.toString(), c);

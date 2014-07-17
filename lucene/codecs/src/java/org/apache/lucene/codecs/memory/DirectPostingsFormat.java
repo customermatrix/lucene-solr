@@ -30,8 +30,8 @@ import org.apache.lucene.codecs.PostingsFormat;
 import org.apache.lucene.codecs.lucene41.Lucene41PostingsFormat; // javadocs
 import org.apache.lucene.index.DocsAndPositionsEnum;
 import org.apache.lucene.index.DocsEnum;
-import org.apache.lucene.index.FieldInfo.IndexOptions;
 import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.FieldInfo.IndexOptions;
 import org.apache.lucene.index.Fields;
 import org.apache.lucene.index.OrdTermState;
 import org.apache.lucene.index.SegmentReadState;
@@ -41,6 +41,7 @@ import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.RAMOutputStream;
+import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
@@ -176,16 +177,18 @@ public final class DirectPostingsFormat extends PostingsFormat {
     }
   }
 
-  private final static class DirectField extends Terms {
+  private final static class DirectField extends Terms implements Accountable {
 
-    private static abstract class TermAndSkip {
+    private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(DirectField.class);
+
+    private static abstract class TermAndSkip implements Accountable {
       public int[] skips;
-
-      /** Returns the approximate number of RAM bytes used */
-      public abstract long ramBytesUsed();
     }
 
     private static final class LowFreqTerm extends TermAndSkip {
+
+      private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(HighFreqTerm.class);
+
       public final int[] postings;
       public final byte[] payloads;
       public final int docFreq;
@@ -200,13 +203,17 @@ public final class DirectPostingsFormat extends PostingsFormat {
 
       @Override
       public long ramBytesUsed() {
-        return ((postings!=null) ? RamUsageEstimator.sizeOf(postings) : 0) + 
+        return BASE_RAM_BYTES_USED +
+            ((postings!=null) ? RamUsageEstimator.sizeOf(postings) : 0) + 
             ((payloads!=null) ? RamUsageEstimator.sizeOf(payloads) : 0);
       }
     }
 
     // TODO: maybe specialize into prx/no-prx/no-frq cases?
     private static final class HighFreqTerm extends TermAndSkip {
+
+      private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(HighFreqTerm.class);
+
       public final long totalTermFreq;
       public final int[] docIDs;
       public final int[] freqs;
@@ -223,19 +230,22 @@ public final class DirectPostingsFormat extends PostingsFormat {
 
       @Override
       public long ramBytesUsed() {
-         long sizeInBytes = 0;
+         long sizeInBytes = BASE_RAM_BYTES_USED;
          sizeInBytes += (docIDs!=null)? RamUsageEstimator.sizeOf(docIDs) : 0;
          sizeInBytes += (freqs!=null)? RamUsageEstimator.sizeOf(freqs) : 0;
          
          if(positions != null) {
+           sizeInBytes += RamUsageEstimator.shallowSizeOf(positions);
            for(int[] position : positions) {
              sizeInBytes += (position!=null) ? RamUsageEstimator.sizeOf(position) : 0;
            }
          }
          
          if (payloads != null) {
+           sizeInBytes += RamUsageEstimator.shallowSizeOf(payloads);
            for(byte[][] payload : payloads) {
              if(payload != null) {
+               sizeInBytes += RamUsageEstimator.shallowSizeOf(payload);
                for(byte[] pload : payload) {
                  sizeInBytes += (pload!=null) ? RamUsageEstimator.sizeOf(pload) : 0; 
                }
@@ -393,8 +403,7 @@ public final class DirectPostingsFormat extends PostingsFormat {
 
           final byte[] payloads;
           if (hasPayloads) {
-            ros.flush();
-            payloads = new byte[(int) ros.length()];
+            payloads = new byte[(int) ros.getFilePointer()];
             ros.writeTo(payloads, 0);
           } else {
             payloads = null;
@@ -505,9 +514,9 @@ public final class DirectPostingsFormat extends PostingsFormat {
       assert skipOffset == skipCount;
     }
 
-    /** Returns approximate RAM bytes used */
+    @Override
     public long ramBytesUsed() {
-      long sizeInBytes = 0;
+      long sizeInBytes = BASE_RAM_BYTES_USED;
       sizeInBytes += ((termBytes!=null) ? RamUsageEstimator.sizeOf(termBytes) : 0);
       sizeInBytes += ((termOffsets!=null) ? RamUsageEstimator.sizeOf(termOffsets) : 0);
       sizeInBytes += ((skips!=null) ? RamUsageEstimator.sizeOf(skips) : 0);
@@ -515,6 +524,7 @@ public final class DirectPostingsFormat extends PostingsFormat {
       sizeInBytes += ((sameCounts!=null) ? RamUsageEstimator.sizeOf(sameCounts) : 0);
       
       if(terms!=null) {
+        sizeInBytes += RamUsageEstimator.shallowSizeOf(terms);
         for(TermAndSkip termAndSkip : terms) {
           sizeInBytes += (termAndSkip!=null) ? termAndSkip.ramBytesUsed() : 0;
         }

@@ -21,7 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
 
-import org.apache.http.impl.conn.BasicClientConnectionManager;
+import org.apache.http.impl.conn.BasicHttpClientConnectionManager;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
@@ -40,10 +40,18 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.RuleChain;
+import org.junit.rules.TestRule;
+
+import com.carrotsearch.randomizedtesting.rules.SystemPropertiesRestoreRule;
 
 public class HttpReplicatorTest extends ReplicatorTestCase {
-  
+  @Rule
+  public TestRule testRules = 
+    RuleChain.outerRule(new SystemPropertiesRestoreRule());
+
   private File clientWorkDir;
   private Replicator serverReplicator;
   private IndexWriter writer;
@@ -69,7 +77,9 @@ public class HttpReplicatorTest extends ReplicatorTestCase {
   @Override
   public void setUp() throws Exception {
     super.setUp();
-    System.setProperty("org.eclipse.jetty.LEVEL", "DEBUG"); // sets stderr logging to DEBUG level
+    if (VERBOSE) {
+      System.setProperty("org.eclipse.jetty.LEVEL", "DEBUG"); // sets stderr logging to DEBUG level
+    }
     clientWorkDir = createTempDir("httpReplicatorTest");
     handlerIndexDir = newDirectory();
     serverIndexDir = newDirectory();
@@ -86,7 +96,6 @@ public class HttpReplicatorTest extends ReplicatorTestCase {
   public void tearDown() throws Exception {
     stopHttpServer(server);
     IOUtils.close(reader, writer, handlerIndexDir, serverIndexDir);
-    System.clearProperty("org.eclipse.jetty.LEVEL");
     super.tearDown();
   }
   
@@ -129,7 +138,7 @@ public class HttpReplicatorTest extends ReplicatorTestCase {
   public void testServerErrors() throws Exception {
     // tests the behaviour of the client when the server sends an error
     // must use BasicClientConnectionManager to test whether the client is closed correctly
-    BasicClientConnectionManager conMgr = new BasicClientConnectionManager();
+    BasicHttpClientConnectionManager conMgr = new BasicHttpClientConnectionManager();
     Replicator replicator = new HttpReplicator(host, port, ReplicationService.REPLICATION_CONTEXT + "/s1", conMgr);
     ReplicationClient client = new ReplicationClient(replicator, new IndexReplicationHandler(handlerIndexDir, null), 
         new PerSessionDirectoryFactory(clientWorkDir));

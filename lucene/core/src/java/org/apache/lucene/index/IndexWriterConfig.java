@@ -49,7 +49,7 @@ import java.io.PrintStream;
  * 
  * @since 3.1
  */
-public final class IndexWriterConfig extends LiveIndexWriterConfig implements Cloneable {
+public final class IndexWriterConfig extends LiveIndexWriterConfig {
 
   /**
    * Specifies the open mode for {@link IndexWriter}.
@@ -161,7 +161,7 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig implements Cl
    * Creates a new config that with defaults that match the specified
    * {@link Version} as well as the default {@link
    * Analyzer}. If matchVersion is >= {@link
-   * Version#LUCENE_32}, {@link TieredMergePolicy} is used
+   * Version#LUCENE_3_2}, {@link TieredMergePolicy} is used
    * for merging; else {@link LogByteSizeMergePolicy}.
    * Note that {@link TieredMergePolicy} is free to select
    * non-contiguous merges, which means docIDs may not
@@ -173,31 +173,6 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig implements Cl
     super(analyzer, matchVersion);
   }
 
-  @Override
-  public IndexWriterConfig clone() {
-    try {
-      IndexWriterConfig clone = (IndexWriterConfig) super.clone();
-      
-      clone.writer = writer.clone();
-      
-      // Mostly shallow clone, but do a deepish clone of
-      // certain objects that have state that cannot be shared
-      // across IW instances:
-      clone.delPolicy = delPolicy.clone();
-      clone.flushPolicy = flushPolicy.clone();
-      clone.indexerThreadPool = indexerThreadPool.clone();
-      // we clone the infoStream because some impls might have state variables
-      // such as line numbers, message throughput, ...
-      clone.infoStream = infoStream.clone();
-      clone.mergePolicy = mergePolicy.clone();
-      clone.mergeScheduler = mergeScheduler.clone();
-      
-      return clone;
-    } catch (CloneNotSupportedException e) {
-      throw new RuntimeException(e);
-    }
-  }
-  
   /** Specifies {@link OpenMode} of the index.
    * 
    * <p>Only takes effect when IndexWriter is first created. */

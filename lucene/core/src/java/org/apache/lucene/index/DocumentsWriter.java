@@ -30,13 +30,11 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.index.DocumentsWriterFlushQueue.SegmentFlushTicket;
 import org.apache.lucene.index.DocumentsWriterPerThread.FlushedSegment;
 import org.apache.lucene.index.DocumentsWriterPerThreadPool.ThreadState;
-import org.apache.lucene.index.DocValuesUpdate.NumericDocValuesUpdate;
-import org.apache.lucene.index.DocValuesUpdate.BinaryDocValuesUpdate;
 import org.apache.lucene.index.IndexWriter.Event;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.InfoStream;
 
 import java.io.IOException;
@@ -51,19 +49,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * This class accepts multiple added documents and directly
  * writes segment files.
  *
- * Each added document is passed to the {@link DocConsumer},
- * which in turn processes the document and interacts with
- * other consumers in the indexing chain.  Certain
- * consumers, like {@link StoredFieldsConsumer} and {@link
- * TermVectorsConsumer}, digest a document and
- * immediately write bytes to the "doc store" files (ie,
- * they do not consume RAM per document, except while they
- * are processing the document).
+ * Each added document is passed to the indexing chain,
+ * which in turn processes the document into the different
+ * codec formats.  Some formats write bytes to files
+ * immediately, e.g. stored fields and term vectors, while
+ * others are buffered by the indexing chain and written
+ * only on flush.
  *
- * Other consumers, eg {@link FreqProxTermsWriter} and
- * {@link NormsConsumer}, buffer bytes in RAM and flush only
- * when a new segment is produced.
-
  * Once we have used our allowed RAM buffer, or the number
  * of added docs is large enough (in the case we are
  * flushing by doc count instead of RAM usage), we create a
@@ -111,7 +103,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * or none") added to the index.
  */
 
-final class DocumentsWriter implements Closeable {
+final class DocumentsWriter implements Closeable, Accountable {
   private final Directory directory;
 
   private volatile boolean closed;
@@ -170,20 +162,13 @@ final class DocumentsWriter implements Closeable {
     return applyAllDeletes( deleteQueue);
   }
 
-  synchronized boolean updateNumericDocValue(Term term, String field, Long value) throws IOException {
+  synchronized boolean updateDocValues(DocValuesUpdate... updates) throws IOException {
     final DocumentsWriterDeleteQueue deleteQueue = this.deleteQueue;
-    deleteQueue.addNumericUpdate(new NumericDocValuesUpdate(term, field, value));
+    deleteQueue.addDocValuesUpdates(updates);
     flushControl.doOnDelete();
     return applyAllDeletes(deleteQueue);
   }
   
-  synchronized boolean updateBinaryDocValue(Term term, String field, BytesRef value) throws IOException {
-    final DocumentsWriterDeleteQueue deleteQueue = this.deleteQueue;
-    deleteQueue.addBinaryUpdate(new BinaryDocValuesUpdate(term, field, value));
-    flushControl.doOnDelete();
-    return applyAllDeletes(deleteQueue);
-  }
-
   DocumentsWriterDeleteQueue currentDeleteSession() {
     return deleteQueue;
   }
@@ -406,7 +391,7 @@ final class DocumentsWriter implements Closeable {
     return hasEvents;
   }
   
-  private final void ensureInitialized(ThreadState state) {
+  private final void ensureInitialized(ThreadState state) throws IOException {
     if (state.isActive() && state.dwpt == null) {
       final FieldInfos.Builder infos = new FieldInfos.Builder(
           writer.globalFieldNumberMap);
@@ -686,7 +671,12 @@ final class DocumentsWriter implements Closeable {
   private void putEvent(Event event) {
     events.add(event);
   }
-  
+
+  @Override
+  public long ramBytesUsed() {
+    return flushControl.ramBytesUsed();
+  }
+
   static final class ApplyDeletesEvent implements Event {
     static final Event INSTANCE = new ApplyDeletesEvent();
     private int instCount = 0;

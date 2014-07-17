@@ -65,7 +65,7 @@ public class TestBlockJoin extends LuceneTestCase {
   public void testEmptyChildFilter() throws Exception {
     final Directory dir = newDirectory();
     final IndexWriterConfig config = new IndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()));
-    config.setMergePolicy(NoMergePolicy.NO_COMPOUND_FILES);
+    config.setMergePolicy(NoMergePolicy.INSTANCE);
     // we don't want to merge - since we rely on certain segment setup
     final IndexWriter w = new IndexWriter(dir, config);
 
@@ -387,7 +387,7 @@ public class TestBlockJoin extends LuceneTestCase {
         random(),
         dir,
         newIndexWriterConfig(TEST_VERSION_CURRENT,
-            new MockAnalyzer(random())).setMergePolicy(NoMergePolicy.COMPOUND_FILES));
+            new MockAnalyzer(random())).setMergePolicy(NoMergePolicy.INSTANCE));
 
     // Cannot assert this since we use NoMergePolicy:
     w.setDoRandomForceMergeAssert(false);
@@ -602,8 +602,14 @@ public class TestBlockJoin extends LuceneTestCase {
       System.out.println("TEST: reader=" + r);
       System.out.println("TEST: joinReader=" + joinR);
 
+      Bits liveDocs = MultiFields.getLiveDocs(joinR);
       for(int docIDX=0;docIDX<joinR.maxDoc();docIDX++) {
-        System.out.println("  docID=" + docIDX + " doc=" + joinR.document(docIDX));
+        System.out.println("  docID=" + docIDX + " doc=" + joinR.document(docIDX) + " deleted?=" + (liveDocs != null && liveDocs.get(docIDX) == false));
+      }
+      DocsEnum parents = MultiFields.getTermDocsEnum(joinR, null, "isParent", new BytesRef("x"));
+      System.out.println("parent docIDs:");
+      while (parents.nextDoc() != parents.NO_MORE_DOCS) {
+        System.out.println("  " + parents.docID());
       }
     }
 
@@ -802,6 +808,7 @@ public class TestBlockJoin extends LuceneTestCase {
           Explanation explanation = joinS.explain(childJoinQuery, hit.doc);
           Document document = joinS.doc(hit.doc - 1);
           int childId = Integer.parseInt(document.get("childID"));
+          //System.out.println("  hit docID=" + hit.doc + " childId=" + childId + " parentId=" + document.get("parentID"));
           assertTrue(explanation.isMatch());
           assertEquals(hit.score, explanation.getValue(), 0.0f);
           assertEquals(String.format(Locale.ROOT, "Score based on child doc range from %d to %d", hit.doc - 1 - childId, hit.doc - 1), explanation.getDescription());

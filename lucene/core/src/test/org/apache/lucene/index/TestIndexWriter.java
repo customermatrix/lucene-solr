@@ -17,6 +17,7 @@ package org.apache.lucene.index;
  * limitations under the License.
  */
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.Reader;
@@ -32,7 +33,12 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
-import org.apache.lucene.analysis.*;
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.MockAnalyzer;
+import org.apache.lucene.analysis.MockTokenFilter;
+import org.apache.lucene.analysis.MockTokenizer;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.Tokenizer;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
 import org.apache.lucene.codecs.Codec;
@@ -43,6 +49,7 @@ import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.SortedDocValuesField;
+import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.document.SortedSetDocValuesField;
 import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.StringField;
@@ -73,7 +80,6 @@ import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.IOUtils;
-import org.apache.lucene.util.LuceneTestCase.AwaitsFix;
 import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.util.SetOnce;
 import org.apache.lucene.util.TestUtil;
@@ -111,7 +117,7 @@ public class TestIndexWriter extends LuceneTestCase {
         writer.close();
 
         // delete 40 documents
-        writer = new IndexWriter(dir, newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random())).setMergePolicy(NoMergePolicy.NO_COMPOUND_FILES));
+        writer = new IndexWriter(dir, newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random())).setMergePolicy(NoMergePolicy.INSTANCE));
         for (i = 0; i < 40; i++) {
             writer.deleteDocuments(new Term("id", ""+i));
         }
@@ -992,6 +998,8 @@ public class TestIndexWriter extends LuceneTestCase {
     volatile boolean allowInterrupt = false;
     final Random random;
     final Directory adder;
+    final ByteArrayOutputStream bytesLog = new ByteArrayOutputStream();
+    final PrintStream log = new PrintStream(bytesLog, true, IOUtils.UTF_8);
     
     IndexerThreadInterrupt() throws IOException {
       this.random = new Random(random().nextLong());
@@ -1013,6 +1021,10 @@ public class TestIndexWriter extends LuceneTestCase {
         doc.add(new SortedSetDocValuesField("sortedsetdv", new BytesRef("one")));
         doc.add(new SortedSetDocValuesField("sortedsetdv", new BytesRef("two")));
       }
+      if (defaultCodecSupportsSortedNumeric()) {
+        doc.add(new SortedNumericDocValuesField("sortednumericdv", 4));
+        doc.add(new SortedNumericDocValuesField("sortednumericdv", 3));
+      }
       w.addDocument(doc);
       doc = new Document();
       doc.add(newStringField(random, "id", "501", Field.Store.NO));
@@ -1025,6 +1037,10 @@ public class TestIndexWriter extends LuceneTestCase {
       if (defaultCodecSupportsSortedSet()) {
         doc.add(new SortedSetDocValuesField("sortedsetdv", new BytesRef("two")));
         doc.add(new SortedSetDocValuesField("sortedsetdv", new BytesRef("three")));
+      }
+      if (defaultCodecSupportsSortedNumeric()) {
+        doc.add(new SortedNumericDocValuesField("sortednumericdv", 6));
+        doc.add(new SortedNumericDocValuesField("sortednumericdv", 1));
       }
       w.addDocument(doc);
       w.deleteDocuments(new Term("id", "500"));
@@ -1134,24 +1150,27 @@ public class TestIndexWriter extends LuceneTestCase {
           // on!!  This test doesn't repro easily so when
           // Jenkins hits a fail we need to study where the
           // interrupts struck!
-          System.out.println("TEST: got interrupt");
-          re.printStackTrace(System.out);
+          log.println("TEST: got interrupt");
+          re.printStackTrace(log);
           Throwable e = re.getCause();
           assertTrue(e instanceof InterruptedException);
           if (finish) {
             break;
           }
         } catch (Throwable t) {
-          System.out.println("FAILED; unexpected exception");
-          t.printStackTrace(System.out);
+          log.println("FAILED; unexpected exception");
+          t.printStackTrace(log);
           failed = true;
           break;
         }
       }
 
+      if (VERBOSE) {
+        log.println("TEST: now finish failed=" + failed);
+      }
       if (!failed) {
         if (VERBOSE) {
-          System.out.println("TEST: now rollback");
+          log.println("TEST: now rollback");
         }
         // clear interrupt state:
         Thread.interrupted();
@@ -1167,8 +1186,8 @@ public class TestIndexWriter extends LuceneTestCase {
           TestUtil.checkIndex(dir);
         } catch (Exception e) {
           failed = true;
-          System.out.println("CheckIndex FAILED: unexpected exception");
-          e.printStackTrace(System.out);
+          log.println("CheckIndex FAILED: unexpected exception");
+          e.printStackTrace(log);
         }
         try {
           IndexReader r = DirectoryReader.open(dir);
@@ -1176,8 +1195,8 @@ public class TestIndexWriter extends LuceneTestCase {
           r.close();
         } catch (Exception e) {
           failed = true;
-          System.out.println("DirectoryReader.open FAILED: unexpected exception");
-          e.printStackTrace(System.out);
+          log.println("DirectoryReader.open FAILED: unexpected exception");
+          e.printStackTrace(log);
         }
       }
       try {
@@ -1221,7 +1240,9 @@ public class TestIndexWriter extends LuceneTestCase {
     }
     t.finish = true;
     t.join();
-    assertFalse(t.failed);
+    if (t.failed) {
+      fail(new String(t.bytesLog.toString("UTF-8")));
+    }
   }
   
   /** testThreadInterruptDeadlock but with 2 indexer threads */
@@ -1768,8 +1789,7 @@ public class TestIndexWriter extends LuceneTestCase {
 
     SortedDocValues dti = FieldCache.DEFAULT.getTermsIndex(SlowCompositeReaderWrapper.wrap(reader), "content", random().nextFloat() * PackedInts.FAST);
     assertEquals(4, dti.getValueCount());
-    BytesRef br = new BytesRef();
-    dti.lookupOrd(2, br);
+    BytesRef br = dti.lookupOrd(2);
     assertEquals(bigTermBytesRef, br);
     reader.close();
     dir.close();

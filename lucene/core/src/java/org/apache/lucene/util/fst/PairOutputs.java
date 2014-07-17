@@ -61,6 +61,11 @@ public class PairOutputs<A,B> extends Outputs<PairOutputs.Pair<A,B>> {
     public int hashCode() {
       return output1.hashCode() + output2.hashCode();
     }
+
+    @Override
+    public String toString() {
+      return "Pair(" + output1 + "," + output2 + ")";
+    }
   };
 
   public PairOutputs(Outputs<A> outputs1, Outputs<B> outputs2) {
@@ -148,6 +153,12 @@ public class PairOutputs<A,B> extends Outputs<PairOutputs.Pair<A,B>> {
     B output2 = outputs2.read(in);
     return newPair(output1, output2);
   }
+  
+  @Override
+  public void skipOutput(DataInput in) throws IOException {
+    outputs1.skipOutput(in);
+    outputs2.skipOutput(in);
+  }
 
   @Override
   public Pair<A,B> getNoOutput() {
@@ -163,5 +174,17 @@ public class PairOutputs<A,B> extends Outputs<PairOutputs.Pair<A,B>> {
   @Override
   public String toString() {
     return "PairOutputs<" + outputs1 + "," + outputs2 + ">";
+  }
+
+  @Override
+  public long ramBytesUsed(Pair<A,B> output) {
+    long ramBytesUsed = super.ramBytesUsed(output);
+    if (output.output1 != null) {
+      ramBytesUsed += outputs1.ramBytesUsed(output.output1);
+    }
+    if (output.output2 != null) {
+      ramBytesUsed += outputs2.ramBytesUsed(output.output2);
+    }
+    return ramBytesUsed;
   }
 }

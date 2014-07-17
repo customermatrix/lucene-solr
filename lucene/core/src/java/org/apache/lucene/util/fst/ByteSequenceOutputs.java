@@ -22,6 +22,7 @@ import java.io.IOException;
 import org.apache.lucene.store.DataInput;
 import org.apache.lucene.store.DataOutput;
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.RamUsageEstimator;
 
 /**
  * An FST {@link Outputs} implementation where each output
@@ -129,6 +130,14 @@ public final class ByteSequenceOutputs extends Outputs<BytesRef> {
   }
 
   @Override
+  public void skipOutput(DataInput in) throws IOException {
+    final int len = in.readVInt();
+    if (len != 0) {
+      in.skipBytes(len);
+    }
+  }
+
+  @Override
   public BytesRef getNoOutput() {
     return NO_OUTPUT;
   }
@@ -136,5 +145,10 @@ public final class ByteSequenceOutputs extends Outputs<BytesRef> {
   @Override
   public String outputToString(BytesRef output) {
     return output.toString();
+  }
+
+  @Override
+  public long ramBytesUsed(BytesRef output) {
+    return super.ramBytesUsed(output) + RamUsageEstimator.sizeOf(output.bytes);
   }
 }

@@ -48,17 +48,24 @@ import org.apache.lucene.index.IndexFileNames;
 import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SortedDocValues;
+import org.apache.lucene.index.SortedNumericDocValues;
 import org.apache.lucene.index.SortedSetDocValues;
 import org.apache.lucene.store.BufferedChecksumIndexInput;
 import org.apache.lucene.store.ChecksumIndexInput;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.lucene.util.StringHelper;
 
 class SimpleTextDocValuesReader extends DocValuesProducer {
 
+  private static final long BASE_RAM_BYTES_USED =
+        RamUsageEstimator.shallowSizeOfInstance(SimpleTextDocValuesReader.class)
+      + RamUsageEstimator.shallowSizeOfInstance(BytesRef.class);
+
   static class OneField {
+    private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(OneField.class);
     long dataStartFilePointer;
     String pattern;
     String ordPattern;
@@ -168,9 +175,7 @@ class SimpleTextDocValuesReader extends DocValuesProducer {
           try {
             bd = (BigDecimal) decoder.parse(scratch.utf8ToString());
           } catch (ParseException pe) {
-            CorruptIndexException e = new CorruptIndexException("failed to parse BigDecimal value (resource=" + in + ")");
-            e.initCause(pe);
-            throw e;
+            throw new CorruptIndexException("failed to parse BigDecimal value (resource=" + in + ")", pe);
           }
           SimpleTextUtil.readLine(in, scratch); // read the line telling us if its real or not
           return BigInteger.valueOf(field.minValue).add(bd.toBigIntegerExact()).longValue();
@@ -218,8 +223,10 @@ class SimpleTextDocValuesReader extends DocValuesProducer {
     final DecimalFormat decoder = new DecimalFormat(field.pattern, new DecimalFormatSymbols(Locale.ROOT));
 
     return new BinaryDocValues() {
+      final BytesRef term = new BytesRef();
+
       @Override
-      public void get(int docID, BytesRef result) {
+      public BytesRef get(int docID) {
         try {
           if (docID < 0 || docID >= maxDoc) {
             throw new IndexOutOfBoundsException("docID must be 0 .. " + (maxDoc-1) + "; got " + docID);
@@ -231,14 +238,13 @@ class SimpleTextDocValuesReader extends DocValuesProducer {
           try {
             len = decoder.parse(new String(scratch.bytes, scratch.offset + LENGTH.length, scratch.length - LENGTH.length, StandardCharsets.UTF_8)).intValue();
           } catch (ParseException pe) {
-            CorruptIndexException e = new CorruptIndexException("failed to parse int length (resource=" + in + ")");
-            e.initCause(pe);
-            throw e;
+            throw new CorruptIndexException("failed to parse int length (resource=" + in + ")", pe);
           }
-          result.bytes = new byte[len];
-          result.offset = 0;
-          result.length = len;
-          in.readBytes(result.bytes, 0, len);
+          term.grow(len);
+          term.offset = 0;
+          term.length = len;
+          in.readBytes(term.bytes, 0, len);
+          return term;
         } catch (IOException ioe) {
           throw new RuntimeException(ioe);
         }
@@ -263,9 +269,7 @@ class SimpleTextDocValuesReader extends DocValuesProducer {
           try {
             len = decoder.parse(new String(scratch.bytes, scratch.offset + LENGTH.length, scratch.length - LENGTH.length, StandardCharsets.UTF_8)).intValue();
           } catch (ParseException pe) {
-            CorruptIndexException e = new CorruptIndexException("failed to parse int length (resource=" + in + ")");
-            e.initCause(pe);
-            throw e;
+            throw new CorruptIndexException("failed to parse int length (resource=" + in + ")", pe);
           }
           // skip past bytes
           byte bytes[] = new byte[len];
@@ -299,6 +303,8 @@ class SimpleTextDocValuesReader extends DocValuesProducer {
     final DecimalFormat ordDecoder = new DecimalFormat(field.ordPattern, new DecimalFormatSymbols(Locale.ROOT));
 
     return new SortedDocValues() {
+      final BytesRef term = new BytesRef();
+
       @Override
       public int getOrd(int docID) {
         if (docID < 0 || docID >= maxDoc) {
@@ -310,9 +316,7 @@ class SimpleTextDocValuesReader extends DocValuesProducer {
           try {
             return (int) ordDecoder.parse(scratch.utf8ToString()).longValue()-1;
           } catch (ParseException pe) {
-            CorruptIndexException e = new CorruptIndexException("failed to parse ord (resource=" + in + ")");
-            e.initCause(pe);
-            throw e;
+            throw new CorruptIndexException("failed to parse ord (resource=" + in + ")", pe);
           }
         } catch (IOException ioe) {
           throw new RuntimeException(ioe);
@@ -320,7 +324,7 @@ class SimpleTextDocValuesReader extends DocValuesProducer {
       }
 
       @Override
-      public void lookupOrd(int ord, BytesRef result) {
+      public BytesRef lookupOrd(int ord) {
         try {
           if (ord < 0 || ord >= field.numValues) {
             throw new IndexOutOfBoundsException("ord must be 0 .. " + (field.numValues-1) + "; got " + ord);
@@ -332,14 +336,13 @@ class SimpleTextDocValuesReader extends DocValuesProducer {
           try {
             len = decoder.parse(new String(scratch.bytes, scratch.offset + LENGTH.length, scratch.length - LENGTH.length, StandardCharsets.UTF_8)).intValue();
           } catch (ParseException pe) {
-            CorruptIndexException e = new CorruptIndexException("failed to parse int length (resource=" + in + ")");
-            e.initCause(pe);
-            throw e;
+            throw new CorruptIndexException("failed to parse int length (resource=" + in + ")", pe);
           }
-          result.bytes = new byte[len];
-          result.offset = 0;
-          result.length = len;
-          in.readBytes(result.bytes, 0, len);
+          term.grow(len);
+          term.offset = 0;
+          term.length = len;
+          in.readBytes(term.bytes, 0, len);
+          return term;
         } catch (IOException ioe) {
           throw new RuntimeException(ioe);
         }
@@ -348,6 +351,38 @@ class SimpleTextDocValuesReader extends DocValuesProducer {
       @Override
       public int getValueCount() {
         return (int)field.numValues;
+      }
+    };
+  }
+  
+  @Override
+  public SortedNumericDocValues getSortedNumeric(FieldInfo field) throws IOException {
+    final BinaryDocValues binary = getBinary(field);
+    return new SortedNumericDocValues() {
+      long values[];
+
+      @Override
+      public void setDocument(int doc) {
+        String csv = binary.get(doc).utf8ToString();
+        if (csv.length() == 0) {
+          values = new long[0];
+        } else {
+          String s[] = csv.split(",");
+          values = new long[s.length];
+          for (int i = 0; i < values.length; i++) {
+            values[i] = Long.parseLong(s[i]);
+          }
+        }
+      }
+
+      @Override
+      public long valueAt(int index) {
+        return values[index];
+      }
+
+      @Override
+      public int count() {
+        return values.length;
       }
     };
   }
@@ -367,6 +402,7 @@ class SimpleTextDocValuesReader extends DocValuesProducer {
     return new SortedSetDocValues() {
       String[] currentOrds = new String[0];
       int currentIndex = 0;
+      final BytesRef term = new BytesRef();
       
       @Override
       public long nextOrd() {
@@ -398,7 +434,7 @@ class SimpleTextDocValuesReader extends DocValuesProducer {
       }
 
       @Override
-      public void lookupOrd(long ord, BytesRef result) {
+      public BytesRef lookupOrd(long ord) {
         try {
           if (ord < 0 || ord >= field.numValues) {
             throw new IndexOutOfBoundsException("ord must be 0 .. " + (field.numValues-1) + "; got " + ord);
@@ -410,14 +446,13 @@ class SimpleTextDocValuesReader extends DocValuesProducer {
           try {
             len = decoder.parse(new String(scratch.bytes, scratch.offset + LENGTH.length, scratch.length - LENGTH.length, StandardCharsets.UTF_8)).intValue();
           } catch (ParseException pe) {
-            CorruptIndexException e = new CorruptIndexException("failed to parse int length (resource=" + in + ")");
-            e.initCause(pe);
-            throw e;
+            throw new CorruptIndexException("failed to parse int length (resource=" + in + ")", pe);
           }
-          result.bytes = new byte[len];
-          result.offset = 0;
-          result.length = len;
-          in.readBytes(result.bytes, 0, len);
+          term.grow(len);
+          term.offset = 0;
+          term.length = len;
+          in.readBytes(term.bytes, 0, len);
+          return term;
         } catch (IOException ioe) {
           throw new RuntimeException(ioe);
         }
@@ -435,6 +470,8 @@ class SimpleTextDocValuesReader extends DocValuesProducer {
     switch (field.getDocValuesType()) {
       case SORTED_SET:
         return DocValues.docsWithValue(getSortedSet(field), maxDoc);
+      case SORTED_NUMERIC:
+        return DocValues.docsWithValue(getSortedNumeric(field), maxDoc);
       case SORTED:
         return DocValues.docsWithValue(getSorted(field), maxDoc);
       case BINARY:
@@ -469,7 +506,8 @@ class SimpleTextDocValuesReader extends DocValuesProducer {
 
   @Override
   public long ramBytesUsed() {
-    return 0;
+    return BASE_RAM_BYTES_USED + RamUsageEstimator.sizeOf(scratch.bytes)
+        + fields.size() * (RamUsageEstimator.NUM_BYTES_OBJECT_REF * 2L + OneField.BASE_RAM_BYTES_USED);
   }
 
   @Override

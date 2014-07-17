@@ -24,22 +24,23 @@ import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.RAMFile;
 import org.apache.lucene.store.RAMInputStream;
 import org.apache.lucene.store.RAMOutputStream;
+import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.BytesRef;
 
 /**
  * Prefix codes term instances (prefixes are shared)
  * @lucene.experimental
  */
-class PrefixCodedTerms implements Iterable<Term> {
+class PrefixCodedTerms implements Iterable<Term>, Accountable {
   final RAMFile buffer;
   
   private PrefixCodedTerms(RAMFile buffer) {
     this.buffer = buffer;
   }
-  
-  /** @return size in bytes */
-  public long getSizeInBytes() {
-    return buffer.getSizeInBytes();
+
+  @Override
+  public long ramBytesUsed() {
+    return buffer.ramBytesUsed();
   }
   
   /** @return iterator over the bytes */
@@ -97,7 +98,7 @@ class PrefixCodedTerms implements Iterable<Term> {
   /** Builds a PrefixCodedTerms: call add repeatedly, then finish. */
   public static class Builder {
     private RAMFile buffer = new RAMFile();
-    private RAMOutputStream output = new RAMOutputStream(buffer);
+    private RAMOutputStream output = new RAMOutputStream(buffer, false);
     private Term lastTerm = new Term("");
 
     /** add a term */

@@ -82,6 +82,7 @@ import org.apache.solr.search.ReturnFields;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.search.SolrReturnFields;
 import org.apache.solr.search.SortSpec;
+import org.apache.solr.search.RankQuery;
 import org.apache.solr.search.SyntaxError;
 import org.apache.solr.search.grouping.CommandHandler;
 import org.apache.solr.search.grouping.GroupingSpecification;
@@ -168,7 +169,28 @@ public class QueryComponent extends SearchComponent
         // normalize a null query to a query that matches nothing
         q = new BooleanQuery();        
       }
+
       rb.setQuery( q );
+
+      String rankQueryString = rb.req.getParams().get(CommonParams.RQ);
+      if(rankQueryString != null) {
+        QParser rqparser = QParser.getParser(rankQueryString, defType, req);
+        Query rq = rqparser.getQuery();
+        if(rq instanceof RankQuery) {
+          RankQuery rankQuery = (RankQuery)rq;
+          rb.setRankQuery(rankQuery);
+          MergeStrategy mergeStrategy = rankQuery.getMergeStrategy();
+          if(mergeStrategy != null) {
+            rb.addMergeStrategy(mergeStrategy);
+            if(mergeStrategy.handlesMergeFields()) {
+              rb.mergeFieldHandler = mergeStrategy;
+            }
+          }
+        } else {
+          throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,"rq parameter must be a RankQuery");
+        }
+      }
+
       rb.setSortSpec( parser.getSort(true, req.getSchema()) );
       rb.setQparser(parser);
       
@@ -502,7 +524,13 @@ public class QueryComponent extends SearchComponent
                    rb.getNextCursorMark().getSerializedTotem());
       }
     }
-    doFieldSortValues(rb, searcher);
+
+    if(rb.mergeFieldHandler != null) {
+      rb.mergeFieldHandler.handleMergeFields(rb, searcher);
+    } else {
+      doFieldSortValues(rb, searcher);
+    }
+
     doPrefetch(rb);
   }
 
@@ -850,6 +878,22 @@ public class QueryComponent extends SearchComponent
 
 
   private void mergeIds(ResponseBuilder rb, ShardRequest sreq) {
+      List<MergeStrategy> mergeStrategies = rb.getMergeStrategies();
+      if(mergeStrategies != null) {
+        Collections.sort(mergeStrategies, MergeStrategy.MERGE_COMP);
+        boolean idsMerged = false;
+        for(MergeStrategy mergeStrategy : mergeStrategies) {
+          mergeStrategy.merge(rb, sreq);
+          if(mergeStrategy.mergesIds()) {
+            idsMerged = true;
+          }
+        }
+
+        if(idsMerged) {
+          return; //ids were merged above so return.
+        }
+      }
+
       SortSpec ss = rb.getSortSpec();
       Sort sort = ss.getSort();
 
@@ -1058,7 +1102,6 @@ public class QueryComponent extends SearchComponent
     List<Object> nextCursorMarkValues = new ArrayList<>(sortFields.length);
     for (SortField sf : sortFields) {
       if (sf.getType().equals(SortField.Type.SCORE)) {
-        assert null != lastDoc.score : "lastDoc has null score";
         nextCursorMarkValues.add(lastDoc.score);
       } else {
         assert null != sf.getField() : "SortField has null field";
@@ -1185,7 +1228,7 @@ public class QueryComponent extends SearchComponent
           Object id = doc.getFieldValue(keyFieldName);
           ShardDoc sdoc = rb.resultIds.get(id.toString());
           if (sdoc != null) {
-            if (returnScores && sdoc.score != null) {
+            if (returnScores) {
               doc.setField("score", sdoc.score);
             }
             if (removeKeyField) {

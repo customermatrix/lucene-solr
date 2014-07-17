@@ -51,6 +51,7 @@ import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.impl.HttpSolrServer;
 import org.apache.solr.client.solrj.request.CoreAdminRequest;
 import org.apache.solr.client.solrj.request.CoreAdminRequest.RequestSyncShard;
+import org.apache.solr.cloud.DistributedQueue;
 import org.apache.solr.cloud.DistributedQueue.QueueEvent;
 import org.apache.solr.cloud.Overseer;
 import org.apache.solr.cloud.OverseerCollectionProcessor;
@@ -282,15 +283,20 @@ public class CollectionsHandler extends RequestHandlerBase {
         success.add("state", "completed");
         success.add("msg", "found " + requestId + " in completed tasks");
         results.add("status", success);
-      } else if (coreContainer.getZkController().getOverseerRunningMap().contains(requestId)) {
-        SimpleOrderedMap success = new SimpleOrderedMap();
-        success.add("state", "running");
-        success.add("msg", "found " + requestId + " in submitted tasks");
-        results.add("status", success);
       } else if (coreContainer.getZkController().getOverseerFailureMap().contains(requestId)) {
         SimpleOrderedMap success = new SimpleOrderedMap();
         success.add("state", "failed");
         success.add("msg", "found " + requestId + " in failed tasks");
+        results.add("status", success);
+      } else if (coreContainer.getZkController().getOverseerRunningMap().contains(requestId)) {
+        SimpleOrderedMap success = new SimpleOrderedMap();
+        success.add("state", "running");
+        success.add("msg", "found " + requestId + " in running tasks");
+        results.add("status", success);
+      } else if(overseerCollectionQueueContains(requestId)){
+        SimpleOrderedMap success = new SimpleOrderedMap();
+        success.add("state", "submitted");
+        success.add("msg", "found " + requestId + " in submitted tasks");
         results.add("status", success);
       } else {
         SimpleOrderedMap failure = new SimpleOrderedMap();
@@ -302,6 +308,11 @@ public class CollectionsHandler extends RequestHandlerBase {
 
       rsp.getValues().addAll(response.getResponse());
     }
+  }
+
+  private boolean overseerCollectionQueueContains(String asyncId) throws KeeperException, InterruptedException {
+    DistributedQueue collectionQueue = coreContainer.getZkController().getOverseerCollectionQueue();
+    return collectionQueue.containsTaskWithRequestId(asyncId);
   }
 
   private void handleResponse(String operation, ZkNodeProps m,
@@ -325,13 +336,13 @@ public class CollectionsHandler extends RequestHandlerBase {
  
        if (coreContainer.getZkController().getOverseerCompletedMap().contains(asyncId) ||
            coreContainer.getZkController().getOverseerFailureMap().contains(asyncId) ||
-           coreContainer.getZkController().getOverseerRunningMap().contains(asyncId)) {
+           coreContainer.getZkController().getOverseerRunningMap().contains(asyncId) ||
+           overseerCollectionQueueContains(asyncId)) {
          r.add("error", "Task with the same requestid already exists.");
  
        } else {
          coreContainer.getZkController().getOverseerCollectionQueue()
              .offer(ZkStateReader.toJSON(m));
- 
        }
        r.add(CoreAdminParams.REQUESTID, (String) m.get(ASYNC));
        SolrResponse response = new OverseerSolrResponse(r);
@@ -609,7 +620,7 @@ public class CollectionsHandler extends RequestHandlerBase {
     Map<String,Object> props = new HashMap<>();
     props.put(Overseer.QUEUE_OPERATION, CollectionAction.ADDREPLICA.toString());
     copyIfNotNull(req.getParams(), props, COLLECTION_PROP, "node", SHARD_ID_PROP, ShardParams._ROUTE_,
-        CoreAdminParams.NAME, CoreAdminParams.INSTANCE_DIR, CoreAdminParams.DATA_DIR);
+        CoreAdminParams.NAME, CoreAdminParams.INSTANCE_DIR, CoreAdminParams.DATA_DIR, ASYNC);
     ZkNodeProps m = new ZkNodeProps(props);
     handleResponse(CollectionAction.ADDREPLICA.toString(), m, rsp);
   }

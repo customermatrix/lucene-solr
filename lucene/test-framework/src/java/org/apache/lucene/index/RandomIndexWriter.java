@@ -25,6 +25,7 @@ import java.util.Random;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.MockAnalyzer;
 import org.apache.lucene.codecs.Codec;
+import org.apache.lucene.document.Field;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.BytesRef;
@@ -239,6 +240,11 @@ public class RandomIndexWriter implements Closeable {
     w.updateBinaryDocValue(term, field, value);
   }
   
+  public void updateDocValues(Term term, Field... updates) throws IOException {
+    LuceneTestCase.maybeChangeLiveIndexWriterConfig(r, w.getConfig());
+    w.updateDocValues(term, updates);
+  }
+  
   public void deleteDocuments(Term term) throws IOException {
     LuceneTestCase.maybeChangeLiveIndexWriterConfig(r, w.getConfig());
     w.deleteDocuments(term);
@@ -301,7 +307,7 @@ public class RandomIndexWriter implements Closeable {
           System.out.println("RIW: doRandomForceMerge(1)");
         }
         w.forceMerge(1);
-      } else {
+      } else if (r.nextBoolean()) {
         // partial forceMerge
         final int limit = TestUtil.nextInt(r, 1, segCount);
         if (LuceneTestCase.VERBOSE) {
@@ -309,6 +315,11 @@ public class RandomIndexWriter implements Closeable {
         }
         w.forceMerge(limit);
         assert !doRandomForceMergeAssert || w.getSegmentCount() <= limit: "limit=" + limit + " actual=" + w.getSegmentCount();
+      } else {
+        if (LuceneTestCase.VERBOSE) {
+          System.out.println("RIW: do random forceMergeDeletes()");
+        }
+        w.forceMergeDeletes();
       }
     }
   }

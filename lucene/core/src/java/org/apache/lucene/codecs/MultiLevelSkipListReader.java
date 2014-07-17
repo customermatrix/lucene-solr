@@ -241,7 +241,7 @@ public abstract class MultiLevelSkipListReader implements Closeable {
         // clone this stream, it is already at the start of the current level
         skipStream[i] = skipStream[0].clone();
         if (inputIsBuffered && length < BufferedIndexInput.BUFFER_SIZE) {
-          ((BufferedIndexInput) skipStream[i]).setBufferSize((int) length);
+          ((BufferedIndexInput) skipStream[i]).setBufferSize(Math.max(BufferedIndexInput.MIN_BUFFER_SIZE, (int) length));
         }
         
         // move base stream beyond the current level
@@ -312,5 +312,9 @@ public abstract class MultiLevelSkipListReader implements Closeable {
       this.pos =  (int) (pos - pointer);
     }
     
+    @Override
+    public IndexInput slice(String sliceDescription, long offset, long length) throws IOException {
+      throw new UnsupportedOperationException();
+    }
   }
 }

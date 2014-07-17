@@ -74,7 +74,9 @@ import org.apache.lucene.util.packed.PackedInts;
  * the next doc ID by reading at most 2 dirty words.</p>
  * @lucene.experimental
  */
-public final class WAH8DocIdSet extends DocIdSet {
+public final class WAH8DocIdSet extends DocIdSet implements Accountable {
+
+  private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(WAH8DocIdSet.class);
 
   // Minimum index interval, intervals below this value can't guarantee anymore
   // that this set implementation won't be significantly larger than a FixedBitSet
@@ -736,12 +738,19 @@ public final class WAH8DocIdSet extends DocIdSet {
     return cardinality;
   }
 
-  /** Return the memory usage of this class in bytes. */
+  @Override
   public long ramBytesUsed() {
-    return RamUsageEstimator.alignObjectSize(3 * RamUsageEstimator.NUM_BYTES_OBJECT_REF + 2 * RamUsageEstimator.NUM_BYTES_INT)
-        + RamUsageEstimator.sizeOf(data)
-        + positions.ramBytesUsed()
-        + wordNums.ramBytesUsed();
+    if (this == EMPTY) {
+      return 0L;
+    }
+    long ramBytesUsed = BASE_RAM_BYTES_USED + RamUsageEstimator.sizeOf(data);
+    if (positions != SINGLE_ZERO_BUFFER) {
+      ramBytesUsed += positions.ramBytesUsed();
+    }
+    if (wordNums != SINGLE_ZERO_BUFFER) {
+      ramBytesUsed += wordNums.ramBytesUsed();
+    }
+    return ramBytesUsed;
   }
 
 }

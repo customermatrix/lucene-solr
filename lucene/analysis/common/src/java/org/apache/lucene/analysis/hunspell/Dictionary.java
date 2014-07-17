@@ -207,32 +207,16 @@ public class Dictionary {
     return lookup(words, word, offset, length);
   }
 
-  /**
-   * Looks up HunspellAffix prefixes that have an append that matches the String created from the given char array, offset and length
-   *
-   * @param word Char array to generate the String from
-   * @param offset Offset in the char array that the String starts at
-   * @param length Length from the offset that the String is
-   * @return List of HunspellAffix prefixes with an append that matches the String, or {@code null} if none are found
-   */
+  // only for testing
   IntsRef lookupPrefix(char word[], int offset, int length) {
     return lookup(prefixes, word, offset, length);
   }
 
-  /**
-   * Looks up HunspellAffix suffixes that have an append that matches the String created from the given char array, offset and length
-   *
-   * @param word Char array to generate the String from
-   * @param offset Offset in the char array that the String starts at
-   * @param length Length from the offset that the String is
-   * @return List of HunspellAffix suffixes with an append that matches the String, or {@code null} if none are found
-   */
+  // only for testing
   IntsRef lookupSuffix(char word[], int offset, int length) {
     return lookup(suffixes, word, offset, length);
   }
   
-  // TODO: this is pretty stupid, considering how the stemming algorithm works
-  // we can speed it up to be significantly faster!
   IntsRef lookup(FST<IntsRef> fst, char word[], int offset, int length) {
     if (fst == null) {
       return null;
@@ -372,6 +356,25 @@ public class Dictionary {
     }
     return builder.finish();
   }
+  
+  static String escapeDash(String re) {
+    // we have to be careful, even though dash doesn't have a special meaning,
+    // some dictionaries already escape it (e.g. pt_PT), so we don't want to nullify it
+    StringBuilder escaped = new StringBuilder();
+    for (int i = 0; i < re.length(); i++) {
+      char c = re.charAt(i);
+      if (c == '-') {
+        escaped.append("\\-");
+      } else {
+        escaped.append(c);
+        if (c == '\\' && i + 1 < re.length()) {
+          escaped.append(re.charAt(i+1));
+          i++;
+        }
+      }
+    }
+    return escaped.toString();
+  }
 
   /**
    * Parses a specific affix rule putting the result into the provided affix map
@@ -396,6 +399,7 @@ public class Dictionary {
     String args[] = header.split("\\s+");
 
     boolean crossProduct = args[2].equals("Y");
+    boolean isSuffix = conditionPattern == SUFFIX_CONDITION_REGEX_PATTERN;
     
     int numLines = Integer.parseInt(args[3]);
     affixData = ArrayUtil.grow(affixData, (currentAffix << 3) + (numLines << 3));
@@ -435,12 +439,12 @@ public class Dictionary {
 
       String condition = ruleArgs.length > 4 ? ruleArgs[4] : ".";
       // at least the gascon affix file has this issue
-      if (condition.startsWith("[") && !condition.endsWith("]")) {
+      if (condition.startsWith("[") && condition.indexOf(']') == -1) {
         condition = condition + "]";
       }
       // "dash hasn't got special meaning" (we must escape it)
       if (condition.indexOf('-') >= 0) {
-        condition = condition.replace("-", "\\-");
+        condition = escapeDash(condition);
       }
 
       final String regex;
@@ -499,6 +503,10 @@ public class Dictionary {
       if (needsInputCleaning) {
         CharSequence cleaned = cleanInput(affixArg, sb);
         affixArg = cleaned.toString();
+      }
+      
+      if (isSuffix) {
+        affixArg = new StringBuilder(affixArg).reverse().toString();
       }
       
       List<Character> list = affixes.get(affixArg);

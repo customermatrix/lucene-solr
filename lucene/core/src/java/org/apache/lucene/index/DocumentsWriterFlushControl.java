@@ -19,14 +19,15 @@ package org.apache.lucene.index;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
-import java.util.List;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.lucene.index.DocumentsWriterPerThreadPool.ThreadState;
+import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.InfoStream;
 import org.apache.lucene.util.ThreadInterruptedException;
 
@@ -42,7 +43,7 @@ import org.apache.lucene.util.ThreadInterruptedException;
  * {@link IndexWriterConfig#getRAMPerThreadHardLimitMB()} to prevent address
  * space exhaustion.
  */
-final class DocumentsWriterFlushControl  {
+final class DocumentsWriterFlushControl implements Accountable {
 
   private final long hardMaxBytesPerDWPT;
   private long activeBytes = 0;
@@ -62,6 +63,7 @@ final class DocumentsWriterFlushControl  {
   long peakFlushBytes = 0;// only with assert
   long peakNetBytes = 0;// only with assert
   long peakDelta = 0; // only with assert
+  boolean flushByRAMWasDisabled; // only with assert
   final DocumentsWriterStallControl stallControl;
   private final DocumentsWriterPerThreadPool perThreadPool;
   private final FlushPolicy flushPolicy;
@@ -101,7 +103,9 @@ final class DocumentsWriterFlushControl  {
   
   private boolean assertMemory() {
     final double maxRamMB = config.getRAMBufferSizeMB();
-    if (maxRamMB != IndexWriterConfig.DISABLE_AUTO_FLUSH) {
+    // We can only assert if we have always been flushing by RAM usage; otherwise the assert will false trip if e.g. the
+    // flush-by-doc-count * doc size was large enough to use far more RAM than the sudden change to IWC's maxRAMBufferSizeMB:
+    if (maxRamMB != IndexWriterConfig.DISABLE_AUTO_FLUSH && flushByRAMWasDisabled == false) {
       // for this assert we must be tolerant to ram buffer changes!
       maxConfiguredRamBuffer = Math.max(maxRamMB, maxConfiguredRamBuffer);
       final long ram = flushBytes + activeBytes;
@@ -109,7 +113,7 @@ final class DocumentsWriterFlushControl  {
       // take peakDelta into account - worst case is that all flushing, pending and blocked DWPT had maxMem and the last doc had the peakDelta
       
       // 2 * ramBufferBytes -> before we stall we need to cross the 2xRAM Buffer border this is still a valid limit
-      // (numPending + numFlushingDWPT() + numBlockedFlushes()) * peakDelta) -> those are the total number of DWPT that are not active but not yet fully fluhsed
+      // (numPending + numFlushingDWPT() + numBlockedFlushes()) * peakDelta) -> those are the total number of DWPT that are not active but not yet fully flushed
       // all of them could theoretically be taken out of the loop once they crossed the RAM buffer and the last document was the peak delta
       // (numDocsSinceStalled * peakDelta) -> at any given time there could be n threads in flight that crossed the stall control before we reached the limit and each of them could hold a peak document
       final long expected = (2 * (ramBufferBytes)) + ((numPending + numFlushingDWPT() + numBlockedFlushes()) * peakDelta) + (numDocsSinceStalled * peakDelta);
@@ -128,8 +132,11 @@ final class DocumentsWriterFlushControl  {
             + " byte, flush mem: " + flushBytes + ", active mem: " + activeBytes
             + ", pending DWPT: " + numPending + ", flushing DWPT: "
             + numFlushingDWPT() + ", blocked DWPT: " + numBlockedFlushes()
-            + ", peakDelta mem: " + peakDelta + " byte";
+            + ", peakDelta mem: " + peakDelta + " bytes, ramBufferBytes=" + ramBufferBytes
+            + ", maxConfiguredRamBuffer=" + maxConfiguredRamBuffer;
       }
+    } else {
+      flushByRAMWasDisabled = true;
     }
     return true;
   }
@@ -220,14 +227,14 @@ final class DocumentsWriterFlushControl  {
       assert assertMemory();
     } finally {
       try {
-       updateStallState();
+        updateStallState();
       } finally {
         notifyAll();
       }
     }
   }
   
-  private final boolean updateStallState() {
+  private boolean updateStallState() {
     
     assert Thread.holdsLock(this);
     final long limit = stallLimitBytes();
@@ -422,7 +429,12 @@ final class DocumentsWriterFlushControl  {
   }
   
   public long getDeleteBytesUsed() {
-    return documentsWriter.deleteQueue.bytesUsed() + bufferedUpdatesStream.bytesUsed();
+    return documentsWriter.deleteQueue.ramBytesUsed() + bufferedUpdatesStream.ramBytesUsed();
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    return getDeleteBytesUsed() + netBytes();
   }
 
   synchronized int numFlushingDWPT() {

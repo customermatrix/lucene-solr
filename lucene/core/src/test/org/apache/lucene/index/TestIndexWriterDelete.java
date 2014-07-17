@@ -21,7 +21,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.Reader;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -1040,7 +1039,7 @@ public class TestIndexWriterDelete extends LuceneTestCase {
     // note: tiny rambuffer used, as with a 1MB buffer the test is too slow (flush @ 128,999)
     IndexWriter w = new IndexWriter(dir,
                                     newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()))
-                                    .setRAMBufferSizeMB(0.1f).setMaxBufferedDocs(1000).setMergePolicy(NoMergePolicy.NO_COMPOUND_FILES).setReaderPooling(false));
+                                    .setRAMBufferSizeMB(0.1f).setMaxBufferedDocs(1000).setMergePolicy(NoMergePolicy.INSTANCE).setReaderPooling(false));
     int count = 0;
     while(true) {
       Document doc = new Document();
@@ -1086,7 +1085,7 @@ public class TestIndexWriterDelete extends LuceneTestCase {
     final int flushAtDelCount = atLeast(1020);
     IndexWriter w = new IndexWriter(dir,
                                     newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random())).
-                                    setMaxBufferedDeleteTerms(flushAtDelCount).setMaxBufferedDocs(1000).setRAMBufferSizeMB(IndexWriterConfig.DISABLE_AUTO_FLUSH).setMergePolicy(NoMergePolicy.NO_COMPOUND_FILES).setReaderPooling(false));
+                                    setMaxBufferedDeleteTerms(flushAtDelCount).setMaxBufferedDocs(1000).setRAMBufferSizeMB(IndexWriterConfig.DISABLE_AUTO_FLUSH).setMergePolicy(NoMergePolicy.INSTANCE).setReaderPooling(false));
     int count = 0;
     while(true) {
       Document doc = new Document();
@@ -1127,7 +1126,7 @@ public class TestIndexWriterDelete extends LuceneTestCase {
     final AtomicBoolean sawAfterFlush = new AtomicBoolean();
     IndexWriter w = new IndexWriter(dir,
                                     newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random())).
-                                    setRAMBufferSizeMB(0.5).setMaxBufferedDocs(-1).setMergePolicy(NoMergePolicy.NO_COMPOUND_FILES).setReaderPooling(false)) {
+                                    setRAMBufferSizeMB(0.5).setMaxBufferedDocs(-1).setMergePolicy(NoMergePolicy.INSTANCE).setReaderPooling(false)) {
         @Override
         public void doAfterFlush() {
           assertTrue("only " + docsInSegment.get() + " in segment", closing.get() || docsInSegment.get() >= 7);
@@ -1169,7 +1168,7 @@ public class TestIndexWriterDelete extends LuceneTestCase {
     Directory dir = newDirectory();
     IndexWriterConfig iwc = new IndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()));
     iwc.setMaxBufferedDocs(2);
-    IndexWriter w = new IndexWriter(dir, iwc.clone());
+    IndexWriter w = new IndexWriter(dir, iwc);
     Document doc = new Document();
     doc.add(newField("field", "0", StringField.TYPE_NOT_STORED));
     w.addDocument(doc);
@@ -1194,7 +1193,8 @@ public class TestIndexWriterDelete extends LuceneTestCase {
 
     // Segment should have deletions:
     assertTrue(s.contains("has deletions"));
-    w = new IndexWriter(dir, iwc.clone());
+    iwc = new IndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()));
+    w = new IndexWriter(dir, iwc);
     w.forceMerge(1);
     w.close();
 

@@ -24,8 +24,9 @@ import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.FieldInfo.IndexOptions;
 import org.apache.lucene.store.DataInput;
 import org.apache.lucene.store.DataOutput;
+import org.apache.lucene.util.Accountable;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.lucene.util.fst.Outputs;
-import org.apache.lucene.util.LongsRef;
 
 /**
  * An FST {@link Outputs} implementation for 
@@ -47,7 +48,8 @@ class FSTTermOutputs extends Outputs<FSTTermOutputs.TermData> {
    * On an FST, only long[] part is 'shared' and pushed towards root.
    * byte[] and term stats will be kept on deeper arcs.
    */
-  static class TermData {
+  static class TermData implements Accountable {
+    private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(TermData.class);
     long[] longs;
     byte[] bytes;
     int docFreq;
@@ -63,6 +65,18 @@ class FSTTermOutputs extends Outputs<FSTTermOutputs.TermData> {
       this.bytes = bytes;
       this.docFreq = docFreq;
       this.totalTermFreq = totalTermFreq;
+    }
+
+    @Override
+    public long ramBytesUsed() {
+      long ramBytesUsed = BASE_RAM_BYTES_USED;
+      if (longs != null) {
+        ramBytesUsed += RamUsageEstimator.sizeOf(longs);
+      }
+      if (bytes != null) {
+        ramBytesUsed += RamUsageEstimator.sizeOf(bytes);
+      }
+      return ramBytesUsed;
     }
 
     // NOTE: actually, FST nodes are seldom 
@@ -106,6 +120,11 @@ class FSTTermOutputs extends Outputs<FSTTermOutputs.TermData> {
   protected FSTTermOutputs(FieldInfo fieldInfo, int longsSize) {
     this.hasPos = (fieldInfo.getIndexOptions() != IndexOptions.DOCS_ONLY);
     this.longsSize = longsSize;
+  }
+
+  @Override
+  public long ramBytesUsed(TermData output) {
+    return output.ramBytesUsed();
   }
 
   @Override
@@ -293,6 +312,33 @@ class FSTTermOutputs extends Outputs<FSTTermOutputs.TermData> {
       }
     }
     return new TermData(longs, bytes, docFreq, totalTermFreq);
+  }
+  
+
+  @Override
+  public void skipOutput(DataInput in) throws IOException {
+    int bits = in.readByte() & 0xff;
+    int bit0 = bits & 1;
+    int bit1 = bits & 2;
+    int bit2 = bits & 4;
+    int bytesSize = (bits >>> 3);
+    if (bit1 > 0 && bytesSize == 0) {  // determine extra length
+      bytesSize = in.readVInt();
+    }
+    if (bit0 > 0) {  // not all-zero case
+      for (int pos = 0; pos < longsSize; pos++) {
+        in.readVLong();
+      }
+    }
+    if (bit1 > 0) {  // bytes exists
+      in.skipBytes(bytesSize);
+    }
+    if (bit2 > 0) {  // stats exist
+      int code = in.readVInt();
+      if (hasPos && (code & 1) == 0) {
+        in.readVLong();
+      }
+    }
   }
 
   @Override

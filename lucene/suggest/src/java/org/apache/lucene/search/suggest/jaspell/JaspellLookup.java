@@ -28,6 +28,7 @@ import org.apache.lucene.search.suggest.UnsortedInputIterator;
 import org.apache.lucene.search.suggest.jaspell.JaspellTernarySearchTrie.TSTNode;
 import org.apache.lucene.store.DataInput;
 import org.apache.lucene.store.DataOutput;
+import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.CharsRef;
 import org.apache.lucene.util.UnicodeUtil;
@@ -37,8 +38,10 @@ import org.apache.lucene.util.UnicodeUtil;
  * <a href="http://jaspell.sourceforge.net/">JaSpell</a>.
  * 
  * @see JaspellTernarySearchTrie
+ * @deprecated Migrate to one of the newer suggesters which are much more RAM efficient.
  */
-public class JaspellLookup extends Lookup {
+@Deprecated
+public class JaspellLookup extends Lookup implements Accountable {
   JaspellTernarySearchTrie trie = new JaspellTernarySearchTrie();
   private boolean usePrefix = true;
   private int editDistance = 2;
@@ -206,10 +209,9 @@ public class JaspellLookup extends Lookup {
     return true;
   }
 
-  /** Returns byte size of the underlying TST. */
   @Override
-  public long sizeInBytes() {
-    return trie.sizeInBytes();
+  public long ramBytesUsed() {
+    return trie.ramBytesUsed();
   }
   
   @Override

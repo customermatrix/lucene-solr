@@ -83,8 +83,8 @@ import org.apache.lucene.analysis.synonym.SynonymMap;
 import org.apache.lucene.analysis.util.CharArrayMap;
 import org.apache.lucene.analysis.util.CharArraySet;
 import org.apache.lucene.analysis.wikipedia.WikipediaTokenizer;
+import org.apache.lucene.util.AttributeFactory;
 import org.apache.lucene.util.AttributeSource;
-import org.apache.lucene.util.AttributeSource.AttributeFactory;
 import org.apache.lucene.util.CharsRef;
 import org.apache.lucene.util.Rethrow;
 import org.apache.lucene.util.TestUtil;
@@ -307,7 +307,7 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
         // TODO: could cause huge ram usage to use full int range for some filters
         // (e.g. allocate enormous arrays)
         // return Integer.valueOf(random.nextInt());
-        return Integer.valueOf(TestUtil.nextInt(random, -100, 100));
+        return Integer.valueOf(TestUtil.nextInt(random, -50, 50));
       }
     });
     put(char.class, new ArgProducer() {
@@ -355,6 +355,11 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
       @Override public Object create(Random random) {
         // we expect bugs in emulating old versions
         return TEST_VERSION_CURRENT;
+      }
+    });
+    put(AttributeFactory.class, new ArgProducer() {
+      @Override public Object create(Random random) {
+        return newAttributeFactory(random);
       }
     });
     put(Set.class, new ArgProducer() {
@@ -600,9 +605,6 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
       Class<?> paramType = paramTypes[i];
       if (paramType == Reader.class) {
         args[i] = reader;
-      } else if (paramType == AttributeFactory.class) {
-        // TODO: maybe the collator one...???
-        args[i] = AttributeFactory.DEFAULT_ATTRIBUTE_FACTORY;
       } else if (paramType == AttributeSource.class) {
         // TODO: args[i] = new AttributeSource();
         // this is currently too scary to deal with!
@@ -941,7 +943,7 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
         System.out.println("Creating random analyzer:" + a);
       }
       try {
-        checkRandomData(random, a, 50*RANDOM_MULTIPLIER, 128, false,
+        checkRandomData(random, a, 50*RANDOM_MULTIPLIER, 80, false,
                         false /* We already validate our own offsets... */);
       } catch (Throwable e) {
         System.err.println("Exception from random analyzer: " + a);

@@ -32,11 +32,10 @@ import org.apache.lucene.codecs.PostingsFormat;
 import org.apache.lucene.codecs.asserting.AssertingDocValuesFormat;
 import org.apache.lucene.codecs.asserting.AssertingPostingsFormat;
 import org.apache.lucene.codecs.bloom.TestBloomFilteredLucene41Postings;
-import org.apache.lucene.codecs.diskdv.DiskDocValuesFormat;
 import org.apache.lucene.codecs.lucene41.Lucene41PostingsFormat;
 import org.apache.lucene.codecs.lucene41ords.Lucene41WithOrds;
-import org.apache.lucene.codecs.lucene45.Lucene45DocValuesFormat;
-import org.apache.lucene.codecs.lucene46.Lucene46Codec;
+import org.apache.lucene.codecs.lucene49.Lucene49Codec;
+import org.apache.lucene.codecs.lucene49.Lucene49DocValuesFormat;
 import org.apache.lucene.codecs.memory.DirectPostingsFormat;
 import org.apache.lucene.codecs.memory.MemoryDocValuesFormat;
 import org.apache.lucene.codecs.memory.MemoryPostingsFormat;
@@ -64,7 +63,7 @@ import org.apache.lucene.util.TestUtil;
  * documents in different orders and the test will still be deterministic
  * and reproducable.
  */
-public class RandomCodec extends Lucene46Codec {
+public class RandomCodec extends Lucene49Codec {
   /** Shuffled list of postings formats to use for new mappings */
   private List<PostingsFormat> formats = new ArrayList<>();
   
@@ -76,6 +75,8 @@ public class RandomCodec extends Lucene46Codec {
   
   /** unique set of docvalues format names this codec knows about */
   public Set<String> dvFormatNames = new HashSet<>();
+
+  public final Set<String> avoidCodecs;
 
   /** memorized field->postingsformat mappings */
   // note: we have to sync this map even though its just for debugging/toString, 
@@ -119,6 +120,7 @@ public class RandomCodec extends Lucene46Codec {
 
   public RandomCodec(Random random, Set<String> avoidCodecs) {
     this.perFieldSeed = random.nextInt();
+    this.avoidCodecs = avoidCodecs;
     // TODO: make it possible to specify min/max iterms per
     // block via CL:
     int minItemsPerBlock = TestUtil.nextInt(random, 2, 100);
@@ -152,8 +154,7 @@ public class RandomCodec extends Lucene46Codec {
         new MemoryPostingsFormat(false, random.nextFloat()));
     
     addDocValues(avoidCodecs,
-        new Lucene45DocValuesFormat(),
-        new DiskDocValuesFormat(),
+        new Lucene49DocValuesFormat(),
         new MemoryDocValuesFormat(),
         new SimpleTextDocValuesFormat(),
         new AssertingDocValuesFormat());

@@ -49,7 +49,6 @@ import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
@@ -126,7 +125,7 @@ public class IndexSchema {
   protected volatile DynamicField[] dynamicFields;
   public DynamicField[] getDynamicFields() { return dynamicFields; }
 
-  protected Analyzer analyzer;
+  protected Analyzer indexAnalyzer;
   protected Analyzer queryAnalyzer;
 
   protected List<SchemaAware> schemaAware = new ArrayList<>();
@@ -277,8 +276,23 @@ public class IndexSchema {
    * This Analyzer is field (and dynamic field) name aware, and delegates to
    * a field specific Analyzer based on the field type.
    * </p>
+   * @deprecated (4.9) Use {@link #getIndexAnalyzer()} instead.
    */
-  public Analyzer getAnalyzer() { return analyzer; }
+  @Deprecated
+  public Analyzer getAnalyzer() { return indexAnalyzer; }
+
+  /**
+   * Returns the Analyzer used when indexing documents for this index
+   *
+   * <p>
+   * This Analyzer is field (and dynamic field) name aware, and delegates to
+   * a field specific Analyzer based on the field type.
+   * </p>
+   */
+  @SuppressWarnings("deprecation")
+  public Analyzer getIndexAnalyzer() {
+    return getAnalyzer();
+  }
 
   /**
    * Returns the Analyzer used when searching this index
@@ -357,7 +371,7 @@ public class IndexSchema {
    * @since solr 1.3
    */
   public void refreshAnalyzers() {
-    analyzer = new SolrIndexAnalyzer();
+    indexAnalyzer = new SolrIndexAnalyzer();
     queryAnalyzer = new SolrQueryAnalyzer();
   }
 
@@ -390,7 +404,7 @@ public class IndexSchema {
     protected HashMap<String, Analyzer> analyzerCache() {
       HashMap<String, Analyzer> cache = new HashMap<>();
       for (SchemaField f : getFields().values()) {
-        Analyzer analyzer = f.getType().getAnalyzer();
+        Analyzer analyzer = f.getType().getIndexAnalyzer();
         cache.put(f.getName(), analyzer);
       }
       return cache;
@@ -399,7 +413,7 @@ public class IndexSchema {
     @Override
     protected Analyzer getWrappedAnalyzer(String fieldName) {
       Analyzer analyzer = analyzers.get(fieldName);
-      return analyzer != null ? analyzer : getDynamicFieldType(fieldName).getAnalyzer();
+      return analyzer != null ? analyzer : getDynamicFieldType(fieldName).getIndexAnalyzer();
     }
 
   }
@@ -483,7 +497,7 @@ public class IndexSchema {
         similarityFactory = new DefaultSimilarityFactory();
         final NamedList similarityParams = new NamedList();
         Version luceneVersion = getDefaultLuceneMatchVersion();
-        if (!luceneVersion.onOrAfter(Version.LUCENE_47)) {
+        if (!luceneVersion.onOrAfter(Version.LUCENE_4_7)) {
           similarityParams.add(DefaultSimilarityFactory.DISCOUNT_OVERLAPS, false);
         }
         similarityFactory.init(SolrParams.toSolrParams(similarityParams));
@@ -573,44 +587,7 @@ public class IndexSchema {
       // expression = "/schema/copyField";
     
       dynamicCopyFields = new DynamicCopy[] {};
-      expression = "//" + COPY_FIELD;
-      nodes = (NodeList) xpath.evaluate(expression, document, XPathConstants.NODESET);
-
-      for (int i=0; i<nodes.getLength(); i++) {
-        node = nodes.item(i);
-        NamedNodeMap attrs = node.getAttributes();
-
-        String source = DOMUtil.getAttr(attrs, SOURCE, COPY_FIELD + " definition");
-        String dest   = DOMUtil.getAttr(attrs, DESTINATION,  COPY_FIELD + " definition");
-        String maxChars = DOMUtil.getAttr(attrs, MAX_CHARS);
-        int maxCharsInt = CopyField.UNLIMITED;
-        if (maxChars != null) {
-          try {
-            maxCharsInt = Integer.parseInt(maxChars);
-          } catch (NumberFormatException e) {
-            log.warn("Couldn't parse " + MAX_CHARS + " attribute for " + COPY_FIELD + " from "
-                    + source + " to " + dest + " as integer. The whole field will be copied.");
-          }
-        }
-
-        if (dest.equals(uniqueKeyFieldName)) {
-          String msg = UNIQUE_KEY + " field ("+uniqueKeyFieldName+
-            ") can not be the " + DESTINATION + " of a " + COPY_FIELD + "(" + SOURCE + "=" +source+")";
-          log.error(msg);
-          throw new SolrException(ErrorCode.SERVER_ERROR, msg);
-          
-        }
-
-        registerCopyField(source, dest, maxCharsInt);
-      }
-      
-      for (Map.Entry<SchemaField, Integer> entry : copyFieldTargetCounts.entrySet()) {
-        if (entry.getValue() > 1 && !entry.getKey().multiValued())  {
-          log.warn("Field " + entry.getKey().name + " is not multivalued "+
-              "and destination for multiple " + COPY_FIELDS + " ("+
-              entry.getValue()+")");
-        }
-      }
+      loadCopyFields(document, xpath);
 
       //Run the callbacks on SchemaAware now that everything else is done
       for (SchemaAware aware : schemaAware) {
@@ -726,6 +703,50 @@ public class IndexSchema {
     dynamicFields = dFields.toArray(new DynamicField[dFields.size()]);
 
     return explicitRequiredProp;
+  }
+
+  /**
+   * Loads the copy fields
+   */
+  protected synchronized void loadCopyFields(Document document, XPath xpath) throws XPathExpressionException {
+    String expression = "//" + COPY_FIELD;
+    NodeList nodes = (NodeList)xpath.evaluate(expression, document, XPathConstants.NODESET);
+
+    for (int i=0; i<nodes.getLength(); i++) {
+      Node node = nodes.item(i);
+      NamedNodeMap attrs = node.getAttributes();
+
+      String source = DOMUtil.getAttr(attrs, SOURCE, COPY_FIELD + " definition");
+      String dest   = DOMUtil.getAttr(attrs, DESTINATION,  COPY_FIELD + " definition");
+      String maxChars = DOMUtil.getAttr(attrs, MAX_CHARS);
+
+      int maxCharsInt = CopyField.UNLIMITED;
+      if (maxChars != null) {
+        try {
+          maxCharsInt = Integer.parseInt(maxChars);
+        } catch (NumberFormatException e) {
+          log.warn("Couldn't parse " + MAX_CHARS + " attribute for " + COPY_FIELD + " from "
+                  + source + " to " + dest + " as integer. The whole field will be copied.");
+        }
+      }
+
+      if (dest.equals(uniqueKeyFieldName)) {
+        String msg = UNIQUE_KEY + " field ("+uniqueKeyFieldName+
+          ") can not be the " + DESTINATION + " of a " + COPY_FIELD + "(" + SOURCE + "=" +source+")";
+        log.error(msg);
+        throw new SolrException(ErrorCode.SERVER_ERROR, msg);
+      }
+      
+      registerCopyField(source, dest, maxCharsInt);
+    }
+      
+    for (Map.Entry<SchemaField, Integer> entry : copyFieldTargetCounts.entrySet()) {
+      if (entry.getValue() > 1 && !entry.getKey().multiValued())  {
+        log.warn("Field " + entry.getKey().name + " is not multivalued "+
+            "and destination for multiple " + COPY_FIELDS + " ("+
+            entry.getValue()+")");
+      }
+    }
   }
 
   /**

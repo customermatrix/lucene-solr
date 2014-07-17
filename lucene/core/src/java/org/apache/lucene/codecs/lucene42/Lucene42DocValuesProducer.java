@@ -36,11 +36,13 @@ import org.apache.lucene.index.IndexFileNames;
 import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SortedDocValues;
+import org.apache.lucene.index.SortedNumericDocValues;
 import org.apache.lucene.index.SortedSetDocValues;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.store.ByteArrayDataInput;
 import org.apache.lucene.store.ChecksumIndexInput;
 import org.apache.lucene.store.IndexInput;
+import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
@@ -127,10 +129,10 @@ class Lucene42DocValuesProducer extends DocValuesProducer {
       }
     }
 
+    String dataName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, dataExtension);
+    this.data = state.directory.openInput(dataName, state.context);
     success = false;
     try {
-      String dataName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, dataExtension);
-      data = state.directory.openInput(dataName, state.context);
       final int version2 = CodecUtil.checkHeader(data, dataCodec, 
                                                  VERSION_START,
                                                  VERSION_CURRENT);
@@ -149,12 +151,10 @@ class Lucene42DocValuesProducer extends DocValuesProducer {
   private void readFields(IndexInput meta, FieldInfos infos) throws IOException {
     int fieldNumber = meta.readVInt();
     while (fieldNumber != -1) {
-      // check should be: infos.fieldInfo(fieldNumber) != null, which incorporates negative check
-      // but docvalues updates are currently buggy here (loading extra stuff, etc): LUCENE-5616
-      if (fieldNumber < 0) {
+      if (infos.fieldInfo(fieldNumber) == null) {
         // trickier to validate more: because we re-use for norms, because we use multiple entries
         // for "composite" types like sortedset, etc.
-        throw new CorruptIndexException("Invalid field number: " + fieldNumber + ", input=" + meta);
+        throw new CorruptIndexException("Invalid field number: " + fieldNumber + " (resource=" + meta + ")");
       }
       int fieldType = meta.readByte();
       if (fieldType == NUMBER) {
@@ -292,22 +292,27 @@ class Lucene42DocValuesProducer extends DocValuesProducer {
     final PagedBytes.Reader bytesReader = bytes.freeze(true);
     if (entry.minLength == entry.maxLength) {
       final int fixedLength = entry.minLength;
-      ramBytesUsed.addAndGet(bytes.ramBytesUsed());
+      ramBytesUsed.addAndGet(bytesReader.ramBytesUsed());
       return new BinaryDocValues() {
         @Override
-        public void get(int docID, BytesRef result) {
-          bytesReader.fillSlice(result, fixedLength * (long)docID, fixedLength);
+        public BytesRef get(int docID) {
+          final BytesRef term = new BytesRef();
+          bytesReader.fillSlice(term, fixedLength * (long)docID, fixedLength);
+          return term;
         }
       };
     } else {
-      final MonotonicBlockPackedReader addresses = new MonotonicBlockPackedReader(data, entry.packedIntsVersion, entry.blockSize, maxDoc, false);
-      ramBytesUsed.addAndGet(bytes.ramBytesUsed() + addresses.ramBytesUsed());
+      final MonotonicBlockPackedReader addresses = MonotonicBlockPackedReader.of(data, entry.packedIntsVersion, entry.blockSize, maxDoc, false);
+      ramBytesUsed.addAndGet(bytesReader.ramBytesUsed() + addresses.ramBytesUsed());
       return new BinaryDocValues() {
+
         @Override
-        public void get(int docID, BytesRef result) {
+        public BytesRef get(int docID) {
           long startAddress = docID == 0 ? 0 : addresses.get(docID-1);
           long endAddress = addresses.get(docID); 
-          bytesReader.fillSlice(result, startAddress, (int) (endAddress - startAddress));
+          final BytesRef term = new BytesRef();
+          bytesReader.fillSlice(term, startAddress, (int) (endAddress - startAddress));
+          return term;
         }
       };
     }
@@ -322,7 +327,7 @@ class Lucene42DocValuesProducer extends DocValuesProducer {
       if (instance == null) {
         data.seek(entry.offset);
         instance = new FST<>(data, PositiveIntOutputs.getSingleton());
-        ramBytesUsed.addAndGet(instance.sizeInBytes());
+        ramBytesUsed.addAndGet(instance.ramBytesUsed());
         fstInstances.put(field.number, instance);
       }
     }
@@ -337,21 +342,24 @@ class Lucene42DocValuesProducer extends DocValuesProducer {
     final BytesRefFSTEnum<Long> fstEnum = new BytesRefFSTEnum<>(fst);
     
     return new SortedDocValues() {
+
+      final BytesRef term = new BytesRef();
+
       @Override
       public int getOrd(int docID) {
         return (int) docToOrd.get(docID);
       }
 
       @Override
-      public void lookupOrd(int ord, BytesRef result) {
+      public BytesRef lookupOrd(int ord) {
         try {
           in.setPosition(0);
           fst.getFirstArc(firstArc);
           IntsRef output = Util.getByOutput(fst, ord, in, firstArc, scratchArc, scratchInts);
-          result.bytes = new byte[output.length];
-          result.offset = 0;
-          result.length = 0;
-          Util.toBytesRef(output, result);
+          term.bytes = ArrayUtil.grow(term.bytes, output.length);
+          term.offset = 0;
+          term.length = 0;
+          return Util.toBytesRef(output, term);
         } catch (IOException bogus) {
           throw new RuntimeException(bogus);
         }
@@ -389,7 +397,7 @@ class Lucene42DocValuesProducer extends DocValuesProducer {
   public SortedSetDocValues getSortedSet(FieldInfo field) throws IOException {
     final FSTEntry entry = fsts.get(field.number);
     if (entry.numOrds == 0) {
-      return DocValues.EMPTY_SORTED_SET; // empty FST!
+      return DocValues.emptySortedSet(); // empty FST!
     }
     FST<Long> instance;
     synchronized(this) {
@@ -397,7 +405,7 @@ class Lucene42DocValuesProducer extends DocValuesProducer {
       if (instance == null) {
         data.seek(entry.offset);
         instance = new FST<>(data, PositiveIntOutputs.getSingleton());
-        ramBytesUsed.addAndGet(instance.sizeInBytes());
+        ramBytesUsed.addAndGet(instance.ramBytesUsed());
         fstInstances.put(field.number, instance);
       }
     }
@@ -410,9 +418,10 @@ class Lucene42DocValuesProducer extends DocValuesProducer {
     final Arc<Long> scratchArc = new Arc<>();
     final IntsRef scratchInts = new IntsRef();
     final BytesRefFSTEnum<Long> fstEnum = new BytesRefFSTEnum<>(fst);
-    final BytesRef ref = new BytesRef();
     final ByteArrayDataInput input = new ByteArrayDataInput();
     return new SortedSetDocValues() {
+      final BytesRef term = new BytesRef();
+      BytesRef ordsRef;
       long currentOrd;
 
       @Override
@@ -427,21 +436,21 @@ class Lucene42DocValuesProducer extends DocValuesProducer {
       
       @Override
       public void setDocument(int docID) {
-        docToOrds.get(docID, ref);
-        input.reset(ref.bytes, ref.offset, ref.length);
+        ordsRef = docToOrds.get(docID);
+        input.reset(ordsRef.bytes, ordsRef.offset, ordsRef.length);
         currentOrd = 0;
       }
 
       @Override
-      public void lookupOrd(long ord, BytesRef result) {
+      public BytesRef lookupOrd(long ord) {
         try {
           in.setPosition(0);
           fst.getFirstArc(firstArc);
           IntsRef output = Util.getByOutput(fst, ord, in, firstArc, scratchArc, scratchInts);
-          result.bytes = new byte[output.length];
-          result.offset = 0;
-          result.length = 0;
-          Util.toBytesRef(output, result);
+          term.bytes = ArrayUtil.grow(term.bytes, output.length);
+          term.offset = 0;
+          term.length = 0;
+          return Util.toBytesRef(output, term);
         } catch (IOException bogus) {
           throw new RuntimeException(bogus);
         }
@@ -482,6 +491,11 @@ class Lucene42DocValuesProducer extends DocValuesProducer {
     } else {
       return new Bits.MatchAllBits(maxDoc);
     }
+  }
+  
+  @Override
+  public SortedNumericDocValues getSortedNumeric(FieldInfo field) throws IOException {
+    throw new IllegalStateException("Lucene 4.2 does not support SortedNumeric: how did you pull this off?");
   }
 
   @Override

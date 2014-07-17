@@ -21,7 +21,7 @@ import com.spatial4j.core.context.SpatialContext;
 import com.spatial4j.core.shape.Point;
 import com.spatial4j.core.shape.Rectangle;
 import org.apache.lucene.analysis.MockAnalyzer;
-import org.apache.lucene.codecs.lucene45.Lucene45DocValuesFormat;
+import org.apache.lucene.codecs.lucene49.Lucene49DocValuesFormat;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriterConfig;
@@ -34,6 +34,8 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.util.TestUtil;
+import org.apache.lucene.util.LuceneTestCase.SuppressSysoutChecks;
+import org.apache.lucene.util.TestRuleLimitSysouts.Limit;
 import org.junit.After;
 import org.junit.Before;
 
@@ -46,6 +48,7 @@ import static com.carrotsearch.randomizedtesting.RandomizedTest.randomGaussian;
 import static com.carrotsearch.randomizedtesting.RandomizedTest.randomIntBetween;
 
 /** A base test class for spatial lucene. It's mostly Lucene generic. */
+@SuppressSysoutChecks(bugUrl = "These tests use JUL extensively.")
 public abstract class SpatialTestCase extends LuceneTestCase {
 
   private DirectoryReader indexReader;
@@ -71,7 +74,7 @@ public abstract class SpatialTestCase extends LuceneTestCase {
     final IndexWriterConfig indexWriterConfig = LuceneTestCase.newIndexWriterConfig(random, LuceneTestCase.TEST_VERSION_CURRENT, new MockAnalyzer(random));
     //TODO can we randomly choose a doc-values supported format?
     if (needsDocValues())
-      indexWriterConfig.setCodec( TestUtil.alwaysDocValuesFormat(new Lucene45DocValuesFormat()));;
+      indexWriterConfig.setCodec( TestUtil.alwaysDocValuesFormat(new Lucene49DocValuesFormat()));;
     return indexWriterConfig;
   }
 
