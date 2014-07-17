@@ -17,21 +17,20 @@ package org.apache.lucene.store;
  * limitations under the License.
  */
 
+import org.apache.lucene.util.Constants;
+import org.apache.lucene.util.IOUtils;
+
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-
 import java.util.Collection;
-import static java.util.Collections.synchronizedSet;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.Future;
 
-import org.apache.lucene.util.ThreadInterruptedException;
-import org.apache.lucene.util.Constants;
-import org.apache.lucene.util.IOUtils;
+import static java.util.Collections.synchronizedSet;
 
 /**
  * Base class for Directory implementations that store index
@@ -300,12 +299,19 @@ public abstract class FSDirectory extends BaseDirectory {
   @Override
   public void sync(Collection<String> names) throws IOException {
     ensureOpen();
-    Set<String> toSync = new HashSet<String>(names);
+    Set<String> toSync = new HashSet<>(names);
     toSync.retainAll(staleFiles);
 
-    for (String name : toSync)
+    for (String name : toSync) {
       fsync(name);
-
+    }
+    
+    // fsync the directory itsself, but only if there was any file fsynced before
+    // (otherwise it can happen that the directory does not yet exist)!
+    if (!toSync.isEmpty()) {
+      IOUtils.fsync(directory, true);
+    }
+    
     staleFiles.removeAll(toSync);
   }
 
@@ -366,61 +372,6 @@ public abstract class FSDirectory extends BaseDirectory {
     return chunkSize;
   }
 
-  /** Base class for reading input from a RandomAccessFile */
-  protected abstract static class FSIndexInput extends BufferedIndexInput {
-    /** the underlying RandomAccessFile */
-    protected final RandomAccessFile file;
-    boolean isClone = false;
-    /** start offset: non-zero in the slice case */
-    protected final long off;
-    /** end offset (start+length) */
-    protected final long end;
-    
-    /** Create a new FSIndexInput, reading the entire file from <code>path</code> */
-    protected FSIndexInput(String resourceDesc, File path, IOContext context) throws IOException {
-      super(resourceDesc, context);
-      this.file = new RandomAccessFile(path, "r"); 
-      this.off = 0L;
-      this.end = file.length();
-    }
-    
-    /** Create a new FSIndexInput, representing a slice of an existing open <code>file</code> */
-    protected FSIndexInput(String resourceDesc, RandomAccessFile file, long off, long length, int bufferSize) {
-      super(resourceDesc, bufferSize);
-      this.file = file;
-      this.off = off;
-      this.end = off + length;
-      this.isClone = true; // well, we are sorta?
-    }
-    
-    @Override
-    public void close() throws IOException {
-      // only close the file if this is not a clone
-      if (!isClone) {
-        file.close();
-      }
-    }
-    
-    @Override
-    public FSIndexInput clone() {
-      FSIndexInput clone = (FSIndexInput)super.clone();
-      clone.isClone = true;
-      return clone;
-    }
-    
-    @Override
-    public final long length() {
-      return end - off;
-    }
-    
-    /** Method used for testing. Returns true if the underlying
-     *  file descriptor is valid.
-     */
-    boolean isFDValid() throws IOException {
-      return file.getFD().valid();
-    }
-  }
-  
   /**
    * Writes output with {@link RandomAccessFile#write(byte[], int, int)}
    */
@@ -461,14 +412,17 @@ public abstract class FSDirectory extends BaseDirectory {
       parent.onIndexOutputClosed(this);
       // only close the file if it has not been closed yet
       if (isOpen) {
-        IOException priorE = null;
+        boolean success = false;
         try {
           super.close();
-        } catch (IOException ioe) {
-          priorE = ioe;
+          success = true;
         } finally {
           isOpen = false;
-          IOUtils.closeWhileHandlingException(priorE, file);
+          if (success) {
+            IOUtils.close(file);
+          } else {
+            IOUtils.closeWhileHandlingException(file);
+          }
         }
       }
     }
@@ -492,41 +446,6 @@ public abstract class FSDirectory extends BaseDirectory {
   }
 
   protected void fsync(String name) throws IOException {
-    File fullFile = new File(directory, name);
-    boolean success = false;
-    int retryCount = 0;
-    IOException exc = null;
-    while (!success && retryCount < 5) {
-      retryCount++;
-      RandomAccessFile file = null;
-      try {
-        // LUCENE-5570: throw FNFE if it doesnt exist
-        try {
-          file = new RandomAccessFile(fullFile, "r");
-        } finally {
-          IOUtils.closeWhileHandlingException(file);
-        }
-        try {
-          file = new RandomAccessFile(fullFile, "rw");
-          file.getFD().sync();
-          success = true;
-        } finally {
-          if (file != null)
-            file.close();
-        }
-      } catch (IOException ioe) {
-        if (exc == null)
-          exc = ioe;
-        try {
-          // Pause 5 msec
-          Thread.sleep(5);
-        } catch (InterruptedException ie) {
-          throw new ThreadInterruptedException(ie);
-        }
-      }
-    }
-    if (!success)
-      // Throw original exception
-      throw exc;
+    IOUtils.fsync(new File(directory, name), false);
   }
 }

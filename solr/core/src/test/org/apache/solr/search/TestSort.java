@@ -49,7 +49,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.RAMDirectory;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.FixedBitSet;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 import org.apache.solr.SolrTestCaseJ4;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.schema.SchemaField;
@@ -96,12 +96,12 @@ public class TestSort extends SolrTestCaseJ4 {
 
     for (int i = 0; i < iters; i++) {
       final StringBuilder input = new StringBuilder();
-      final String[] names = new String[_TestUtil.nextInt(r,1,10)];
+      final String[] names = new String[TestUtil.nextInt(r, 1, 10)];
       final boolean[] reverse = new boolean[names.length];
       for (int j = 0; j < names.length; j++) {
         names[j] = null;
         for (int k = 0; k < nonBlankAttempts && null == names[j]; k++) {
-          names[j] = _TestUtil.randomRealisticUnicodeString(r, 1, 100);
+          names[j] = TestUtil.randomRealisticUnicodeString(r, 1, 100);
 
           // munge anything that might make this a function
           names[j] = names[j].replaceFirst("\\{","\\{\\{");
@@ -237,7 +237,7 @@ public class TestSort extends SolrTestCaseJ4 {
         final boolean sortMissingLast = !luceneSort && r.nextBoolean();
         final boolean sortMissingFirst = !luceneSort && !sortMissingLast;
         final boolean reverse = r.nextBoolean();
-        List<SortField> sfields = new ArrayList<SortField>();
+        List<SortField> sfields = new ArrayList<>();
 
         final boolean secondary = r.nextBoolean();
         final boolean luceneSort2 = r.nextBoolean();
@@ -263,7 +263,7 @@ public class TestSort extends SolrTestCaseJ4 {
         boolean scoreInOrder = r.nextBoolean();
         final TopFieldCollector topCollector = TopFieldCollector.create(sort, top, true, trackScores, trackMaxScores, scoreInOrder);
 
-        final List<MyDoc> collectedDocs = new ArrayList<MyDoc>();
+        final List<MyDoc> collectedDocs = new ArrayList<>();
         // delegate and collect docs ourselves
         Collector myCollector = new Collector() {
           int docBase;

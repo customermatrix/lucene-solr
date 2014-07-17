@@ -37,7 +37,8 @@ import junit.framework.Assert;
 import org.apache.commons.io.FileUtils;
 import org.apache.lucene.search.FieldCache;
 import org.apache.lucene.util.Constants;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.LuceneTestCase;
+import org.apache.lucene.util.TestUtil;
 import org.apache.solr.client.solrj.SolrResponse;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -53,7 +54,6 @@ import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.schema.TrieDateField;
-import org.apache.solr.util.AbstractSolrTestCase;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -103,15 +103,15 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
       // half the time we use the root context, the other half...
 
       // Remember: randomSimpleString might be the empty string
-      hostContext.append(_TestUtil.randomSimpleString(random(), 2));
+      hostContext.append(TestUtil.randomSimpleString(random(), 2));
       if (random().nextBoolean()) {
         hostContext.append("_");
       }
-      hostContext.append(_TestUtil.randomSimpleString(random(), 3));
+      hostContext.append(TestUtil.randomSimpleString(random(), 3));
       if ( ! "/".equals(hostContext.toString())) {
         // if our random string is empty, this might add a trailing slash, 
         // but our code should be ok with that
-        hostContext.append("/").append(_TestUtil.randomSimpleString(random(), 2));
+        hostContext.append("/").append(TestUtil.randomSimpleString(random(), 2));
       } else {
         // we got 'lucky' and still just have the root context,
         // NOOP: don't try to add a subdir to nothing (ie "//" is bad)
@@ -187,8 +187,8 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
   protected boolean fixShardCount = false;
 
   protected JettySolrRunner controlJetty;
-  protected List<SolrServer> clients = new ArrayList<SolrServer>();
-  protected List<JettySolrRunner> jettys = new ArrayList<JettySolrRunner>();
+  protected List<SolrServer> clients = new ArrayList<>();
+  protected List<JettySolrRunner> jettys = new ArrayList<>();
   
   protected String context;
   protected String[] deadServers;
@@ -211,7 +211,7 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
   public static int UNORDERED = 8;
 
   protected int flags;
-  protected Map<String, Integer> handle = new HashMap<String, Integer>();
+  protected Map<String, Integer> handle = new HashMap<>();
 
   protected String id = "id";
   public static Logger log = LoggerFactory.getLogger(BaseDistributedSearchTestCase.class);
@@ -278,17 +278,12 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     super.setUp();
     System.setProperty("solr.test.sys.prop1", "propone");
     System.setProperty("solr.test.sys.prop2", "proptwo");
-    testDir = new File(TEMP_DIR,
-            getClass().getName() + "-" + System.currentTimeMillis());
-    testDir.mkdirs();
+    testDir = createTempDir();
   }
 
   @Override
   public void tearDown() throws Exception {
     destroyServers();
-    if (!AbstractSolrTestCase.recurseDelete(testDir)) {
-      System.err.println("!!!! WARNING: best effort to remove " + testDir.getAbsolutePath() + " FAILED !!!!!");
-    }
     FieldCache.DEFAULT.purgeAllCaches();   // avoid FC insanity
     super.tearDown();
   }
@@ -328,7 +323,7 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
       if (sb.length() > 0) sb.append(',');
       int nDeadServers = r.nextInt(deadServers.length+1);
       if (nDeadServers > 0) {
-        List<String> replicas = new ArrayList<String>(Arrays.asList(deadServers));
+        List<String> replicas = new ArrayList<>(Arrays.asList(deadServers));
         Collections.shuffle(replicas, r);
         replicas.add(r.nextInt(nDeadServers+1), shard);
         for (int i=0; i<nDeadServers+1; i++) {

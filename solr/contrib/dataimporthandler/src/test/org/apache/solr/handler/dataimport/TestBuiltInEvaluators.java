@@ -20,6 +20,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
@@ -30,7 +31,7 @@ import java.util.*;
  * @since solr 1.3
  */
 public class TestBuiltInEvaluators extends AbstractDataImportHandlerTestCase {
-  private static final String ENCODING = "UTF-8";
+  private static final String ENCODING = StandardCharsets.UTF_8.name();
 
   VariableResolver resolver;
 
@@ -44,7 +45,7 @@ public class TestBuiltInEvaluators extends AbstractDataImportHandlerTestCase {
     super.setUp();
     resolver = new VariableResolver();
 
-    sqlTests = new HashMap<String, String>();
+    sqlTests = new HashMap<>();
 
     sqlTests.put("foo\"", "foo\"\"");
     sqlTests.put("foo\\", "foo\\\\");
@@ -53,23 +54,23 @@ public class TestBuiltInEvaluators extends AbstractDataImportHandlerTestCase {
     sqlTests.put("'foo\"", "''foo\"\"");
     sqlTests.put("\"Albert D'souza\"", "\"\"Albert D''souza\"\"");
 
-    urlTests = new HashMap<String, String>();
+    urlTests = new HashMap<>();
 
     urlTests.put("*:*", URLEncoder.encode("*:*", ENCODING));
     urlTests.put("price:[* TO 200]", URLEncoder.encode("price:[* TO 200]",
-        ENCODING));
+            ENCODING));
     urlTests.put("review:\"hybrid sedan\"", URLEncoder.encode(
-        "review:\"hybrid sedan\"", ENCODING));
+            "review:\"hybrid sedan\"", ENCODING));
   }
 
-
+  
   @Test
   public void testSqlEscapingEvaluator() {
     Evaluator sqlEscaper = new SqlEscapingEvaluator();
     runTests(sqlTests, sqlEscaper);
   }
 
-
+  
   @Test
   public void testUrlEvaluator() throws Exception {
     Evaluator urlEvaluator = new UrlEvaluator();
@@ -78,11 +79,11 @@ public class TestBuiltInEvaluators extends AbstractDataImportHandlerTestCase {
 
   @Test
   public void parseParams() {
-    Map<String,Object> m = new HashMap<String,Object>();
+    Map<String,Object> m = new HashMap<>();
     m.put("b","B");
     VariableResolver vr = new VariableResolver();
     vr.addNamespace("a",m);
-    List<Object> l = (new Evaluator() {
+    List<Object> l = (new Evaluator() {      
       @Override
       public String evaluate(String expression, Context context) {
         return null;
@@ -96,34 +97,34 @@ public class TestBuiltInEvaluators extends AbstractDataImportHandlerTestCase {
 
   @Test
   public void testEscapeSolrQueryFunction() {
-    final VariableResolver resolver = new VariableResolver();
-    Map<String,Object> m= new HashMap<String,Object>();
+    final VariableResolver resolver = new VariableResolver();    
+    Map<String,Object> m= new HashMap<>();
     m.put("query","c:t");
     resolver.setEvaluators(new DataImporter().getEvaluators(Collections.<Map<String,String>>emptyList()));
-
+    
     resolver.addNamespace("e",m);
     String s = resolver
-        .replaceTokens("${dataimporter.functions.escapeQueryChars(e.query)}");
+            .replaceTokens("${dataimporter.functions.escapeQueryChars(e.query)}");
     org.junit.Assert.assertEquals("c\\:t", s);
-
+    
   }
-
+  
   private Date twoDaysAgo(Locale l, TimeZone tz) {
     Calendar calendar = Calendar.getInstance(tz, l);
     calendar.add(Calendar.DAY_OF_YEAR, -2);
     return calendar.getTime();
   }
-
+  
   @Test
   public void testDateFormatEvaluator() {
     Evaluator dateFormatEval = new DateFormatEvaluator();
     ContextImpl context = new ContextImpl(null, resolver, null,
         Context.FULL_DUMP, Collections.<String,Object> emptyMap(), null, null);
-
+    
     Locale rootLocale = Locale.ROOT;
     Locale defaultLocale = Locale.getDefault();
     TimeZone defaultTz = TimeZone.getDefault();
-
+    
     {
       SimpleDateFormat sdfDate = new SimpleDateFormat("yyyy-MM-dd HH", rootLocale);
       String sdf = sdfDate.format(twoDaysAgo(rootLocale, defaultTz));
@@ -136,21 +137,21 @@ public class TestBuiltInEvaluators extends AbstractDataImportHandlerTestCase {
       String dfe = dateFormatEval.evaluate(
           "'NOW-2DAYS','yyyy-MM-dd HH','" + defaultLocale + "'", context);
       assertEquals(sdf,dfe);
-      for(String tzStr : TimeZone.getAvailableIDs()) {
+      for(String tzStr : TimeZone.getAvailableIDs()) {  
         TimeZone tz = TimeZone.getTimeZone(tzStr);
         sdfDate.setTimeZone(tz);
         sdf = sdfDate.format(twoDaysAgo(defaultLocale, tz));
         dfe = dateFormatEval.evaluate(
             "'NOW-2DAYS','yyyy-MM-dd HH','" + defaultLocale + "','" + tzStr + "'", context);
-        assertEquals(sdf,dfe);
+        assertEquals(sdf,dfe);          
       }
     }
-
-    Date d = new Date();
-    Map<String,Object> map = new HashMap<String,Object>();
+   
+    Date d = new Date();    
+    Map<String,Object> map = new HashMap<>();
     map.put("key", d);
     resolver.addNamespace("A", map);
-
+        
     assertEquals(
         new SimpleDateFormat("yyyy-MM-dd HH:mm", rootLocale).format(d),
         dateFormatEval.evaluate("A.key, 'yyyy-MM-dd HH:mm'", context));
@@ -164,17 +165,17 @@ public class TestBuiltInEvaluators extends AbstractDataImportHandlerTestCase {
       assertEquals(
           sdf.format(d),
           dateFormatEval.evaluate(
-              "A.key, 'yyyy-MM-dd HH:mm','" + defaultLocale + "', '" + tzStr + "'", context));
-
+              "A.key, 'yyyy-MM-dd HH:mm','" + defaultLocale + "', '" + tzStr + "'", context));     
+      
     }
-
-
+    
+    
   }
 
   private void runTests(Map<String, String> tests, Evaluator evaluator) {
-    ContextImpl ctx = new ContextImpl(null, resolver, null, Context.FULL_DUMP, Collections.<String, Object>emptyMap(), null, null);
+    ContextImpl ctx = new ContextImpl(null, resolver, null, Context.FULL_DUMP, Collections.<String, Object>emptyMap(), null, null);    
     for (Map.Entry<String, String> entry : tests.entrySet()) {
-      Map<String, Object> values = new HashMap<String, Object>();
+      Map<String, Object> values = new HashMap<>();
       values.put("key", entry.getKey());
       resolver.addNamespace("A", values);
 
@@ -182,6 +183,6 @@ public class TestBuiltInEvaluators extends AbstractDataImportHandlerTestCase {
       String actual = evaluator.evaluate("A.key", ctx);
       assertEquals(expected, actual);
     }
-
+    
   }
 }

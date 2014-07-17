@@ -51,7 +51,7 @@ import org.apache.lucene.util.IOUtils;
  * <pre class="prettyprint">
  *   Directory fsDir = FSDirectory.open(new File("/path/to/index"));
  *   NRTCachingDirectory cachedFSDir = new NRTCachingDirectory(fsDir, 5.0, 60.0);
- *   IndexWriterConfig conf = new IndexWriterConfig(Version.LUCENE_47, analyzer);
+ *   IndexWriterConfig conf = new IndexWriterConfig(Version.LUCENE_48, analyzer);
  *   IndexWriter writer = new IndexWriter(cachedFSDir, conf);
  * </pre>
  *
@@ -121,7 +121,7 @@ public class NRTCachingDirectory extends Directory {
 
   @Override
   public synchronized String[] listAll() throws IOException {
-    final Set<String> files = new HashSet<String>();
+    final Set<String> files = new HashSet<>();
     for(String f : cache.listAll()) {
       files.add(f);
     }
@@ -163,7 +163,6 @@ public class NRTCachingDirectory extends Directory {
       System.out.println("nrtdir.deleteFile name=" + name);
     }
     if (cache.fileExists(name)) {
-      assert !delegate.fileExists(name): "name=" + name;
       cache.deleteFile(name);
     } else {
       delegate.deleteFile(name);
@@ -293,9 +292,6 @@ public class NRTCachingDirectory extends Directory {
       if (!cache.fileExists(fileName)) {
         // Another thread beat us...
         return;
-      }
-      if (delegate.fileExists(fileName)) {
-        throw new IOException("cannot uncache file=\"" + fileName + "\": it was separately also created in the delegate directory");
       }
       final IOContext context = IOContext.DEFAULT;
       final IndexOutput out = delegate.createOutput(fileName, context);

@@ -17,14 +17,14 @@ package org.apache.lucene.index;
  * limitations under the License.
  */
 
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import org.apache.lucene.analysis.MockAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.LuceneTestCase;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
+
+import java.io.IOException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Base test case for {@link MergePolicy}.
@@ -39,18 +39,18 @@ public abstract class BaseMergePolicyTestCase extends LuceneTestCase {
     final AtomicBoolean mayMerge = new AtomicBoolean(true);
     final MergeScheduler mergeScheduler = new SerialMergeScheduler() {
       @Override
-      synchronized public void merge(IndexWriter writer) throws IOException {
+      synchronized public void merge(IndexWriter writer, MergeTrigger trigger, boolean newMergesFound) throws IOException {
         if (!mayMerge.get() && writer.getNextMerge() != null) {
           throw new AssertionError();
         }
-        super.merge(writer);
+        super.merge(writer, trigger, newMergesFound);
       }
     };
     IndexWriter writer = new IndexWriter(dir, newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random())).setMergeScheduler(mergeScheduler).setMergePolicy(mergePolicy()));
     writer.getConfig().getMergePolicy().setNoCFSRatio(random().nextBoolean() ? 0 : 1);
-    final int numSegments = _TestUtil.nextInt(random(), 2, 20);
+    final int numSegments = TestUtil.nextInt(random(), 2, 20);
     for (int i = 0; i < numSegments; ++i) {
-      final int numDocs = _TestUtil.nextInt(random(), 1, 5);
+      final int numDocs = TestUtil.nextInt(random(), 1, 5);
       for (int j = 0; j < numDocs; ++j) {
         writer.addDocument(new Document());
       }
@@ -58,7 +58,7 @@ public abstract class BaseMergePolicyTestCase extends LuceneTestCase {
     }
     for (int i = 5; i >= 0; --i) {
       final int segmentCount = writer.getSegmentCount();
-      final int maxNumSegments = i == 0 ? 1 : _TestUtil.nextInt(random(), 1, 10);
+      final int maxNumSegments = i == 0 ? 1 : TestUtil.nextInt(random(), 1, 10);
       mayMerge.set(segmentCount > maxNumSegments);
       writer.forceMerge(maxNumSegments);
     }

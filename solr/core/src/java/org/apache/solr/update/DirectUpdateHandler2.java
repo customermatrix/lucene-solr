@@ -201,7 +201,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
           if (deletesAfter != null) {
             log.info("Reordered DBQs detected.  Update=" + cmd + " DBQs="
                 + deletesAfter);
-            List<Query> dbqList = new ArrayList<Query>(deletesAfter.size());
+            List<Query> dbqList = new ArrayList<>(deletesAfter.size());
             for (UpdateLog.DBQ dbq : deletesAfter) {
               try {
                 DeleteUpdateCommand tmpDel = new DeleteUpdateCommand(cmd.req);
@@ -496,7 +496,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
       log.info("start "+cmd);
       RefCounted<IndexWriter> iw = solrCoreState.getIndexWriter(core);
       try {
-        final Map<String,String> commitData = new HashMap<String,String>();
+        final Map<String,String> commitData = new HashMap<>();
         commitData.put(SolrIndexWriter.COMMIT_TIME_MSEC_KEY,
             String.valueOf(System.currentTimeMillis()));
         iw.get().setCommitData(commitData);
@@ -574,7 +574,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
           // SolrCore.verbose("writer.commit() start writer=",writer);
 
           if (writer.hasUncommittedChanges()) {
-            final Map<String,String> commitData = new HashMap<String,String>();
+            final Map<String,String> commitData = new HashMap<>();
             commitData.put(SolrIndexWriter.COMMIT_TIME_MSEC_KEY,
                 String.valueOf(System.currentTimeMillis()));
             writer.setCommitData(commitData);
@@ -762,7 +762,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
           }
 
           // todo: refactor this shared code (or figure out why a real CommitUpdateCommand can't be used)
-          final Map<String,String> commitData = new HashMap<String,String>();
+          final Map<String,String> commitData = new HashMap<>();
           commitData.put(SolrIndexWriter.COMMIT_TIME_MSEC_KEY, String.valueOf(System.currentTimeMillis()));
           writer.setCommitData(commitData);
           writer.commit();

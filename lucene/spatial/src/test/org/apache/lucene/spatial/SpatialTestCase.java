@@ -33,7 +33,7 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.LuceneTestCase;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 import org.junit.After;
 import org.junit.Before;
 
@@ -71,7 +71,7 @@ public abstract class SpatialTestCase extends LuceneTestCase {
     final IndexWriterConfig indexWriterConfig = LuceneTestCase.newIndexWriterConfig(random, LuceneTestCase.TEST_VERSION_CURRENT, new MockAnalyzer(random));
     //TODO can we randomly choose a doc-values supported format?
     if (needsDocValues())
-      indexWriterConfig.setCodec( _TestUtil.alwaysDocValuesFormat(new Lucene45DocValuesFormat()));;
+      indexWriterConfig.setCodec( TestUtil.alwaysDocValuesFormat(new Lucene45DocValuesFormat()));;
     return indexWriterConfig;
   }
 
@@ -118,7 +118,7 @@ public abstract class SpatialTestCase extends LuceneTestCase {
     try {
       TopDocs topDocs = indexSearcher.search(query, numDocs);
 
-      List<SearchResult> results = new ArrayList<SearchResult>();
+      List<SearchResult> results = new ArrayList<>();
       for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
         results.add(new SearchResult(scoreDoc.score, indexSearcher.doc(scoreDoc.doc)));
       }

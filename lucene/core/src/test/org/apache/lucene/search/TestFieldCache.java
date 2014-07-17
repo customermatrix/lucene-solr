@@ -59,8 +59,9 @@ import org.apache.lucene.search.FieldCache.Shorts;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.LuceneTestCase;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
@@ -141,11 +142,12 @@ public class TestFieldCache extends LuceneTestCase {
     try {
       FieldCache cache = FieldCache.DEFAULT;
       ByteArrayOutputStream bos = new ByteArrayOutputStream(1024);
-      cache.setInfoStream(new PrintStream(bos, false, "UTF-8"));
+      cache.setInfoStream(new PrintStream(bos, false, IOUtils.UTF_8));
       cache.getDoubles(reader, "theDouble", false);
       cache.getFloats(reader, "theDouble", false);
-      assertTrue(bos.toString("UTF-8").indexOf("WARNING") != -1);
+      assertTrue(bos.toString(IOUtils.UTF_8).indexOf("WARNING") != -1);
     } finally {
+      FieldCache.DEFAULT.setInfoStream(null);
       FieldCache.DEFAULT.purgeAllCaches();
     }
   }
@@ -285,7 +287,7 @@ public class TestFieldCache extends LuceneTestCase {
     for (int i = 0; i < NUM_DOCS; i++) {
       termOrds.setDocument(i);
       // This will remove identical terms. A DocTermOrds doesn't return duplicate ords for a docId
-      List<BytesRef> values = new ArrayList<BytesRef>(new LinkedHashSet<BytesRef>(Arrays.asList(multiValued[i])));
+      List<BytesRef> values = new ArrayList<>(new LinkedHashSet<>(Arrays.asList(multiValued[i])));
       for (BytesRef v : values) {
         if (v == null) {
           // why does this test use null values... instead of an empty list: confusing
@@ -328,10 +330,10 @@ public class TestFieldCache extends LuceneTestCase {
         s = unicodeStrings[random().nextInt(i)];
       }
       if (s == null) {
-        s = _TestUtil.randomUnicodeString(random());
+        s = TestUtil.randomUnicodeString(random());
       }
     } else {
-      s = _TestUtil.randomUnicodeString(random());
+      s = TestUtil.randomUnicodeString(random());
     }
     return s;
   }
@@ -714,7 +716,7 @@ public class TestFieldCache extends LuceneTestCase {
     Document doc = new Document();
     LongField field = new LongField("f", 0L, Store.YES);
     doc.add(field);
-    final long[] values = new long[_TestUtil.nextInt(random(), 1, 10)];
+    final long[] values = new long[TestUtil.nextInt(random(), 1, 10)];
     for (int i = 0; i < values.length; ++i) {
       final long v;
       switch (random().nextInt(10)) {
@@ -728,7 +730,7 @@ public class TestFieldCache extends LuceneTestCase {
           v = Long.MAX_VALUE;
           break;
         default:
-          v = _TestUtil.nextLong(random(), -10, 10);
+          v = TestUtil.nextLong(random(), -10, 10);
           break;
       }
       values[i] = v;
@@ -760,7 +762,7 @@ public class TestFieldCache extends LuceneTestCase {
     Document doc = new Document();
     IntField field = new IntField("f", 0, Store.YES);
     doc.add(field);
-    final int[] values = new int[_TestUtil.nextInt(random(), 1, 10)];
+    final int[] values = new int[TestUtil.nextInt(random(), 1, 10)];
     for (int i = 0; i < values.length; ++i) {
       final int v;
       switch (random().nextInt(10)) {
@@ -774,7 +776,7 @@ public class TestFieldCache extends LuceneTestCase {
           v = Integer.MAX_VALUE;
           break;
         default:
-          v = _TestUtil.nextInt(random(), -10, 10);
+          v = TestUtil.nextInt(random(), -10, 10);
           break;
       }
       values[i] = v;

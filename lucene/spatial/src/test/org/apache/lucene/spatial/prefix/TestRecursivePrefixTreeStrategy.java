@@ -110,7 +110,7 @@ public class TestRecursivePrefixTreeStrategy extends StrategyTestCase {
     SearchResults got = executeQuery(strategy.makeQuery(args), 100);
     assertEquals("" + args, assertNumFound, got.numFound);
     if (assertIds != null) {
-      Set<Integer> gotIds = new HashSet<Integer>();
+      Set<Integer> gotIds = new HashSet<>();
       for (SearchResult result : got.results) {
         gotIds.add(Integer.valueOf(result.document.get("id")));
       }

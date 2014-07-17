@@ -25,19 +25,27 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
-import org.apache.lucene.index.MergePolicy.MergeTrigger;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 
 /**
  * MergePolicy that makes random decisions for testing.
  */
 public class MockRandomMergePolicy extends MergePolicy {
   private final Random random;
+  boolean doNonBulkMerges = true;
 
   public MockRandomMergePolicy(Random random) {
     // fork a private random, since we are called
     // unpredictably from threads:
     this.random = new Random(random.nextLong());
+  }
+  
+  /** 
+   * Set to true if sometimes readers to be merged should be wrapped in a FilterReader
+   * to mixup bulk merging.
+   */
+  public void setDoNonBulkMerges(boolean v) {
+    doNonBulkMerges = v;
   }
 
   @Override
@@ -47,7 +55,7 @@ public class MockRandomMergePolicy extends MergePolicy {
 
     int numSegments = segmentInfos.size();
 
-    List<SegmentCommitInfo> segments = new ArrayList<SegmentCommitInfo>();
+    List<SegmentCommitInfo> segments = new ArrayList<>();
     final Collection<SegmentCommitInfo> merging = writer.get().getMergingSegments();
 
     for(SegmentCommitInfo sipc : segmentInfos) {
@@ -64,8 +72,12 @@ public class MockRandomMergePolicy extends MergePolicy {
 
       // TODO: sometimes make more than 1 merge?
       mergeSpec = new MergeSpecification();
-      final int segsToMerge = _TestUtil.nextInt(random, 1, numSegments);
-      mergeSpec.add(new OneMerge(segments.subList(0, segsToMerge)));
+      final int segsToMerge = TestUtil.nextInt(random, 1, numSegments);
+      if (doNonBulkMerges) {
+        mergeSpec.add(new MockRandomOneMerge(segments.subList(0, segsToMerge),random.nextLong()));
+      } else {
+        mergeSpec.add(new OneMerge(segments.subList(0, segsToMerge)));
+      }
     }
 
     return mergeSpec;
@@ -76,7 +88,7 @@ public class MockRandomMergePolicy extends MergePolicy {
        SegmentInfos segmentInfos, int maxSegmentCount, Map<SegmentCommitInfo,Boolean> segmentsToMerge)
     throws IOException {
 
-    final List<SegmentCommitInfo> eligibleSegments = new ArrayList<SegmentCommitInfo>();
+    final List<SegmentCommitInfo> eligibleSegments = new ArrayList<>();
     for(SegmentCommitInfo info : segmentInfos) {
       if (segmentsToMerge.containsKey(info)) {
         eligibleSegments.add(info);
@@ -93,8 +105,12 @@ public class MockRandomMergePolicy extends MergePolicy {
       int upto = 0;
       while(upto < eligibleSegments.size()) {
         int max = Math.min(10, eligibleSegments.size()-upto);
-        int inc = max <= 2 ? max : _TestUtil.nextInt(random, 2, max);
-        mergeSpec.add(new OneMerge(eligibleSegments.subList(upto, upto+inc)));
+        int inc = max <= 2 ? max : TestUtil.nextInt(random, 2, max);
+        if (doNonBulkMerges) {
+          mergeSpec.add(new MockRandomOneMerge(eligibleSegments.subList(upto, upto+inc), random.nextLong()));
+        } else {
+          mergeSpec.add(new OneMerge(eligibleSegments.subList(upto, upto+inc)));
+        }
         upto += inc;
       }
     }
@@ -122,5 +138,29 @@ public class MockRandomMergePolicy extends MergePolicy {
   public boolean useCompoundFile(SegmentInfos infos, SegmentCommitInfo mergedInfo) throws IOException {
     // 80% of the time we create CFS:
     return random.nextInt(5) != 1;
+  }
+  
+  static class MockRandomOneMerge extends OneMerge {
+    final Random r;
+    ArrayList<AtomicReader> readers;
+
+    MockRandomOneMerge(List<SegmentCommitInfo> segments, long seed) {
+      super(segments);
+      r = new Random(seed);
+    }
+
+    @Override
+    public List<AtomicReader> getMergeReaders() throws IOException {
+      if (readers == null) {
+        readers = new ArrayList<AtomicReader>(super.getMergeReaders());
+        for (int i = 0; i < readers.size(); i++) {
+          // wrap it (e.g. prevent bulk merge etc)
+          if (r.nextInt(4) == 0) {
+            readers.set(i, new FilterAtomicReader(readers.get(i)));
+          }
+        }
+      }
+      return readers;
+    }
   }
 }

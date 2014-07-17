@@ -136,6 +136,8 @@ public abstract class IndexReader implements Closeable {
         } catch (Throwable t) {
           if (th == null) {
             th = t;
+          } else {
+            th.addSuppressed(t);
           }
         }
       }

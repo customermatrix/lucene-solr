@@ -144,7 +144,7 @@ public class FacetComponent extends SearchComponent
           }
 
           if (distribFieldFacetRefinements == null) {
-            distribFieldFacetRefinements = new ArrayList<String>();
+            distribFieldFacetRefinements = new ArrayList<>();
           }
 
           distribFieldFacetRefinements.add(facetCommand);
@@ -637,7 +637,7 @@ public class FacetComponent extends SearchComponent
               dff.needRefinements = true;
               List<String> lst = dff._toRefine[shardNum];
               if (lst == null) {
-                lst = dff._toRefine[shardNum] = new ArrayList<String>();
+                lst = dff._toRefine[shardNum] = new ArrayList<>();
               }
               lst.add(sfc.name);
             }
@@ -962,19 +962,19 @@ public class FacetComponent extends SearchComponent
 
     FacetInfo fi = rb._facetInfo;
 
-    NamedList<Object> facet_counts = new SimpleOrderedMap<Object>();
+    NamedList<Object> facet_counts = new SimpleOrderedMap<>();
 
-    NamedList<Number> facet_queries = new SimpleOrderedMap<Number>();
+    NamedList<Number> facet_queries = new SimpleOrderedMap<>();
     facet_counts.add("facet_queries",facet_queries);
     for (QueryFacet qf : fi.queryFacets.values()) {
       facet_queries.add(qf.getKey(), num(qf.count));
     }
 
-    NamedList<Object> facet_fields = new SimpleOrderedMap<Object>();
+    NamedList<Object> facet_fields = new SimpleOrderedMap<>();
     facet_counts.add("facet_fields", facet_fields);
 
     for (DistribFieldFacet dff : fi.facets.values()) {
-      NamedList<Object> fieldCounts = new NamedList<Object>(); // order is more important for facets
+      NamedList<Object> fieldCounts = new NamedList<>(); // order is more important for facets
       facet_fields.add(dff.getKey(), fieldCounts);
 
       ShardFacetCount[] counts;
@@ -1226,7 +1226,7 @@ public class FacetComponent extends SearchComponent
     // the max possible count for a missing term for each shard (indexed by shardNum)
     public long[] missingMax;
     public FixedBitSet[] counted; // a bitset for each shard, keeping track of which terms seen
-    public HashMap<String,ShardFacetCount> counts = new HashMap<String,ShardFacetCount>(128);
+    public HashMap<String,ShardFacetCount> counts = new HashMap<>(128);
     public int termNum;
 
     public int initialLimit;     // how many terms requested in first phase

@@ -21,6 +21,9 @@ import java.io.IOException;
 
 import org.apache.lucene.store.IndexOutput;
 
+/**
+ * @lucene.experimental
+ */
 public class NullIndexOutput extends IndexOutput {
   
   private long pos;
@@ -69,5 +72,9 @@ public class NullIndexOutput extends IndexOutput {
       length = pos;
     }
   }
-  
+
+  @Override
+  public long getChecksum() throws IOException {
+    return 0; // we don't write anything.
+  }
 }

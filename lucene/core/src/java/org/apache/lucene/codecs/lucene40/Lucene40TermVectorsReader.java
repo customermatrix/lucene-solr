@@ -222,7 +222,7 @@ public class Lucene40TermVectorsReader extends TermVectorsReader implements Clos
   private class TVFields extends Fields {
     private final int[] fieldNumbers;
     private final long[] fieldFPs;
-    private final Map<Integer,Integer> fieldNumberToIndex = new HashMap<Integer,Integer>();
+    private final Map<Integer,Integer> fieldNumberToIndex = new HashMap<>();
 
     public TVFields(int docID) throws IOException {
       seekTvx(docID);
@@ -773,5 +773,8 @@ public class Lucene40TermVectorsReader extends TermVectorsReader implements Clos
   public long ramBytesUsed() {
     return 0;
   }
+
+  @Override
+  public void checkIntegrity() throws IOException {}
 }
 

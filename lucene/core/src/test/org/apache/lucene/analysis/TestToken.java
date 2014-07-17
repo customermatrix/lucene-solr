@@ -22,7 +22,7 @@ import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.util.Attribute;
 import org.apache.lucene.util.AttributeImpl;
 import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 
 import java.io.StringReader;
 import java.util.HashMap;
@@ -245,7 +245,7 @@ public class TestToken extends LuceneTestCase {
 
   public void testAttributeReflection() throws Exception {
     Token t = new Token("foobar", 6, 22, 8);
-    _TestUtil.assertAttributeReflection(t,
+    TestUtil.assertAttributeReflection(t,
         new HashMap<String, Object>() {{
           put(CharTermAttribute.class.getName() + "#term", "foobar");
           put(TermToBytesRefAttribute.class.getName() + "#bytes", new BytesRef("foobar"));

@@ -32,7 +32,7 @@ import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.util.Rethrow;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 import org.apache.lucene.util.automaton.Automaton;
 import org.apache.lucene.util.automaton.AutomatonTestUtil;
 import org.apache.lucene.util.automaton.BasicAutomata;
@@ -217,7 +217,7 @@ public class TestAutomatonQuery extends LuceneTestCase {
       queries[i] = new AutomatonQuery(new Term("bogus", "bogus"), AutomatonTestUtil.randomAutomaton(random()));
     }
     final CountDownLatch startingGun = new CountDownLatch(1);
-    int numThreads = _TestUtil.nextInt(random(), 2, 5);
+    int numThreads = TestUtil.nextInt(random(), 2, 5);
     Thread[] threads = new Thread[numThreads];
     for (int threadID = 0; threadID < numThreads; threadID++) {
       Thread thread = new Thread() {

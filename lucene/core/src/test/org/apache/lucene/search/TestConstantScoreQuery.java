@@ -95,7 +95,8 @@ public class TestConstantScoreQuery extends LuceneTestCase {
 
       reader = writer.getReader();
       writer.close();
-      searcher = newSearcher(reader);
+      // we don't wrap with AssertingIndexSearcher in order to have the original scorer in setScorer.
+      searcher = newSearcher(reader, true, false);
       
       // set a similarity that does not normalize our boost away
       searcher.setSimilarity(new DefaultSimilarity() {
@@ -121,7 +122,7 @@ public class TestConstantScoreQuery extends LuceneTestCase {
       checkHits(searcher, csq2, csq2.getBoost(), ConstantScoreQuery.ConstantScorer.class.getName(), ConstantScoreQuery.ConstantScorer.class.getName());
       
       // for the combined BQ, the scorer should always be BooleanScorer's BucketScorer, because our scorer supports out-of order collection!
-      final String bucketScorerClass = BooleanScorer.class.getName() + "$BucketScorer";
+      final String bucketScorerClass = FakeScorer.class.getName();
       checkHits(searcher, bq, csq1.getBoost() + csq2.getBoost(), bucketScorerClass, null);
       checkHits(searcher, csqbq, csqbq.getBoost(), ConstantScoreQuery.ConstantScorer.class.getName(), bucketScorerClass);
     } finally {
@@ -158,7 +159,7 @@ public class TestConstantScoreQuery extends LuceneTestCase {
   }
 
   // LUCENE-5307
-  // don't reuse the scorer of filters since they have been created with topScorer=false
+  // don't reuse the scorer of filters since they have been created with bulkScorer=false
   public void testQueryWrapperFilter() throws IOException {
     Directory d = newDirectory();
     RandomIndexWriter w = new RandomIndexWriter(random(), d);

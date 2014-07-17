@@ -67,7 +67,7 @@ public class FixedGapTermsIndexReader extends TermsIndexReaderBase {
   private final PagedBytes termBytes = new PagedBytes(PAGED_BYTES_BITS);
   private PagedBytes.Reader termBytesReader;
 
-  final HashMap<FieldInfo,FieldIndexData> fields = new HashMap<FieldInfo,FieldIndexData>();
+  final HashMap<FieldInfo,FieldIndexData> fields = new HashMap<>();
   
   // start of the field info data
   private long dirOffset;
@@ -88,6 +88,11 @@ public class FixedGapTermsIndexReader extends TermsIndexReaderBase {
     try {
       
       version = readHeader(in);
+      
+      if (version >= FixedGapTermsIndexWriter.VERSION_CHECKSUM) {
+        CodecUtil.checksumEntireFile(in);
+      }
+      
       indexInterval = in.readInt();
       if (indexInterval < 1) {
         throw new CorruptIndexException("invalid indexInterval: " + indexInterval + " (resource=" + in + ")");
@@ -421,7 +426,10 @@ public class FixedGapTermsIndexReader extends TermsIndexReaderBase {
   }
 
   private void seekDir(IndexInput input, long dirOffset) throws IOException {
-    if (version >= FixedGapTermsIndexWriter.VERSION_APPEND_ONLY) {
+    if (version >= FixedGapTermsIndexWriter.VERSION_CHECKSUM) {
+      input.seek(input.length() - CodecUtil.footerLength() - 8);
+      dirOffset = input.readLong();
+    } else if (version >= FixedGapTermsIndexWriter.VERSION_APPEND_ONLY) {
       input.seek(input.length() - 8);
       dirOffset = input.readLong();
     }

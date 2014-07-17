@@ -21,6 +21,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.text.Collator;
 import java.util.List;
 import java.util.Locale;
@@ -61,7 +62,7 @@ import org.apache.lucene.search.FieldCache;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.LuceneTestCase.SuppressCodecs;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 
 /**
  * Test very simply that perf tasks - simple algorithms - are doing what they should.
@@ -388,7 +389,7 @@ public class TestPerfTasksLogic extends BenchmarkTestCase {
    * Test WriteLineDoc and LineDocSource.
    */
   public void testLineDocFile() throws Exception {
-    File lineFile = new File(TEMP_DIR, "test.reuters.lines.txt");
+    File lineFile = createTempFile("test.reuters.lines", ".txt");
 
     // We will call WriteLineDocs this many times
     final int NUM_TRY_DOCS = 50;
@@ -408,7 +409,7 @@ public class TestPerfTasksLogic extends BenchmarkTestCase {
 
     BufferedReader r = new BufferedReader(
         new InputStreamReader(
-            new FileInputStream(lineFile), "UTF-8"));
+            new FileInputStream(lineFile), StandardCharsets.UTF_8));
     int numLines = 0;
     String line;
     while((line = r.readLine()) != null) {
@@ -507,7 +508,7 @@ public class TestPerfTasksLogic extends BenchmarkTestCase {
       TermsEnum termsEnum = terms.iterator(null);
       DocsEnum docs = null;
       while(termsEnum.next() != null) {
-        docs = _TestUtil.docs(random(), termsEnum, MultiFields.getLiveDocs(reader), docs, DocsEnum.FLAG_FREQS);
+        docs = TestUtil.docs(random(), termsEnum, MultiFields.getLiveDocs(reader), docs, DocsEnum.FLAG_FREQS);
         while(docs.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
           totalTokenCount2 += docs.freq();
         }

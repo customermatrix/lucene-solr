@@ -51,7 +51,7 @@ public class VariableGapTermsIndexReader extends TermsIndexReaderBase {
   private IndexInput in;
   private volatile boolean indexLoaded;
 
-  final HashMap<FieldInfo,FieldIndexData> fields = new HashMap<FieldInfo,FieldIndexData>();
+  final HashMap<FieldInfo,FieldIndexData> fields = new HashMap<>();
   
   // start of the field info data
   private long dirOffset;
@@ -70,6 +70,10 @@ public class VariableGapTermsIndexReader extends TermsIndexReaderBase {
       
       version = readHeader(in);
       this.indexDivisor = indexDivisor;
+      
+      if (version >= VariableGapTermsIndexWriter.VERSION_CHECKSUM) {
+        CodecUtil.checksumEntireFile(in);
+      }
 
       seekDir(in, dirOffset);
 
@@ -119,7 +123,7 @@ public class VariableGapTermsIndexReader extends TermsIndexReaderBase {
     private BytesRefFSTEnum.InputOutput<Long> current;
 
     public IndexEnum(FST<Long> fst) {
-      fstEnum = new BytesRefFSTEnum<Long>(fst);
+      fstEnum = new BytesRefFSTEnum<>(fst);
     }
 
     @Override
@@ -185,7 +189,7 @@ public class VariableGapTermsIndexReader extends TermsIndexReaderBase {
       if (fst == null) {
         IndexInput clone = in.clone();
         clone.seek(indexStart);
-        fst = new FST<Long>(clone, fstOutputs);
+        fst = new FST<>(clone, fstOutputs);
         clone.close();
 
         /*
@@ -200,8 +204,8 @@ public class VariableGapTermsIndexReader extends TermsIndexReaderBase {
           // subsample
           final IntsRef scratchIntsRef = new IntsRef();
           final PositiveIntOutputs outputs = PositiveIntOutputs.getSingleton();
-          final Builder<Long> builder = new Builder<Long>(FST.INPUT_TYPE.BYTE1, outputs);
-          final BytesRefFSTEnum<Long> fstEnum = new BytesRefFSTEnum<Long>(fst);
+          final Builder<Long> builder = new Builder<>(FST.INPUT_TYPE.BYTE1, outputs);
+          final BytesRefFSTEnum<Long> fstEnum = new BytesRefFSTEnum<>(fst);
           BytesRefFSTEnum.InputOutput<Long> result;
           int count = indexDivisor;
           while((result = fstEnum.next()) != null) {
@@ -240,7 +244,10 @@ public class VariableGapTermsIndexReader extends TermsIndexReaderBase {
   }
 
   private void seekDir(IndexInput input, long dirOffset) throws IOException {
-    if (version >= VariableGapTermsIndexWriter.VERSION_APPEND_ONLY) {
+    if (version >= VariableGapTermsIndexWriter.VERSION_CHECKSUM) {
+      input.seek(input.length() - CodecUtil.footerLength() - 8);
+      dirOffset = input.readLong();
+    } else if (version >= VariableGapTermsIndexWriter.VERSION_APPEND_ONLY) {
       input.seek(input.length() - 8);
       dirOffset = input.readLong();
     }

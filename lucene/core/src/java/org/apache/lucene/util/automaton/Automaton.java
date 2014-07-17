@@ -269,8 +269,8 @@ public class Automaton implements Cloneable {
   public State[] getNumberedStates() {
     if (numberedStates == null) {
       expandSingleton();
-      final Set<State> visited = new HashSet<State>();
-      final LinkedList<State> worklist = new LinkedList<State>();
+      final Set<State> visited = new HashSet<>();
+      final LinkedList<State> worklist = new LinkedList<>();
       State states[] = new State[4];
       int upto = 0;
       worklist.add(initial);
@@ -334,9 +334,9 @@ public class Automaton implements Cloneable {
    */
   public Set<State> getAcceptStates() {
     expandSingleton();
-    HashSet<State> accepts = new HashSet<State>();
-    HashSet<State> visited = new HashSet<State>();
-    LinkedList<State> worklist = new LinkedList<State>();
+    HashSet<State> accepts = new HashSet<>();
+    HashSet<State> visited = new HashSet<>();
+    LinkedList<State> worklist = new LinkedList<>();
     worklist.add(initial);
     visited.add(initial);
     while (worklist.size() > 0) {
@@ -400,7 +400,7 @@ public class Automaton implements Cloneable {
    */
   int[] getStartPoints() {
     final State[] states = getNumberedStates();
-    Set<Integer> pointset = new HashSet<Integer>();
+    Set<Integer> pointset = new HashSet<>();
     pointset.add(Character.MIN_CODE_POINT);
     for (State s : states) {
       for (Transition t : s.getTransitions()) {
@@ -424,7 +424,7 @@ public class Automaton implements Cloneable {
    */
   private State[] getLiveStates() {
     final State[] states = getNumberedStates();
-    Set<State> live = new HashSet<State>();
+    Set<State> live = new HashSet<>();
     for (State q : states) {
       if (q.isAccept()) {
         live.add(q);
@@ -433,13 +433,13 @@ public class Automaton implements Cloneable {
     // map<state, set<state>>
     @SuppressWarnings({"rawtypes","unchecked"}) Set<State> map[] = new Set[states.length];
     for (int i = 0; i < map.length; i++)
-      map[i] = new HashSet<State>();
+      map[i] = new HashSet<>();
     for (State s : states) {
       for(int i=0;i<s.numTransitions;i++) {
         map[s.transitionsArray[i].to.number].add(s);
       }
     }
-    LinkedList<State> worklist = new LinkedList<State>(live);
+    LinkedList<State> worklist = new LinkedList<>(live);
     while (worklist.size() > 0) {
       State s = worklist.removeFirst();
       for (State p : map[s.number])
@@ -640,7 +640,7 @@ public class Automaton implements Cloneable {
     try {
       Automaton a = (Automaton) super.clone();
       if (!isSingleton()) {
-        HashMap<State,State> m = new HashMap<State,State>();
+        HashMap<State,State> m = new HashMap<>();
         State[] states = getNumberedStates();
         for (State s : states)
           m.put(s, new State());

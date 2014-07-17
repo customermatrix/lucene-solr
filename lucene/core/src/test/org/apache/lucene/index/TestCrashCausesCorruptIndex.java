@@ -32,7 +32,7 @@ import org.apache.lucene.store.FilterDirectory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.util.LuceneTestCase;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 
 public class TestCrashCausesCorruptIndex extends LuceneTestCase  {
 
@@ -42,7 +42,7 @@ public class TestCrashCausesCorruptIndex extends LuceneTestCase  {
    * LUCENE-3627: This test fails.
    */
   public void testCrashCorruptsIndexing() throws Exception {
-    path = _TestUtil.getTempDir("testCrashCorruptsIndexing");
+    path = createTempDir("testCrashCorruptsIndexing");
         
     indexAndCrashOnCreateOutputSegments2();
 
@@ -82,7 +82,7 @@ public class TestCrashCausesCorruptIndex extends LuceneTestCase  {
     }
     // writes segments_3
     indexWriter.close();
-    assertFalse(realDirectory.fileExists("segments_2"));
+    assertFalse(slowFileExists(realDirectory, "segments_2"));
     crashAfterCreateOutput.close();
   }
     
@@ -102,7 +102,7 @@ public class TestCrashCausesCorruptIndex extends LuceneTestCase  {
     // however, to test the fix, the following lines should pass as well.
     indexWriter.addDocument(getDocument());
     indexWriter.close();
-    assertFalse(realDirectory.fileExists("segments_2"));
+    assertFalse(slowFileExists(realDirectory, "segments_2"));
     realDirectory.close();
   }
     

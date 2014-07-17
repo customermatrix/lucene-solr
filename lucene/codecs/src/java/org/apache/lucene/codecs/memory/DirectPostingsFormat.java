@@ -110,6 +110,7 @@ public final class DirectPostingsFormat extends PostingsFormat {
     if (state.context.context != IOContext.Context.MERGE) {
       FieldsProducer loadedPostings;
       try {
+        postings.checkIntegrity();
         loadedPostings = new DirectFields(state, postings, minSkipCount, lowFreqCutoff);
       } finally {
         postings.close();
@@ -122,7 +123,7 @@ public final class DirectPostingsFormat extends PostingsFormat {
   }
 
   private static final class DirectFields extends FieldsProducer {
-    private final Map<String,DirectField> fields = new TreeMap<String,DirectField>();
+    private final Map<String,DirectField> fields = new TreeMap<>();
 
     public DirectFields(SegmentReadState state, Fields fields, int minSkipCount, int lowFreqCutoff) throws IOException {
       for (String field : fields) {
@@ -166,6 +167,12 @@ public final class DirectPostingsFormat extends PostingsFormat {
         sizeInBytes += entry.getValue().ramBytesUsed();
       }
       return sizeInBytes;
+    }
+
+    @Override
+    public void checkIntegrity() throws IOException {
+      // if we read entirely into ram, we already validated.
+      // otherwise returned the raw postings reader
     }
   }
 

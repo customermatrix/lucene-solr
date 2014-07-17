@@ -24,12 +24,13 @@ import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.codecs.lucene46.Lucene46Codec;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.store.CompoundFileDirectory;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.LuceneTestCase;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 
 /**
  * Test that a plain default puts codec headers in all files.
@@ -39,21 +40,26 @@ public class TestAllFilesHaveCodecHeader extends LuceneTestCase {
     Directory dir = newDirectory();
     IndexWriterConfig conf = newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()));
     conf.setCodec(new Lucene46Codec());
-    // riw should sometimes create docvalues fields, etc
     RandomIndexWriter riw = new RandomIndexWriter(random(), dir, conf);
     Document doc = new Document();
     // these fields should sometimes get term vectors, etc
     Field idField = newStringField("id", "", Field.Store.NO);
     Field bodyField = newTextField("body", "", Field.Store.NO);
+    Field dvField = new NumericDocValuesField("dv", 5);
     doc.add(idField);
     doc.add(bodyField);
+    doc.add(dvField);
     for (int i = 0; i < 100; i++) {
       idField.setStringValue(Integer.toString(i));
-      bodyField.setStringValue(_TestUtil.randomUnicodeString(random()));
+      bodyField.setStringValue(TestUtil.randomUnicodeString(random()));
       riw.addDocument(doc);
       if (random().nextInt(7) == 0) {
         riw.commit();
       }
+      // TODO: we should make a new format with a clean header...
+      // if (random().nextInt(20) == 0) {
+      //  riw.deleteDocuments(new Term("id", Integer.toString(i)));
+      // }
     }
     riw.close();
     checkHeaders(dir);
@@ -62,6 +68,9 @@ public class TestAllFilesHaveCodecHeader extends LuceneTestCase {
   
   private void checkHeaders(Directory dir) throws IOException {
     for (String file : dir.listAll()) {
+      if (file.equals(IndexWriter.WRITE_LOCK_NAME)) {
+        continue; // write.lock has no header, thats ok
+      }
       if (file.equals(IndexFileNames.SEGMENTS_GEN)) {
         continue; // segments.gen has no header, thats ok
       }

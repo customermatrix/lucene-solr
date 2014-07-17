@@ -17,9 +17,20 @@ package org.apache.lucene.index;
  * limitations under the License.
  */
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map.Entry;
+import java.util.Map;
+import java.util.Set;
+
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.DocValuesFormat;
 import org.apache.lucene.codecs.DocValuesProducer;
+import org.apache.lucene.codecs.FieldInfosFormat;
 import org.apache.lucene.codecs.StoredFieldsReader;
 import org.apache.lucene.codecs.TermVectorsReader;
 import org.apache.lucene.index.FieldInfo.DocValuesType;
@@ -30,13 +41,6 @@ import org.apache.lucene.store.IOContext;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.CloseableThreadLocal;
 import org.apache.lucene.util.IOUtils;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
 
 /**
  * IndexReader implementation over a single segment. 
@@ -61,22 +65,23 @@ public final class SegmentReader extends AtomicReader {
   final CloseableThreadLocal<Map<String,Object>> docValuesLocal = new CloseableThreadLocal<Map<String,Object>>() {
     @Override
     protected Map<String,Object> initialValue() {
-      return new HashMap<String,Object>();
+      return new HashMap<>();
     }
   };
 
   final CloseableThreadLocal<Map<String,Bits>> docsWithFieldLocal = new CloseableThreadLocal<Map<String,Bits>>() {
     @Override
     protected Map<String,Bits> initialValue() {
-      return new HashMap<String,Bits>();
+      return new HashMap<>();
     }
   };
 
-  final Map<String,DocValuesProducer> dvProducers = new HashMap<String,DocValuesProducer>();
+  final Map<String,DocValuesProducer> dvProducersByField = new HashMap<>();
+  final Set<DocValuesProducer> dvProducers = Collections.newSetFromMap(new IdentityHashMap<DocValuesProducer,Boolean>());
   
   final FieldInfos fieldInfos;
 
-  private final List<Long> dvGens = new ArrayList<Long>();
+  private final List<Long> dvGens = new ArrayList<>();
   
   /**
    * Constructs a new SegmentReader with a new core.
@@ -177,16 +182,18 @@ public final class SegmentReader extends AtomicReader {
     
 //      System.out.println("[" + Thread.currentThread().getName() + "] SR.initDocValuesProducers: segInfo=" + si + "; gens=" + genInfos.keySet());
     
+    // TODO: can we avoid iterating over fieldinfos several times and creating maps of all this stuff if dv updates do not exist?
+    
     for (Entry<Long,List<FieldInfo>> e : genInfos.entrySet()) {
       Long gen = e.getKey();
       List<FieldInfo> infos = e.getValue();
       DocValuesProducer dvp = segDocValues.getDocValuesProducer(gen, si, IOContext.READ, dir, dvFormat, infos, getTermInfosIndexDivisor());
+      dvGens.add(gen);
       for (FieldInfo fi : infos) {
-        dvProducers.put(fi.name, dvp);
+        dvProducersByField.put(fi.name, dvp);
+        dvProducers.add(dvp);
       }
     }
-    
-    dvGens.addAll(genInfos.keySet());
   }
   
   /**
@@ -212,7 +219,9 @@ public final class SegmentReader extends AtomicReader {
     
     try {
       final String segmentSuffix = info.getFieldInfosGen() == -1 ? "" : Long.toString(info.getFieldInfosGen(), Character.MAX_RADIX);
-      return info.info.getCodec().fieldInfosFormat().getFieldInfosReader().read(dir, info.info.name, segmentSuffix, IOContext.READONCE);
+      Codec codec = info.info.getCodec();
+      FieldInfosFormat fisFormat = codec.fieldInfosFormat();
+      return fisFormat.getFieldInfosReader().read(dir, info.info.name, segmentSuffix, IOContext.READONCE);
     } finally {
       if (closeDir) {
         dir.close();
@@ -222,7 +231,7 @@ public final class SegmentReader extends AtomicReader {
   
   // returns a gen->List<FieldInfo> mapping. Fields without DV updates have gen=-1
   private Map<Long,List<FieldInfo>> getGenInfos() {
-    final Map<Long,List<FieldInfo>> genInfos = new HashMap<Long,List<FieldInfo>>();
+    final Map<Long,List<FieldInfo>> genInfos = new HashMap<>();
     for (FieldInfo fi : fieldInfos) {
       if (fi.getDocValuesType() == null) {
         continue;
@@ -230,7 +239,7 @@ public final class SegmentReader extends AtomicReader {
       long gen = fi.getDocValuesGen();
       List<FieldInfo> infos = genInfos.get(gen);
       if (infos == null) {
-        infos = new ArrayList<FieldInfo>();
+        infos = new ArrayList<>();
         genInfos.put(gen, infos);
       }
       infos.add(fi);
@@ -250,7 +259,7 @@ public final class SegmentReader extends AtomicReader {
     try {
       core.decRef();
     } finally {
-      dvProducers.clear();
+      dvProducersByField.clear();
       try {
         IOUtils.close(docValuesLocal, docsWithFieldLocal);
       } finally {
@@ -401,13 +410,12 @@ public final class SegmentReader extends AtomicReader {
       return null;
     }
 
-    DocValuesProducer dvProducer = dvProducers.get(field);
-    assert dvProducer != null;
-
     Map<String,Object> dvFields = docValuesLocal.get();
 
     NumericDocValues dvs = (NumericDocValues) dvFields.get(field);
     if (dvs == null) {
+      DocValuesProducer dvProducer = dvProducersByField.get(field);
+      assert dvProducer != null;
       dvs = dvProducer.getNumeric(fi);
       dvFields.put(field, dvs);
     }
@@ -428,13 +436,12 @@ public final class SegmentReader extends AtomicReader {
       return null;
     }
 
-    DocValuesProducer dvProducer = dvProducers.get(field);
-    assert dvProducer != null;
-
     Map<String,Bits> dvFields = docsWithFieldLocal.get();
 
     Bits dvs = dvFields.get(field);
     if (dvs == null) {
+      DocValuesProducer dvProducer = dvProducersByField.get(field);
+      assert dvProducer != null;
       dvs = dvProducer.getDocsWithField(fi);
       dvFields.put(field, dvs);
     }
@@ -450,13 +457,12 @@ public final class SegmentReader extends AtomicReader {
       return null;
     }
 
-    DocValuesProducer dvProducer = dvProducers.get(field);
-    assert dvProducer != null;
-
     Map<String,Object> dvFields = docValuesLocal.get();
 
     BinaryDocValues dvs = (BinaryDocValues) dvFields.get(field);
     if (dvs == null) {
+      DocValuesProducer dvProducer = dvProducersByField.get(field);
+      assert dvProducer != null;
       dvs = dvProducer.getBinary(fi);
       dvFields.put(field, dvs);
     }
@@ -472,13 +478,12 @@ public final class SegmentReader extends AtomicReader {
       return null;
     }
 
-    DocValuesProducer dvProducer = dvProducers.get(field);
-    assert dvProducer != null;
-
     Map<String,Object> dvFields = docValuesLocal.get();
 
     SortedDocValues dvs = (SortedDocValues) dvFields.get(field);
     if (dvs == null) {
+      DocValuesProducer dvProducer = dvProducersByField.get(field);
+      assert dvProducer != null;
       dvs = dvProducer.getSorted(fi);
       dvFields.put(field, dvs);
     }
@@ -494,13 +499,12 @@ public final class SegmentReader extends AtomicReader {
       return null;
     }
 
-    DocValuesProducer dvProducer = dvProducers.get(field);
-    assert dvProducer != null;
-
     Map<String,Object> dvFields = docValuesLocal.get();
 
     SortedSetDocValues dvs = (SortedSetDocValues) dvFields.get(field);
     if (dvs == null) {
+      DocValuesProducer dvProducer = dvProducersByField.get(field);
+      assert dvProducer != null;
       dvs = dvProducer.getSortedSet(fi);
       dvFields.put(field, dvs);
     }
@@ -554,12 +558,45 @@ public final class SegmentReader extends AtomicReader {
   public long ramBytesUsed() {
     ensureOpen();
     long ramBytesUsed = 0;
-    if (segDocValues != null) {
-      ramBytesUsed += segDocValues.ramBytesUsed();
+    if (dvProducers != null) {
+      for (DocValuesProducer producer : dvProducers) {
+        ramBytesUsed += producer.ramBytesUsed();
+      }
     }
     if (core != null) {
       ramBytesUsed += core.ramBytesUsed();
     }
     return ramBytesUsed;
+  }
+  
+  @Override
+  public void checkIntegrity() throws IOException {
+    ensureOpen();
+    
+    // stored fields
+    getFieldsReader().checkIntegrity();
+    
+    // term vectors
+    TermVectorsReader termVectorsReader = getTermVectorsReader();
+    if (termVectorsReader != null) {
+      termVectorsReader.checkIntegrity();
+    }
+    
+    // terms/postings
+    if (core.fields != null) {
+      core.fields.checkIntegrity();
+    }
+    
+    // norms
+    if (core.normsProducer != null) {
+      core.normsProducer.checkIntegrity();
+    }
+    
+    // docvalues
+    if (dvProducers != null) {
+      for (DocValuesProducer producer : dvProducers) {
+        producer.checkIntegrity();
+      }
+    }
   }
 }

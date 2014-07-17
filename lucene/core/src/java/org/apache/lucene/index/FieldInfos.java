@@ -41,8 +41,8 @@ public class FieldInfos implements Iterable<FieldInfo> {
   private final boolean hasNorms;
   private final boolean hasDocValues;
   
-  private final SortedMap<Integer,FieldInfo> byNumber = new TreeMap<Integer,FieldInfo>();
-  private final HashMap<String,FieldInfo> byName = new HashMap<String,FieldInfo>();
+  private final SortedMap<Integer,FieldInfo> byNumber = new TreeMap<>();
+  private final HashMap<String,FieldInfo> byName = new HashMap<>();
   private final Collection<FieldInfo> values; // for an unmodifiable iterator
   
   /**
@@ -58,6 +58,9 @@ public class FieldInfos implements Iterable<FieldInfo> {
     boolean hasDocValues = false;
     
     for (FieldInfo info : infos) {
+      if (info.number < 0) {
+        throw new IllegalArgumentException("illegal field number: " + info.number + " for field " + info.name);
+      }
       FieldInfo previous = byNumber.put(info.number, info);
       if (previous != null) {
         throw new IllegalArgumentException("duplicate field numbers: " + previous.name + " and " + info.name + " have: " + info.number);
@@ -148,15 +151,16 @@ public class FieldInfos implements Iterable<FieldInfo> {
 
   /**
    * Return the fieldinfo object referenced by the fieldNumber.
-   * @param fieldNumber field's number. if this is negative, this method
-   *        always returns null.
+   * @param fieldNumber field's number.
    * @return the FieldInfo object or null when the given fieldNumber
    * doesn't exist.
-   */  
-  // TODO: fix this negative behavior, this was something related to Lucene3x?
-  // if the field name is empty, i think it writes the fieldNumber as -1
+   * @throws IllegalArgumentException if fieldNumber is negative
+   */
   public FieldInfo fieldInfo(int fieldNumber) {
-    return (fieldNumber >= 0) ? byNumber.get(fieldNumber) : null;
+    if (fieldNumber < 0) {
+      throw new IllegalArgumentException("Illegal field number: " + fieldNumber);
+    }
+    return byNumber.get(fieldNumber);
   }
   
   static final class FieldNumbers {
@@ -174,9 +178,9 @@ public class FieldInfos implements Iterable<FieldInfo> {
     private int lowestUnassignedFieldNumber = -1;
     
     FieldNumbers() {
-      this.nameToNumber = new HashMap<String, Integer>();
-      this.numberToName = new HashMap<Integer, String>();
-      this.docValuesType = new HashMap<String,DocValuesType>();
+      this.nameToNumber = new HashMap<>();
+      this.numberToName = new HashMap<>();
+      this.docValuesType = new HashMap<>();
     }
     
     /**
@@ -250,7 +254,7 @@ public class FieldInfos implements Iterable<FieldInfo> {
   }
   
   static final class Builder {
-    private final HashMap<String,FieldInfo> byName = new HashMap<String,FieldInfo>();
+    private final HashMap<String,FieldInfo> byName = new HashMap<>();
     final FieldNumbers globalFieldNumbers;
 
     Builder() {

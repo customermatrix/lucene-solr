@@ -54,12 +54,13 @@ import java.io.IOException;
  * <ul>
  *   <li>Compound (.cfs) --&gt; Header, FileData <sup>FileCount</sup></li>
  *   <li>Compound Entry Table (.cfe) --&gt; Header, FileCount, &lt;FileName,
- *       DataOffset, DataLength&gt; <sup>FileCount</sup></li>
+ *       DataOffset, DataLength&gt; <sup>FileCount</sup>, Footer</li>
  *   <li>Header --&gt; {@link CodecUtil#writeHeader CodecHeader}</li>
  *   <li>FileCount --&gt; {@link DataOutput#writeVInt VInt}</li>
  *   <li>DataOffset,DataLength --&gt; {@link DataOutput#writeLong UInt64}</li>
  *   <li>FileName --&gt; {@link DataOutput#writeString String}</li>
  *   <li>FileData --&gt; raw file data</li>
+ *   <li>Footer --&gt; {@link CodecUtil#writeFooter CodecFooter}</li>
  * </ul>
  * <p>Notes:</p>
  * <ul>
@@ -127,12 +128,13 @@ public final class CompoundFileDirectory extends BaseDirectory {
   /** Helper method that reads CFS entries from an input stream */
   private static final Map<String, FileEntry> readEntries(
       IndexInputSlicer handle, Directory dir, String name) throws IOException {
-    IOException priorE = null;
-    IndexInput stream = null, entriesStream = null;
+    IndexInput stream = null; 
+    ChecksumIndexInput entriesStream = null;
+    Map<String,FileEntry> mapping = null;
     // read the first VInt. If it is negative, it's the version number
     // otherwise it's the count (pre-3.1 indexes)
+    boolean success = false;
     try {
-      final Map<String,FileEntry> mapping;
       stream = handle.openFullSlice();
       final int firstInt = stream.readVInt();
       // impossible for 3.0 to have 63 files in a .cfs, CFS writer was not visible
@@ -147,15 +149,15 @@ public final class CompoundFileDirectory extends BaseDirectory {
           throw new CorruptIndexException("Illegal/impossible header for CFS file: " 
                                          + secondByte + "," + thirdByte + "," + fourthByte);
         }
-        CodecUtil.checkHeaderNoMagic(stream, CompoundFileWriter.DATA_CODEC, 
-            CompoundFileWriter.VERSION_START, CompoundFileWriter.VERSION_START);
+        int version = CodecUtil.checkHeaderNoMagic(stream, CompoundFileWriter.DATA_CODEC, 
+            CompoundFileWriter.VERSION_START, CompoundFileWriter.VERSION_CURRENT);
         final String entriesFileName = IndexFileNames.segmentFileName(
                                               IndexFileNames.stripExtension(name), "",
                                               IndexFileNames.COMPOUND_FILE_ENTRIES_EXTENSION);
-        entriesStream = dir.openInput(entriesFileName, IOContext.READONCE);
-        CodecUtil.checkHeader(entriesStream, CompoundFileWriter.ENTRY_CODEC, CompoundFileWriter.VERSION_START, CompoundFileWriter.VERSION_START);
+        entriesStream = dir.openChecksumInput(entriesFileName, IOContext.READONCE);
+        CodecUtil.checkHeader(entriesStream, CompoundFileWriter.ENTRY_CODEC, CompoundFileWriter.VERSION_START, CompoundFileWriter.VERSION_CURRENT);
         final int numEntries = entriesStream.readVInt();
-        mapping = new HashMap<String,FileEntry>(numEntries);
+        mapping = new HashMap<>(numEntries);
         for (int i = 0; i < numEntries; i++) {
           final FileEntry fileEntry = new FileEntry();
           final String id = entriesStream.readString();
@@ -166,23 +168,29 @@ public final class CompoundFileDirectory extends BaseDirectory {
           fileEntry.offset = entriesStream.readLong();
           fileEntry.length = entriesStream.readLong();
         }
+        if (version >= CompoundFileWriter.VERSION_CHECKSUM) {
+          CodecUtil.checkFooter(entriesStream);
+        } else {
+          CodecUtil.checkEOF(entriesStream);
+        }
       } else {
         // TODO remove once 3.x is not supported anymore
         mapping = readLegacyEntries(stream, firstInt);
       }
-      return mapping;
-    } catch (IOException ioe) {
-      priorE = ioe;
+      success = true;
     } finally {
-      IOUtils.closeWhileHandlingException(priorE, stream, entriesStream);
+      if (success) {
+        IOUtils.close(stream, entriesStream);
+      } else {
+        IOUtils.closeWhileHandlingException(stream, entriesStream);
+      }
     }
-    // this is needed until Java 7's real try-with-resources:
-    throw new AssertionError("impossible to get here");
+    return mapping;
   }
 
   private static Map<String, FileEntry> readLegacyEntries(IndexInput stream,
       int firstInt) throws CorruptIndexException, IOException {
-    final Map<String,FileEntry> entries = new HashMap<String,FileEntry>();
+    final Map<String,FileEntry> entries = new HashMap<>();
     final int count;
     final boolean stripSegmentName;
     if (firstInt < CompoundFileWriter.FORMAT_PRE_VERSION) {

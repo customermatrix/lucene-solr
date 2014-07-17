@@ -50,7 +50,7 @@ public class TestIndexReaderClose extends LuceneTestCase {
           }
         }
       };
-      List<IndexReader.ReaderClosedListener> listeners = new ArrayList<IndexReader.ReaderClosedListener>();
+      List<IndexReader.ReaderClosedListener> listeners = new ArrayList<>();
       int listenerCount = random().nextInt(20);
       AtomicInteger count = new AtomicInteger();
       boolean faultySet = false;

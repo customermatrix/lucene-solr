@@ -81,7 +81,7 @@ final class SegmentCoreReaders {
   final CloseableThreadLocal<Map<String,Object>> normsLocal = new CloseableThreadLocal<Map<String,Object>>() {
     @Override
     protected Map<String,Object> initialValue() {
-      return new HashMap<String,Object>();
+      return new HashMap<>();
     }
   };
 
@@ -195,6 +195,8 @@ final class SegmentCoreReaders {
         } catch (Throwable t) {
           if (th == null) {
             th = t;
+          } else {
+            th.addSuppressed(t);
           }
         }
       }

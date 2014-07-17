@@ -35,6 +35,7 @@ import org.apache.lucene.index.FieldInfos;
 import org.apache.lucene.index.Fields;
 import org.apache.lucene.index.IndexFileNames;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LogMergePolicy;
 import org.apache.lucene.index.MultiFields;
@@ -51,7 +52,7 @@ import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.LockObtainFailedException;
 import org.apache.lucene.util.LuceneTestCase;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
@@ -76,7 +77,7 @@ public class TestTermInfosReaderIndex extends LuceneTestCase {
         new MockAnalyzer(random(), MockTokenizer.KEYWORD, false)).setUseCompoundFile(false);
     
     termIndexInterval = config.getTermIndexInterval();
-    indexDivisor = _TestUtil.nextInt(random(), 1, 10);
+    indexDivisor = TestUtil.nextInt(random(), 1, 10);
     NUMBER_OF_DOCUMENTS = atLeast(100);
     NUMBER_OF_FIELDS = atLeast(Math.max(10, 3*termIndexInterval*indexDivisor/NUMBER_OF_DOCUMENTS));
     
@@ -154,7 +155,7 @@ public class TestTermInfosReaderIndex extends LuceneTestCase {
   }
 
   private static List<Term> sample(Random random, IndexReader reader, int size) throws IOException {
-    List<Term> sample = new ArrayList<Term>();
+    List<Term> sample = new ArrayList<>();
     Fields fields = MultiFields.getFields(reader);
     for (String field : fields) {
       Terms terms = fields.terms(field);
@@ -190,7 +191,7 @@ public class TestTermInfosReaderIndex extends LuceneTestCase {
   }
 
   private static void populate(Directory directory, IndexWriterConfig config) throws CorruptIndexException, LockObtainFailedException, IOException {
-    RandomIndexWriter writer = new RandomIndexWriter(random(), directory, config);
+    IndexWriter writer = new IndexWriter(directory, config);
     for (int i = 0; i < NUMBER_OF_DOCUMENTS; i++) {
       Document document = new Document();
       for (int f = 0; f < NUMBER_OF_FIELDS; f++) {

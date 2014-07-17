@@ -47,6 +47,7 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.BaseTokenStreamTestCase;
 import org.apache.lucene.analysis.CachingTokenFilter;
 import org.apache.lucene.analysis.CharFilter;
+import org.apache.lucene.analysis.CrankyTokenFilter;
 import org.apache.lucene.analysis.MockGraphTokenFilter;
 import org.apache.lucene.analysis.MockRandomLookaheadTokenFilter;
 import org.apache.lucene.analysis.MockTokenFilter;
@@ -62,8 +63,8 @@ import org.apache.lucene.analysis.commongrams.CommonGramsQueryFilter;
 import org.apache.lucene.analysis.compound.HyphenationCompoundWordTokenFilter;
 import org.apache.lucene.analysis.compound.TestCompoundWordTokenFilter;
 import org.apache.lucene.analysis.compound.hyphenation.HyphenationTree;
-import org.apache.lucene.analysis.hunspell.HunspellDictionary;
-import org.apache.lucene.analysis.hunspell.HunspellDictionaryTest;
+import org.apache.lucene.analysis.hunspell.Dictionary;
+import org.apache.lucene.analysis.hunspell.TestHunspellStemFilter;
 import org.apache.lucene.analysis.miscellaneous.HyphenatedWordsFilter;
 import org.apache.lucene.analysis.miscellaneous.LimitTokenCountFilter;
 import org.apache.lucene.analysis.miscellaneous.LimitTokenPositionFilter;
@@ -79,7 +80,6 @@ import org.apache.lucene.analysis.payloads.PayloadEncoder;
 import org.apache.lucene.analysis.snowball.TestSnowball;
 import org.apache.lucene.analysis.standard.StandardTokenizer;
 import org.apache.lucene.analysis.synonym.SynonymMap;
-import org.apache.lucene.analysis.th.ThaiWordFilter;
 import org.apache.lucene.analysis.util.CharArrayMap;
 import org.apache.lucene.analysis.util.CharArraySet;
 import org.apache.lucene.analysis.wikipedia.WikipediaTokenizer;
@@ -87,8 +87,8 @@ import org.apache.lucene.util.AttributeSource;
 import org.apache.lucene.util.AttributeSource.AttributeFactory;
 import org.apache.lucene.util.CharsRef;
 import org.apache.lucene.util.Rethrow;
+import org.apache.lucene.util.TestUtil;
 import org.apache.lucene.util.Version;
-import org.apache.lucene.util._TestUtil;
 import org.apache.lucene.util.automaton.CharacterRunAutomaton;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -112,7 +112,7 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
     };
   };
 
-  private static final Map<Constructor<?>,Predicate<Object[]>> brokenConstructors = new HashMap<Constructor<?>, Predicate<Object[]>>();
+  private static final Map<Constructor<?>,Predicate<Object[]>> brokenConstructors = new HashMap<>();
   static {
     try {
       brokenConstructors.put(
@@ -144,11 +144,11 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
           // offsets offenders?
           // doesn't actual reset itself!
           CachingTokenFilter.class,
+          // Not broken, simulates brokenness:
+          CrankyTokenFilter.class,
           // Not broken: we forcefully add this, so we shouldn't
           // also randomly pick it:
-          ValidatingTokenFilter.class,
-          // broken!
-          WordDelimiterFilter.class)) {
+          ValidatingTokenFilter.class)) {
         for (Constructor<?> ctor : c.getConstructors()) {
           brokenConstructors.put(ctor, ALWAYS);
         }
@@ -160,7 +160,7 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
 
   // TODO: also fix these and remove (maybe):
   // Classes/options that don't produce consistent graph offsets:
-  private static final Map<Constructor<?>,Predicate<Object[]>> brokenOffsetsConstructors = new HashMap<Constructor<?>, Predicate<Object[]>>();
+  private static final Map<Constructor<?>,Predicate<Object[]>> brokenOffsetsConstructors = new HashMap<>();
   static {
     try {
       for (Class<?> c : Arrays.<Class<?>>asList(
@@ -169,15 +169,15 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
           // TODO: it seems to mess up offsets!?
           WikipediaTokenizer.class,
           // TODO: doesn't handle graph inputs
-          ThaiWordFilter.class,
-          // TODO: doesn't handle graph inputs
           CJKBigramFilter.class,
           // TODO: doesn't handle graph inputs (or even look at positionIncrement)
           HyphenatedWordsFilter.class,
           // TODO: LUCENE-4983
           CommonGramsFilter.class,
           // TODO: doesn't handle graph inputs
-          CommonGramsQueryFilter.class)) {
+          CommonGramsQueryFilter.class,
+          // TODO: probably doesnt handle graph inputs, too afraid to try
+          WordDelimiterFilter.class)) {
         for (Constructor<?> ctor : c.getConstructors()) {
           brokenOffsetsConstructors.put(ctor, ALWAYS);
         }
@@ -190,9 +190,9 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
   @BeforeClass
   public static void beforeClass() throws Exception {
     List<Class<?>> analysisClasses = getClassesForPackage("org.apache.lucene.analysis");
-    tokenizers = new ArrayList<Constructor<? extends Tokenizer>>();
-    tokenfilters = new ArrayList<Constructor<? extends TokenFilter>>();
-    charfilters = new ArrayList<Constructor<? extends CharFilter>>();
+    tokenizers = new ArrayList<>();
+    tokenfilters = new ArrayList<>();
+    charfilters = new ArrayList<>();
     for (final Class<?> c : analysisClasses) {
       final int modifiers = c.getModifiers();
       if (
@@ -259,7 +259,7 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
   }
   
   public static List<Class<?>> getClassesForPackage(String pckgname) throws Exception {
-    final List<Class<?>> classes = new ArrayList<Class<?>>();
+    final List<Class<?>> classes = new ArrayList<>();
     collectClassesForPackage(pckgname, classes);
     assertFalse("No classes found in package '"+pckgname+"'; maybe your test classes are packaged as JAR file?", classes.isEmpty());
     return classes;
@@ -307,7 +307,7 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
         // TODO: could cause huge ram usage to use full int range for some filters
         // (e.g. allocate enormous arrays)
         // return Integer.valueOf(random.nextInt());
-        return Integer.valueOf(_TestUtil.nextInt(random, -100, 100));
+        return Integer.valueOf(TestUtil.nextInt(random, -100, 100));
       }
     });
     put(char.class, new ArgProducer() {
@@ -360,7 +360,7 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
     put(Set.class, new ArgProducer() {
       @Override public Object create(Random random) {
         // TypeTokenFilter
-        Set<String> set = new HashSet<String>();
+        Set<String> set = new HashSet<>();
         int num = random.nextInt(5);
         for (int i = 0; i < num; i++) {
           set.add(StandardTokenizer.TOKEN_TYPES[random.nextInt(StandardTokenizer.TOKEN_TYPES.length)]);
@@ -371,10 +371,10 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
     put(Collection.class, new ArgProducer() {
       @Override public Object create(Random random) {
         // CapitalizationFilter
-        Collection<char[]> col = new ArrayList<char[]>();
+        Collection<char[]> col = new ArrayList<>();
         int num = random.nextInt(5);
         for (int i = 0; i < num; i++) {
-          col.add(_TestUtil.randomSimpleString(random).toCharArray());
+          col.add(TestUtil.randomSimpleString(random).toCharArray());
         }
         return col;
       }
@@ -385,7 +385,7 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
         CharArraySet set = new CharArraySet(TEST_VERSION_CURRENT, num, random.nextBoolean());
         for (int i = 0; i < num; i++) {
           // TODO: make nastier
-          set.add(_TestUtil.randomSimpleString(random));
+          set.add(TestUtil.randomSimpleString(random));
         }
         return set;
       }
@@ -408,13 +408,13 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
         return new IdentityEncoder(); // the other encoders will throw exceptions if tokens arent numbers?
       }
     });
-    put(HunspellDictionary.class, new ArgProducer() {
+    put(Dictionary.class, new ArgProducer() {
       @Override public Object create(Random random) {
         // TODO: make nastier
-        InputStream affixStream = HunspellDictionaryTest.class.getResourceAsStream("test.aff");
-        InputStream dictStream = HunspellDictionaryTest.class.getResourceAsStream("test.dic");
+        InputStream affixStream = TestHunspellStemFilter.class.getResourceAsStream("simple.aff");
+        InputStream dictStream = TestHunspellStemFilter.class.getResourceAsStream("simple.dic");
         try {
-         return new HunspellDictionary(affixStream, dictStream, TEST_VERSION_CURRENT);
+         return new Dictionary(affixStream, dictStream);
         } catch (Exception ex) {
           Rethrow.rethrow(ex);
           return null; // unreachable code
@@ -467,7 +467,7 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
           // a token type
           return StandardTokenizer.TOKEN_TYPES[random.nextInt(StandardTokenizer.TOKEN_TYPES.length)];
         } else {
-          return _TestUtil.randomSimpleString(random);
+          return TestUtil.randomSimpleString(random);
         }
       }
     });
@@ -475,13 +475,13 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
       @Override public Object create(Random random) {
         NormalizeCharMap.Builder builder = new NormalizeCharMap.Builder();
         // we can't add duplicate keys, or NormalizeCharMap gets angry
-        Set<String> keys = new HashSet<String>();
+        Set<String> keys = new HashSet<>();
         int num = random.nextInt(5);
         //System.out.println("NormalizeCharMap=");
         for (int i = 0; i < num; i++) {
-          String key = _TestUtil.randomSimpleString(random);
+          String key = TestUtil.randomSimpleString(random);
           if (!keys.contains(key) && key.length() > 0) {
-            String value = _TestUtil.randomSimpleString(random);
+            String value = TestUtil.randomSimpleString(random);
             builder.add(key, value);
             keys.add(key);
             //System.out.println("mapping: '" + key + "' => '" + value + "'");
@@ -505,10 +505,10 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
     put(CharArrayMap.class, new ArgProducer() {
       @Override public Object create(Random random) {
         int num = random.nextInt(10);
-        CharArrayMap<String> map = new CharArrayMap<String>(TEST_VERSION_CURRENT, num, random.nextBoolean());
+        CharArrayMap<String> map = new CharArrayMap<>(TEST_VERSION_CURRENT, num, random.nextBoolean());
         for (int i = 0; i < num; i++) {
           // TODO: make nastier
-          map.put(_TestUtil.randomSimpleString(random), _TestUtil.randomSimpleString(random));
+          map.put(TestUtil.randomSimpleString(random), TestUtil.randomSimpleString(random));
         }
         return map;
       }
@@ -520,11 +520,11 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
         for (int i = 0; i < num; i++) {
           String input = ""; 
           do {
-            input = _TestUtil.randomRealisticUnicodeString(random);
+            input = TestUtil.randomRealisticUnicodeString(random);
           } while(input.isEmpty());
-          String out = ""; _TestUtil.randomSimpleString(random);
+          String out = ""; TestUtil.randomSimpleString(random);
           do {
-            out = _TestUtil.randomRealisticUnicodeString(random);
+            out = TestUtil.randomRealisticUnicodeString(random);
           } while(out.isEmpty());
           builder.add(input, out);
         }
@@ -559,7 +559,7 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
       
       private String randomNonEmptyString(Random random) {
         while(true) {
-          final String s = _TestUtil.randomUnicodeString(random).trim();
+          final String s = TestUtil.randomUnicodeString(random).trim();
           if (s.length() != 0 && s.indexOf('\u0000') == -1) {
             return s;
           }
@@ -707,7 +707,7 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
         */
         descr.append("\n  ");
         descr.append(ctor.getDeclaringClass().getName());
-        String params = Arrays.toString(args);
+        String params = Arrays.deepToString(args);
         params = params.substring(1, params.length()-1);
         descr.append("(").append(params).append(")");
         return instance;
@@ -914,7 +914,7 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
   }
   
   public void testRandomChains() throws Throwable {
-    int numIterations = atLeast(10);
+    int numIterations = atLeast(20);
     Random random = random();
     for (int i = 0; i < numIterations; i++) {
       MockRandomAnalyzer a = new MockRandomAnalyzer(random.nextLong());
@@ -922,7 +922,26 @@ public class TestRandomChains extends BaseTokenStreamTestCase {
         System.out.println("Creating random analyzer:" + a);
       }
       try {
-        checkRandomData(random, a, 200, 20, false,
+        checkRandomData(random, a, 500*RANDOM_MULTIPLIER, 20, false,
+                        false /* We already validate our own offsets... */);
+      } catch (Throwable e) {
+        System.err.println("Exception from random analyzer: " + a);
+        throw e;
+      }
+    }
+  }
+  
+  // we might regret this decision...
+  public void testRandomChainsWithLargeStrings() throws Throwable {
+    int numIterations = atLeast(20);
+    Random random = random();
+    for (int i = 0; i < numIterations; i++) {
+      MockRandomAnalyzer a = new MockRandomAnalyzer(random.nextLong());
+      if (VERBOSE) {
+        System.out.println("Creating random analyzer:" + a);
+      }
+      try {
+        checkRandomData(random, a, 50*RANDOM_MULTIPLIER, 128, false,
                         false /* We already validate our own offsets... */);
       } catch (Throwable e) {
         System.err.println("Exception from random analyzer: " + a);

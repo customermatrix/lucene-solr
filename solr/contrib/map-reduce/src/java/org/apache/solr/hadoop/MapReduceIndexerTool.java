@@ -27,11 +27,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
 import java.io.Writer;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -83,7 +83,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.kitesdk.morphline.base.Fields;
 
-import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.io.ByteStreams;
 
@@ -546,7 +545,7 @@ public class MapReduceIndexerTool extends Configured implements Tool {
 
   static List<List<String>> buildShardUrls(List<Object> urls, Integer numShards) {
     if (urls == null) return null;
-    List<List<String>> shardUrls = new ArrayList<List<String>>(urls.size());
+    List<List<String>> shardUrls = new ArrayList<>(urls.size());
     List<String> list = null;
     
     int sz;
@@ -556,7 +555,7 @@ public class MapReduceIndexerTool extends Configured implements Tool {
     sz = (int) Math.ceil(urls.size() / (float)numShards);
     for (int i = 0; i < urls.size(); i++) {
       if (i % sz == 0) {
-        list = new ArrayList<String>();
+        list = new ArrayList<>();
         shardUrls.add(list);
       }
       list.add((String) urls.get(i));
@@ -925,7 +924,7 @@ public class MapReduceIndexerTool extends Configured implements Tool {
     FileSystem fs = fullInputList.getFileSystem(conf);
     FSDataOutputStream out = fs.create(fullInputList);
     try {
-      Writer writer = new BufferedWriter(new OutputStreamWriter(out, "UTF-8"));
+      Writer writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8));
       
       for (Path inputFile : inputFiles) {
         FileSystem inputFileFs = inputFile.getFileSystem(conf);
@@ -950,7 +949,7 @@ public class MapReduceIndexerTool extends Configured implements Tool {
           in = inputList.getFileSystem(conf).open(inputList);
         }
         try {
-          BufferedReader reader = new BufferedReader(new InputStreamReader(in, "UTF-8"));
+          BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
           String line;
           while ((line = reader.readLine()) != null) {
             writer.write(line + "\n");
@@ -989,7 +988,7 @@ public class MapReduceIndexerTool extends Configured implements Tool {
   
   private void randomizeFewInputFiles(FileSystem fs, Path outputStep2Dir, Path fullInputList) throws IOException {    
     List<String> lines = new ArrayList();
-    BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(fullInputList), "UTF-8"));
+    BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(fullInputList), StandardCharsets.UTF_8));
     try {
       String line;
       while ((line = reader.readLine()) != null) {
@@ -1002,7 +1001,7 @@ public class MapReduceIndexerTool extends Configured implements Tool {
     Collections.shuffle(lines, new Random(421439783L)); // constant seed for reproducability
     
     FSDataOutputStream out = fs.create(new Path(outputStep2Dir, FULL_INPUT_LIST));
-    Writer writer = new BufferedWriter(new OutputStreamWriter(out, "UTF-8"));
+    Writer writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8));
     try {
       for (String line : lines) {
         writer.write(line + "\n");
@@ -1136,7 +1135,7 @@ public class MapReduceIndexerTool extends Configured implements Tool {
    * turnaround during trial & debug sessions
    */
   private void dryRun(MorphlineMapRunner runner, FileSystem fs, Path fullInputList) throws IOException {    
-    BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(fullInputList), "UTF-8"));
+    BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(fullInputList), StandardCharsets.UTF_8));
     try {
       String line;
       while ((line = reader.readLine()) != null) {
@@ -1155,7 +1154,7 @@ public class MapReduceIndexerTool extends Configured implements Tool {
     int numFiles = 0;
     FSDataOutputStream out = fs.create(fullInputList);
     try {
-      Writer writer = new BufferedWriter(new OutputStreamWriter(out, "UTF-8"));
+      Writer writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8));
       for (FileStatus stat : dirs) {
         LOG.debug("Adding path {}", stat.getPath());
         Path dir = new Path(stat.getPath(), "data/index");
@@ -1264,7 +1263,7 @@ public class MapReduceIndexerTool extends Configured implements Tool {
       byte[] bytes = ByteStreams.toByteArray(in);
       in.close();
       Preconditions.checkArgument(bytes.length > 0);
-      int solrShard = Integer.parseInt(new String(bytes, Charsets.UTF_8));
+      int solrShard = Integer.parseInt(new String(bytes, StandardCharsets.UTF_8));
       if (!delete(solrShardNumberFile, false, fs)) {
         return false;
       }

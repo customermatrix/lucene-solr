@@ -56,10 +56,10 @@ public class TestStressIndexing2 extends LuceneTestCase {
         Thread.yield();
     }
   }
-  //
+//  
   public void testRandomIWReader() throws Throwable {
     Directory dir = newDirectory();
-
+    
     // TODO: verify equals using IW.getReader
     DocsAndWriter dw = indexRandomIWReader(5, 3, 100, dir);
     DirectoryReader reader = dw.writer.getReader();
@@ -69,7 +69,7 @@ public class TestStressIndexing2 extends LuceneTestCase {
     dw.writer.close();
     dir.close();
   }
-
+  
   public void testRandom() throws Throwable {
     Directory dir1 = newDirectory();
     Directory dir2 = newDirectory();
@@ -137,27 +137,27 @@ public class TestStressIndexing2 extends LuceneTestCase {
   // This test avoids using any extra synchronization in the multiple
   // indexing threads to test that IndexWriter does correctly synchronize
   // everything.
-
+  
   public static class DocsAndWriter {
     Map<String,Document> docs;
     IndexWriter writer;
   }
-
+  
   public DocsAndWriter indexRandomIWReader(int nThreads, int iterations, int range, Directory dir) throws IOException, InterruptedException {
-    Map<String,Document> docs = new HashMap<String,Document>();
+    Map<String,Document> docs = new HashMap<>();
     IndexWriter w = RandomIndexWriter.mockIndexWriter(dir, newIndexWriterConfig(
         TEST_VERSION_CURRENT, new MockAnalyzer(random())).setOpenMode(OpenMode.CREATE).setRAMBufferSizeMB(
-        0.1).setMaxBufferedDocs(maxBufferedDocs).setMergePolicy(newLogMergePolicy()), new YieldTestPoint());
+            0.1).setMaxBufferedDocs(maxBufferedDocs).setMergePolicy(newLogMergePolicy()), new YieldTestPoint());
     w.commit();
     LogMergePolicy lmp = (LogMergePolicy) w.getConfig().getMergePolicy();
     lmp.setNoCFSRatio(0.0);
     lmp.setMergeFactor(mergeFactor);
     /***
-     w.setMaxMergeDocs(Integer.MAX_VALUE);
-     w.setMaxFieldLength(10000);
-     w.setRAMBufferSizeMB(1);
-     w.setMergeFactor(10);
-     ***/
+        w.setMaxMergeDocs(Integer.MAX_VALUE);
+        w.setMaxFieldLength(10000);
+        w.setRAMBufferSizeMB(1);
+        w.setMergeFactor(10);
+    ***/
 
     threads = new IndexingThread[nThreads];
     for (int i=0; i<threads.length; i++) {
@@ -186,20 +186,20 @@ public class TestStressIndexing2 extends LuceneTestCase {
       }
     }
 
-    _TestUtil.checkIndex(dir);
+    TestUtil.checkIndex(dir);
     DocsAndWriter dw = new DocsAndWriter();
     dw.docs = docs;
     dw.writer = w;
     return dw;
   }
-
+  
   public Map<String,Document> indexRandom(int nThreads, int iterations, int range, Directory dir, int maxThreadStates,
                                           boolean doReaderPooling) throws IOException, InterruptedException {
-    Map<String,Document> docs = new HashMap<String,Document>();
+    Map<String,Document> docs = new HashMap<>();
     IndexWriter w = RandomIndexWriter.mockIndexWriter(dir, newIndexWriterConfig(
         TEST_VERSION_CURRENT, new MockAnalyzer(random())).setOpenMode(OpenMode.CREATE)
-        .setRAMBufferSizeMB(0.1).setMaxBufferedDocs(maxBufferedDocs).setIndexerThreadPool(new ThreadAffinityDocumentsWriterThreadPool(maxThreadStates))
-        .setReaderPooling(doReaderPooling).setMergePolicy(newLogMergePolicy()), new YieldTestPoint());
+             .setRAMBufferSizeMB(0.1).setMaxBufferedDocs(maxBufferedDocs).setIndexerThreadPool(new DocumentsWriterPerThreadPool(maxThreadStates))
+             .setReaderPooling(doReaderPooling).setMergePolicy(newLogMergePolicy()), new YieldTestPoint());
     LogMergePolicy lmp = (LogMergePolicy) w.getConfig().getMergePolicy();
     lmp.setNoCFSRatio(0.0);
     lmp.setMergeFactor(mergeFactor);
@@ -222,7 +222,7 @@ public class TestStressIndexing2 extends LuceneTestCase {
     }
 
     //w.forceMerge(1);
-    w.close();
+    w.close();    
 
     for (int i=0; i<threads.length; i++) {
       IndexingThread th = threads[i];
@@ -232,12 +232,12 @@ public class TestStressIndexing2 extends LuceneTestCase {
     }
 
     //System.out.println("TEST: checkindex");
-    _TestUtil.checkIndex(dir);
+    TestUtil.checkIndex(dir);
 
     return docs;
   }
 
-
+  
   public static void indexSerial(Random random, Map<String,Document> docs, Directory dir) throws IOException {
     IndexWriter w = new IndexWriter(dir, LuceneTestCase.newIndexWriterConfig(random, TEST_VERSION_CURRENT, new MockAnalyzer(random)).setMergePolicy(newLogMergePolicy()));
 
@@ -245,11 +245,11 @@ public class TestStressIndexing2 extends LuceneTestCase {
     Iterator<Document> iter = docs.values().iterator();
     while (iter.hasNext()) {
       Document d = iter.next();
-      ArrayList<IndexableField> fields = new ArrayList<IndexableField>();
+      ArrayList<IndexableField> fields = new ArrayList<>();
       fields.addAll(d.getFields());
       // put fields in same order each time
       Collections.sort(fields, fieldNameComparator);
-
+      
       Document d1 = new Document();
       for (int i=0; i<fields.size(); i++) {
         d1.add(fields.get(i));
@@ -257,10 +257,10 @@ public class TestStressIndexing2 extends LuceneTestCase {
       w.addDocument(d1);
       // System.out.println("indexing "+d1);
     }
-
+    
     w.close();
   }
-
+  
   public void verifyEquals(Random r, DirectoryReader r1, Directory dir2, String idField) throws Throwable {
     DirectoryReader r2 = DirectoryReader.open(dir2);
     verifyEquals(r1, r2, idField);
@@ -317,14 +317,14 @@ public class TestStressIndexing2 extends LuceneTestCase {
     final Terms terms1 = f1.terms(idField);
     if (terms1 == null) {
       assertTrue(MultiFields.getFields(r2) == null ||
-          MultiFields.getFields(r2).terms(idField) == null);
+                 MultiFields.getFields(r2).terms(idField) == null);
       return;
     }
     final TermsEnum termsEnum = terms1.iterator(null);
 
     final Bits liveDocs1 = MultiFields.getLiveDocs(r1);
     final Bits liveDocs2 = MultiFields.getLiveDocs(r2);
-
+    
     Fields fields = MultiFields.getFields(r2);
     if (fields == null) {
       // make sure r1 is in fact empty (eg has only all
@@ -332,7 +332,7 @@ public class TestStressIndexing2 extends LuceneTestCase {
       Bits liveDocs = MultiFields.getLiveDocs(r1);
       DocsEnum docs = null;
       while(termsEnum.next() != null) {
-        docs = _TestUtil.docs(random(), termsEnum, liveDocs, docs, DocsEnum.FLAG_NONE);
+        docs = TestUtil.docs(random(), termsEnum, liveDocs, docs, DocsEnum.FLAG_NONE);
         while(docs.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
           fail("r1 is not empty but r2 is");
         }
@@ -352,9 +352,9 @@ public class TestStressIndexing2 extends LuceneTestCase {
         break;
       }
 
-      termDocs1 = _TestUtil.docs(random(), termsEnum, liveDocs1, termDocs1, DocsEnum.FLAG_NONE);
+      termDocs1 = TestUtil.docs(random(), termsEnum, liveDocs1, termDocs1, DocsEnum.FLAG_NONE);
       if (termsEnum2.seekExact(term)) {
-        termDocs2 = _TestUtil.docs(random(), termsEnum2, liveDocs2, termDocs2, DocsEnum.FLAG_NONE);
+        termDocs2 = TestUtil.docs(random(), termsEnum2, liveDocs2, termDocs2, DocsEnum.FLAG_NONE);
       } else {
         termDocs2 = null;
       }
@@ -411,7 +411,7 @@ public class TestStressIndexing2 extends LuceneTestCase {
                   System.out.println("          pos=" + dpEnum.nextPosition());
                 }
               } else {
-                dEnum = _TestUtil.docs(random(), termsEnum3, null, dEnum, DocsEnum.FLAG_FREQS);
+                dEnum = TestUtil.docs(random(), termsEnum3, null, dEnum, DocsEnum.FLAG_FREQS);
                 assertNotNull(dEnum);
                 assertTrue(dEnum.nextDoc() != DocIdSetIterator.NO_MORE_DOCS);
                 final int freq = dEnum.freq();
@@ -420,7 +420,7 @@ public class TestStressIndexing2 extends LuceneTestCase {
             }
           }
         }
-
+        
         Fields tv2 = r2.getTermVectors(id2);
         System.out.println("  d2=" + tv2);
         if (tv2 != null) {
@@ -443,7 +443,7 @@ public class TestStressIndexing2 extends LuceneTestCase {
                   System.out.println("          pos=" + dpEnum.nextPosition());
                 }
               } else {
-                dEnum = _TestUtil.docs(random(), termsEnum3, null, dEnum, DocsEnum.FLAG_FREQS);
+                dEnum = TestUtil.docs(random(), termsEnum3, null, dEnum, DocsEnum.FLAG_FREQS);
                 assertNotNull(dEnum);
                 assertTrue(dEnum.nextDoc() != DocIdSetIterator.NO_MORE_DOCS);
                 final int freq = dEnum.freq();
@@ -452,7 +452,7 @@ public class TestStressIndexing2 extends LuceneTestCase {
             }
           }
         }
-
+        
         throw e;
       }
     }
@@ -500,9 +500,9 @@ public class TestStressIndexing2 extends LuceneTestCase {
           termsEnum1 = null;
           continue;
         }
-
+        
         //System.out.println("TEST: term1=" + term1);
-        docs1 = _TestUtil.docs(random(), termsEnum1, liveDocs1, docs1, DocsEnum.FLAG_FREQS);
+        docs1 = TestUtil.docs(random(), termsEnum1, liveDocs1, docs1, DocsEnum.FLAG_FREQS);
         while (docs1.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
           int d = docs1.docID();
           int f = docs1.freq();
@@ -533,9 +533,9 @@ public class TestStressIndexing2 extends LuceneTestCase {
           termsEnum2 = null;
           continue;
         }
-
+        
         //System.out.println("TEST: term1=" + term1);
-        docs2 = _TestUtil.docs(random(), termsEnum2, liveDocs2, docs2, DocsEnum.FLAG_FREQS);
+        docs2 = TestUtil.docs(random(), termsEnum2, liveDocs2, docs2, DocsEnum.FLAG_FREQS);
         while (docs2.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
           int d = r2r1[docs2.docID()];
           int f = docs2.freq();
@@ -562,9 +562,9 @@ public class TestStressIndexing2 extends LuceneTestCase {
       // now compare
       for (int i=0; i<len1; i++) {
         assertEquals("i=" + i + " len=" + len1 + " d1=" + (info1[i]>>>32) + " f1=" + (info1[i]&Integer.MAX_VALUE) + " d2=" + (info2[i]>>>32) + " f2=" + (info2[i]&Integer.MAX_VALUE) +
-            " field=" + field1 + " term=" + term1.utf8ToString(),
-            info1[i],
-            info2[i]);
+                     " field=" + field1 + " term=" + term1.utf8ToString(),
+                     info1[i],
+                     info2[i]);
       }
     }
   }
@@ -587,9 +587,9 @@ public class TestStressIndexing2 extends LuceneTestCase {
         String s1 = f1.stringValue();
         String s2 = f2.stringValue();
         assertEquals(ff1 + " : " + ff2, s1,s2);
+        }
       }
     }
-  }
 
   public static void verifyEquals(Fields d1, Fields d2) throws IOException {
     if (d1 == null) {
@@ -616,14 +616,14 @@ public class TestStressIndexing2 extends LuceneTestCase {
       DocsAndPositionsEnum dpEnum2 = null;
       DocsEnum dEnum1 = null;
       DocsEnum dEnum2 = null;
-
+      
       BytesRef term1;
       while ((term1 = termsEnum1.next()) != null) {
         BytesRef term2 = termsEnum2.next();
         assertEquals(term1, term2);
         assertEquals(termsEnum1.totalTermFreq(),
-            termsEnum2.totalTermFreq());
-
+                     termsEnum2.totalTermFreq());
+        
         dpEnum1 = termsEnum1.docsAndPositions(null, dpEnum1);
         dpEnum2 = termsEnum2.docsAndPositions(null, dpEnum2);
         if (dpEnum1 != null) {
@@ -634,7 +634,7 @@ public class TestStressIndexing2 extends LuceneTestCase {
           //int docID2 = dpEnum2.nextDoc();
           //assertEquals(docID1, docID2);
           assertTrue(docID1 != DocIdSetIterator.NO_MORE_DOCS);
-
+          
           int freq1 = dpEnum1.freq();
           int freq2 = dpEnum2.freq();
           assertEquals(freq1, freq2);
@@ -653,16 +653,16 @@ public class TestStressIndexing2 extends LuceneTestCase {
             assertEquals(pos1, pos2);
             if (offsetAtt1 != null) {
               assertEquals(offsetAtt1.startOffset(),
-                  offsetAtt2.startOffset());
+                           offsetAtt2.startOffset());
               assertEquals(offsetAtt1.endOffset(),
-                  offsetAtt2.endOffset());
+                           offsetAtt2.endOffset());
             }
           }
           assertEquals(DocIdSetIterator.NO_MORE_DOCS, dpEnum1.nextDoc());
           assertEquals(DocIdSetIterator.NO_MORE_DOCS, dpEnum2.nextDoc());
         } else {
-          dEnum1 = _TestUtil.docs(random(), termsEnum1, null, dEnum1, DocsEnum.FLAG_FREQS);
-          dEnum2 = _TestUtil.docs(random(), termsEnum2, null, dEnum2, DocsEnum.FLAG_FREQS);
+          dEnum1 = TestUtil.docs(random(), termsEnum1, null, dEnum1, DocsEnum.FLAG_FREQS);
+          dEnum2 = TestUtil.docs(random(), termsEnum2, null, dEnum2, DocsEnum.FLAG_FREQS);
           assertNotNull(dEnum1);
           assertNotNull(dEnum2);
           int docID1 = dEnum1.nextDoc();
@@ -689,7 +689,7 @@ public class TestStressIndexing2 extends LuceneTestCase {
     int base;
     int range;
     int iterations;
-    Map<String,Document> docs = new HashMap<String,Document>();
+    Map<String,Document> docs = new HashMap<>();  
     Random r;
 
     public int nextInt(int lim) {
@@ -747,7 +747,7 @@ public class TestStressIndexing2 extends LuceneTestCase {
       }
       return new String(arr);
     }
-
+    
     public String getUTF8String(int nTokens) {
       int upto = 0;
       Arrays.fill(buffer, (char) 0);
@@ -766,8 +766,8 @@ public class TestStressIndexing2 extends LuceneTestCase {
       FieldType customType1 = new FieldType(TextField.TYPE_STORED);
       customType1.setTokenized(false);
       customType1.setOmitNorms(true);
-
-      ArrayList<Field> fields = new ArrayList<Field>();
+      
+      ArrayList<Field> fields = new ArrayList<>();      
       String idString = getIdString();
       Field idField =  newField("id", idString, customType1);
       fields.add(idField);
@@ -777,21 +777,21 @@ public class TestStressIndexing2 extends LuceneTestCase {
 
         FieldType customType = new FieldType();
         switch (nextInt(4)) {
-          case 0:
-            break;
-          case 1:
-            customType.setStoreTermVectors(true);
-            break;
-          case 2:
-            customType.setStoreTermVectors(true);
-            customType.setStoreTermVectorPositions(true);
-            break;
-          case 3:
-            customType.setStoreTermVectors(true);
-            customType.setStoreTermVectorOffsets(true);
-            break;
+        case 0:
+          break;
+        case 1:
+          customType.setStoreTermVectors(true);
+          break;
+        case 2:
+          customType.setStoreTermVectors(true);
+          customType.setStoreTermVectorPositions(true);
+          break;
+        case 3:
+          customType.setStoreTermVectors(true);
+          customType.setStoreTermVectorOffsets(true);
+          break;
         }
-
+        
         switch (nextInt(4)) {
           case 0:
             customType.setStored(true);
@@ -816,7 +816,7 @@ public class TestStressIndexing2 extends LuceneTestCase {
             customType.setIndexed(true);
             customType.setTokenized(true);
             fields.add(newField("f" + nextInt(100), getString(bigFieldSize), customType));
-            break;
+            break;          
         }
       }
 

@@ -38,6 +38,7 @@ import org.apache.solr.common.params.CollectionParams.CollectionAction;
 import org.apache.solr.common.params.MapSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.util.SSLTestConfig;
+import org.apache.solr.SolrTestCaseJ4.SuppressSSL;
 import org.apache.lucene.util.LuceneTestCase.Slow;
 
 /**
@@ -46,10 +47,8 @@ import org.apache.lucene.util.LuceneTestCase.Slow;
  * off in the cluster.
  */
 @Slow
+@SuppressSSL
 public class SSLMigrationTest extends AbstractFullDistribZkTestBase {
-  static {
-    ALLOW_SSL = false;
-  }
   
   @Override
   public void doTest() throws Exception {

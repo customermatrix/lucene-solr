@@ -72,7 +72,7 @@ public class SimpleQParserPlugin extends QParserPlugin {
   public static final String NAME = "simple";
 
   /** Map of string operators to their int counterparts in SimpleQueryParser. */
-  private static final Map<String, Integer> OPERATORS = new HashMap<String, Integer>();
+  private static final Map<String, Integer> OPERATORS = new HashMap<>();
 
   /* Setup the map of possible operators. */
   static {
@@ -155,7 +155,7 @@ public class SimpleQParserPlugin extends QParserPlugin {
 
       // Create a SimpleQueryParser using the analyzer from the schema.
       final IndexSchema schema = req.getSchema();
-      parser = new SolrSimpleQueryParser(req.getSchema().getAnalyzer(), queryFields, enabledOps, this, schema);
+      parser = new SolrSimpleQueryParser(req.getSchema().getQueryAnalyzer(), queryFields, enabledOps, this, schema);
 
       // Set the default operator to be either 'AND' or 'OR' for the query.
       QueryParser.Operator defaultOp = QueryParsing.getQueryParserDefaultOperator(req.getSchema(), defaultParams.get(QueryParsing.OP));

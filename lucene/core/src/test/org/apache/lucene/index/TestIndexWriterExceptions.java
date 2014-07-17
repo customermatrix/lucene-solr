@@ -21,7 +21,9 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.StringReader;
+import java.nio.file.NoSuchFileException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
@@ -59,7 +61,7 @@ import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.InfoStream;
 import org.apache.lucene.util.LuceneTestCase;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 
 public class TestIndexWriterExceptions extends LuceneTestCase {
 
@@ -176,7 +178,7 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
         Term idTerm = new Term("id", id);
         try {
           if (r.nextBoolean()) {
-            writer.updateDocuments(idTerm, new DocCopyIterator(doc, _TestUtil.nextInt(r, 1, 20)));
+            writer.updateDocuments(idTerm, new DocCopyIterator(doc, TestUtil.nextInt(r, 1, 20)));
           } else {
             writer.updateDocument(idTerm, doc);
           }
@@ -186,7 +188,7 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
             re.printStackTrace(System.out);
           }
           try {
-            _TestUtil.checkIndex(writer.getDirectory());
+            TestUtil.checkIndex(writer.getDirectory());
           } catch (IOException ioe) {
             System.out.println(Thread.currentThread().getName() + ": unexpected exception1");
             ioe.printStackTrace(System.out);
@@ -217,7 +219,7 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
     }
   }
 
-  ThreadLocal<Thread> doFail = new ThreadLocal<Thread>();
+  ThreadLocal<Thread> doFail = new ThreadLocal<>();
 
   private class TestPoint1 implements RandomIndexWriter.TestPoint {
     Random r = new Random(random().nextLong());
@@ -510,12 +512,12 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
 
     // Make sure the doc that hit the exception was marked
     // as deleted:
-    DocsEnum tdocs = _TestUtil.docs(random(), reader,
-                                    t.field(),
-                                    new BytesRef(t.text()),
-                                    MultiFields.getLiveDocs(reader),
-                                    null,
-                                    0);
+    DocsEnum tdocs = TestUtil.docs(random(), reader,
+        t.field(),
+        new BytesRef(t.text()),
+        MultiFields.getLiveDocs(reader),
+        null,
+        0);
 
     int count = 0;
     while(tdocs.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
@@ -946,7 +948,8 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
       }
       assertTrue(failure.failOnCommit && failure.failOnDeleteFile);
       w.rollback();
-      assertEquals(0, dir.listAll().length);
+      String files[] = dir.listAll();
+      assertTrue(files.length == 0 || Arrays.equals(files, new String[] { IndexWriter.WRITE_LOCK_NAME }));
       dir.close();
     }
   }
@@ -1283,7 +1286,7 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
           }
           if (random().nextInt(20) == 0) {
             w.commit();
-            _TestUtil.checkIndex(dir);
+            TestUtil.checkIndex(dir);
           }
             
         }
@@ -1304,7 +1307,7 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
           }
           if (random().nextInt(20) == 0) {
             w.commit();
-            _TestUtil.checkIndex(dir);
+            TestUtil.checkIndex(dir);
           }
         }
         document = new Document();
@@ -1363,7 +1366,7 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
       w.addDocument(doc);
     }
     
-    final List<Document> docs = new ArrayList<Document>();
+    final List<Document> docs = new ArrayList<>();
     for(int docCount=0;docCount<7;docCount++) {
       Document doc = new Document();
       docs.add(doc);
@@ -1422,7 +1425,7 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
     }
 
     // Use addDocs (no exception) to get docs in the index:
-    final List<Document> docs = new ArrayList<Document>();
+    final List<Document> docs = new ArrayList<>();
     final int numDocs2 = random().nextInt(25);
     for(int docCount=0;docCount<numDocs2;docCount++) {
       Document doc = new Document();
@@ -1441,7 +1444,7 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
     }
 
     docs.clear();
-    final int limit = _TestUtil.nextInt(random(), 2, 25);
+    final int limit = TestUtil.nextInt(random(), 2, 25);
     final int crashAt = random().nextInt(limit);
     for(int docCount=0;docCount<limit;docCount++) {
       Document doc = new Document();
@@ -1579,7 +1582,7 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
     try {
       doc = new Document();
       // try to boost with norms omitted
-      List<IndexableField> list = new ArrayList<IndexableField>();
+      List<IndexableField> list = new ArrayList<>();
       list.add(new IndexableField() {
 
         @Override
@@ -1684,7 +1687,7 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
       } catch (CorruptIndexException ex) {
         // Exceptions are fine - we are running out of file handlers here
         continue;
-      } catch (FileNotFoundException ex) {
+      } catch (FileNotFoundException | NoSuchFileException ex) {
         continue;
       }
       failure.clearDoFail();
@@ -1789,6 +1792,8 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
         if (defaultCodecSupportsDocValues()) {
           doc.add(new NumericDocValuesField("f", 1L));
           doc.add(new NumericDocValuesField("cf", 2L));
+          doc.add(new BinaryDocValuesField("bf", TestBinaryDocValuesUpdates.toBytes(1L)));
+          doc.add(new BinaryDocValuesField("bcf", TestBinaryDocValuesUpdates.toBytes(2L)));
         }
         w.addDocument(doc);
       }
@@ -1802,34 +1807,56 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
 
       shouldFail.set(true);
       boolean doClose = false;
-
+      int updatingDocID = -1;
+      long updatingValue = -1;
       try {
-
         boolean defaultCodecSupportsFieldUpdates = defaultCodecSupportsFieldUpdates();
         for(int i=0;i<numDocs;i++) {
           if (random().nextInt(10) == 7) {
             boolean fieldUpdate = defaultCodecSupportsFieldUpdates && random().nextBoolean();
+            int docid = docBase + i;
             if (fieldUpdate) {
               long value = iter;
               if (VERBOSE) {
-                System.out.println("  update id=" + (docBase+i) + " to value " + value);
+                System.out.println("  update id=" + docid + " to value " + value);
               }
-              w.updateNumericDocValue(new Term("id", Integer.toString(docBase + i)), "f", value);
-              w.updateNumericDocValue(new Term("id", Integer.toString(docBase + i)), "cf", value * 2);
+              Term idTerm = new Term("id", Integer.toString(docid));
+              updatingDocID = docid; // record that we're updating that document
+              updatingValue = value; // and its updating value
+              if (random().nextBoolean()) { // update only numeric field
+                w.updateNumericDocValue(idTerm, "f", value);
+                w.updateNumericDocValue(idTerm, "cf", value * 2);
+              } else if (random().nextBoolean()) {
+                w.updateBinaryDocValue(idTerm, "bf", TestBinaryDocValuesUpdates.toBytes(value));
+                w.updateBinaryDocValue(idTerm, "bcf", TestBinaryDocValuesUpdates.toBytes(value * 2));
+              } else {
+                w.updateNumericDocValue(idTerm, "f", value);
+                w.updateNumericDocValue(idTerm, "cf", value * 2);
+                w.updateBinaryDocValue(idTerm, "bf", TestBinaryDocValuesUpdates.toBytes(value));
+                w.updateBinaryDocValue(idTerm, "bcf", TestBinaryDocValuesUpdates.toBytes(value * 2));
+              }
+              // record that we successfully updated the document. this is
+              // important when we later assert the value of the DV fields of
+              // that document - since we update two fields that depend on each
+              // other, could be that one of the fields successfully updates,
+              // while the other fails (since we turn on random exceptions).
+              // while this is supported, it makes the test raise false alarms.
+              updatingDocID = -1;
+              updatingValue = -1;
             }
             
             // sometimes do both deletes and updates
             if (!fieldUpdate || random().nextBoolean()) {
               if (VERBOSE) {
-                System.out.println("  delete id=" + (docBase+i));
+                System.out.println("  delete id=" + docid);
               }
               deleteCount++;
-              w.deleteDocuments(new Term("id", ""+(docBase+i)));
+              w.deleteDocuments(new Term("id", ""+docid));
             }
           }
         }
 
-        // Trigger writeLiveDocs so we hit fake exc:
+        // Trigger writeLiveDocs + writeFieldUpdates so we hit fake exc:
         IndexReader r = w.getReader(true);
 
         // Sometimes we will make it here (we only randomly
@@ -1862,6 +1889,18 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
       }
       shouldFail.set(false);
 
+      if (updatingDocID != -1) {
+        // Updating this document did not succeed. Since the fields we assert on
+        // depend on each other, and the update may have gone through halfway,
+        // replay the update on both numeric and binary DV fields, so later
+        // asserts succeed.
+        Term idTerm = new Term("id", ""+updatingDocID);
+        w.updateNumericDocValue(idTerm, "f", updatingValue);
+        w.updateNumericDocValue(idTerm, "cf", updatingValue * 2);
+        w.updateBinaryDocValue(idTerm, "bf", TestBinaryDocValuesUpdates.toBytes(updatingValue));
+        w.updateBinaryDocValue(idTerm, "bcf", TestBinaryDocValuesUpdates.toBytes(updatingValue * 2));
+      }
+      
       IndexReader r;
 
       if (doClose && w != null) {
@@ -1890,13 +1929,18 @@ public class TestIndexWriterExceptions extends LuceneTestCase {
       }
       assertEquals(docCount-deleteCount, r.numDocs());
       if (defaultCodecSupportsDocValues()) {
+        BytesRef scratch = new BytesRef();
         for (AtomicReaderContext context : r.leaves()) {
-          Bits liveDocs = context.reader().getLiveDocs();
-          NumericDocValues f = context.reader().getNumericDocValues("f");
-          NumericDocValues cf = context.reader().getNumericDocValues("cf");
-          for (int i = 0; i < context.reader().maxDoc(); i++) {
+          AtomicReader reader = context.reader();
+          Bits liveDocs = reader.getLiveDocs();
+          NumericDocValues f = reader.getNumericDocValues("f");
+          NumericDocValues cf = reader.getNumericDocValues("cf");
+          BinaryDocValues bf = reader.getBinaryDocValues("bf");
+          BinaryDocValues bcf = reader.getBinaryDocValues("bcf");
+          for (int i = 0; i < reader.maxDoc(); i++) {
             if (liveDocs == null || liveDocs.get(i)) {
               assertEquals("doc=" + (docBase + i), cf.get(i), f.get(i) * 2);
+              assertEquals("doc=" + (docBase + i), TestBinaryDocValuesUpdates.getValue(bcf, i, scratch), TestBinaryDocValuesUpdates.getValue(bf, i, scratch) * 2);
             }
           }
         }

@@ -53,7 +53,7 @@ import org.apache.lucene.codecs.memory.FSTOrdPulsing41PostingsFormat;
 import org.apache.lucene.codecs.memory.FSTPostingsFormat;
 import org.apache.lucene.codecs.memory.FSTPulsing41PostingsFormat;
 import org.apache.lucene.util.LuceneTestCase;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 
 /**
  * Codec that assigns per-field random postings formats.
@@ -66,16 +66,16 @@ import org.apache.lucene.util._TestUtil;
  */
 public class RandomCodec extends Lucene46Codec {
   /** Shuffled list of postings formats to use for new mappings */
-  private List<PostingsFormat> formats = new ArrayList<PostingsFormat>();
+  private List<PostingsFormat> formats = new ArrayList<>();
   
   /** Shuffled list of docvalues formats to use for new mappings */
-  private List<DocValuesFormat> dvFormats = new ArrayList<DocValuesFormat>();
+  private List<DocValuesFormat> dvFormats = new ArrayList<>();
   
   /** unique set of format names this codec knows about */
-  public Set<String> formatNames = new HashSet<String>();
+  public Set<String> formatNames = new HashSet<>();
   
   /** unique set of docvalues format names this codec knows about */
-  public Set<String> dvFormatNames = new HashSet<String>();
+  public Set<String> dvFormatNames = new HashSet<>();
 
   /** memorized field->postingsformat mappings */
   // note: we have to sync this map even though its just for debugging/toString, 
@@ -121,9 +121,9 @@ public class RandomCodec extends Lucene46Codec {
     this.perFieldSeed = random.nextInt();
     // TODO: make it possible to specify min/max iterms per
     // block via CL:
-    int minItemsPerBlock = _TestUtil.nextInt(random, 2, 100);
+    int minItemsPerBlock = TestUtil.nextInt(random, 2, 100);
     int maxItemsPerBlock = 2*(Math.max(2, minItemsPerBlock-1)) + random.nextInt(100);
-    int lowFreqCutoff = _TestUtil.nextInt(random, 2, 100);
+    int lowFreqCutoff = TestUtil.nextInt(random, 2, 100);
 
     add(avoidCodecs,
         new Lucene41PostingsFormat(minItemsPerBlock, maxItemsPerBlock),
@@ -141,8 +141,8 @@ public class RandomCodec extends Lucene46Codec {
         //with such "wrapper" classes?
         new TestBloomFilteredLucene41Postings(),                
         new MockSepPostingsFormat(),
-        new MockFixedIntBlockPostingsFormat(_TestUtil.nextInt(random, 1, 2000)),
-        new MockVariableIntBlockPostingsFormat( _TestUtil.nextInt(random, 1, 127)),
+        new MockFixedIntBlockPostingsFormat(TestUtil.nextInt(random, 1, 2000)),
+        new MockVariableIntBlockPostingsFormat( TestUtil.nextInt(random, 1, 127)),
         new MockRandomPostingsFormat(random),
         new NestedPulsingPostingsFormat(),
         new Lucene41WithOrds(),

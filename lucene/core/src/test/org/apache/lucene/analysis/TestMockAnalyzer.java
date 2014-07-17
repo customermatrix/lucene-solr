@@ -35,7 +35,7 @@ import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 import org.apache.lucene.util.automaton.Automaton;
 import org.apache.lucene.util.automaton.AutomatonTestUtil;
 import org.apache.lucene.util.automaton.BasicAutomata;
@@ -213,18 +213,12 @@ public class TestMockAnalyzer extends BaseTokenStreamTestCase {
     String testString = "t";
     
     Analyzer analyzer = new MockAnalyzer(random());
-    Exception priorException = null;
-    TokenStream stream = analyzer.tokenStream("dummy", testString);
-    try {
+    try (TokenStream stream = analyzer.tokenStream("dummy", testString)) {
       stream.reset();
       while (stream.incrementToken()) {
         // consume
       }
       stream.end();
-    } catch (Exception e) {
-      priorException = e;
-    } finally {
-      IOUtils.closeWhileHandlingException(priorException, stream);
     }
     
     assertAnalyzesTo(analyzer, testString, new String[] { "t" });
@@ -241,7 +235,7 @@ public class TestMockAnalyzer extends BaseTokenStreamTestCase {
     for (int i = 0; i < iters; i++) {
       final CharacterRunAutomaton dfa = new CharacterRunAutomaton(AutomatonTestUtil.randomAutomaton(random()));
       final boolean lowercase = random().nextBoolean();
-      final int limit = _TestUtil.nextInt(random(), 0, 500);
+      final int limit = TestUtil.nextInt(random(), 0, 500);
       Analyzer a = new Analyzer() {
         @Override
         protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
@@ -257,22 +251,16 @@ public class TestMockAnalyzer extends BaseTokenStreamTestCase {
   public void testForwardOffsets() throws Exception {
     int num = atLeast(10000);
     for (int i = 0; i < num; i++) {
-      String s = _TestUtil.randomHtmlishString(random(), 20);
+      String s = TestUtil.randomHtmlishString(random(), 20);
       StringReader reader = new StringReader(s);
       MockCharFilter charfilter = new MockCharFilter(reader, 2);
       MockAnalyzer analyzer = new MockAnalyzer(random());
-      Exception priorException = null;
-      TokenStream ts = analyzer.tokenStream("bogus", charfilter);
-      try {
+      try (TokenStream ts = analyzer.tokenStream("bogus", charfilter)) {
         ts.reset();
         while (ts.incrementToken()) {
           ;
         }
         ts.end();
-      } catch (Exception e) {
-        priorException = e;
-      } finally {
-        IOUtils.closeWhileHandlingException(priorException, ts);
       }
     }
   }

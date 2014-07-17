@@ -270,7 +270,17 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
     // test field that is valid in schema and missing in some shards
     query("q","*:*", "rows",100, "facet","true", "facet.field",oddField, "facet.mincount",2);
 
+    query("q","*:*", "sort",i1+" desc", "stats", "true", "stats.field", "stats_dt");
     query("q","*:*", "sort",i1+" desc", "stats", "true", "stats.field", i1);
+    query("q","*:*", "sort",i1+" desc", "stats", "true", "stats.field", tdate_a);
+    query("q","*:*", "sort",i1+" desc", "stats", "true", "stats.field", tdate_b);
+
+    handle.put("stats_fields", UNORDERED);
+    query("q","*:*", "sort",i1+" desc", "stats", "true", 
+          "stats.field", "stats_dt", 
+          "stats.field", i1, 
+          "stats.field", tdate_a, 
+          "stats.field", tdate_b);
 
     /*** TODO: the failure may come back in "exception"
     try {
@@ -345,10 +355,10 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
     // test shards.tolerant=true
     for(int numDownServers = 0; numDownServers < jettys.size()-1; numDownServers++)
     {
-      List<JettySolrRunner> upJettys = new ArrayList<JettySolrRunner>(jettys);
-      List<SolrServer> upClients = new ArrayList<SolrServer>(clients);
-      List<JettySolrRunner> downJettys = new ArrayList<JettySolrRunner>();
-      List<String> upShards = new ArrayList<String>(Arrays.asList(shardsArr));
+      List<JettySolrRunner> upJettys = new ArrayList<>(jettys);
+      List<SolrServer> upClients = new ArrayList<>(clients);
+      List<JettySolrRunner> downJettys = new ArrayList<>();
+      List<String> upShards = new ArrayList<>(Arrays.asList(shardsArr));
       for(int i=0; i<numDownServers; i++)
       {
         // shut down some of the jettys
@@ -423,7 +433,12 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
     del("*:*"); // delete all docs and test stats request
     commit();
     try {
-      query("q", "*:*", "stats", "true", "stats.field", "stats_dt", "stats.calcdistinct", "true");
+      query("q", "*:*", "stats", "true", 
+            "stats.field", "stats_dt", 
+            "stats.field", i1, 
+            "stats.field", tdate_a, 
+            "stats.field", tdate_b,
+            "stats.calcdistinct", "true");
     } catch (Exception e) {
       log.error("Exception on distrib stats request on empty index", e);
       fail("NullPointerException with stats request on empty index");

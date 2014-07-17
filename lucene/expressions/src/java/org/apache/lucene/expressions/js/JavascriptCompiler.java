@@ -22,6 +22,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -83,7 +84,7 @@ public class JavascriptCompiler {
     }
   }
   
-  private static final int CLASSFILE_VERSION = Opcodes.V1_6;
+  private static final int CLASSFILE_VERSION = Opcodes.V1_7;
   
   // We use the same class name for all generated classes as they all have their own class loader.
   // The source code is displayed as "source file name" in stack trace.
@@ -108,7 +109,7 @@ public class JavascriptCompiler {
   private static final int MAX_SOURCE_LENGTH = 16384;
   
   private final String sourceText;
-  private final Map<String, Integer> externalsMap = new LinkedHashMap<String, Integer>();
+  private final Map<String, Integer> externalsMap = new LinkedHashMap<>();
   private final ClassWriter classWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
   private GeneratorAdapter gen;
   
@@ -505,13 +506,13 @@ public class JavascriptCompiler {
    */
   public static final Map<String,Method> DEFAULT_FUNCTIONS;
   static {
-    Map<String,Method> map = new HashMap<String,Method>();
-    Reader in = null;
+    Map<String,Method> map = new HashMap<>();
     try {
       final Properties props = new Properties();
-      in = IOUtils.getDecodingReader(JavascriptCompiler.class,
-        JavascriptCompiler.class.getSimpleName() + ".properties", IOUtils.CHARSET_UTF_8);
-      props.load(in);
+      try (Reader in = IOUtils.getDecodingReader(JavascriptCompiler.class,
+        JavascriptCompiler.class.getSimpleName() + ".properties", StandardCharsets.UTF_8)) {
+        props.load(in);
+      }
       for (final String call : props.stringPropertyNames()) {
         final String[] vals = props.getProperty(call).split(",");
         if (vals.length != 3) {
@@ -526,14 +527,8 @@ public class JavascriptCompiler {
         checkFunction(method, JavascriptCompiler.class.getClassLoader());
         map.put(call, method);
       }
-    } catch (NoSuchMethodException e) {
+    } catch (NoSuchMethodException | ClassNotFoundException | IOException e) {
       throw new Error("Cannot resolve function", e);
-    } catch (ClassNotFoundException e) {
-      throw new Error("Cannot resolve function", e);
-    } catch (IOException e) {
-      throw new Error("Cannot resolve function", e);
-    } finally {
-      IOUtils.closeWhileHandlingException(in);
     }
     DEFAULT_FUNCTIONS = Collections.unmodifiableMap(map);
   }

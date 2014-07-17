@@ -101,10 +101,11 @@ final class DocInverterPerField extends DocFieldConsumerPerField {
         boolean succeededInProcessingField = false;
 
         final TokenStream stream = field.tokenStream(docState.analyzer);
-        // reset the TokenStream to the first token
-        stream.reset();
-
+        
         try {
+          // reset the TokenStream to the first token
+          stream.reset();
+
           boolean hasMoreTokens = stream.incrementToken();
 
           fieldState.attributeSource = stream;
@@ -187,7 +188,17 @@ final class DocInverterPerField extends DocFieldConsumerPerField {
           // when we come back around to the field...
           fieldState.position += posIncrAttribute.getPositionIncrement();
           fieldState.offset += offsetAttribute.endOffset();
-          succeededInProcessingField = true;
+
+
+          if (docState.maxTermPrefix != null) {
+            final String msg = "Document contains at least one immense term in field=\"" + fieldInfo.name + "\" (whose UTF8 encoding is longer than the max length " + DocumentsWriterPerThread.MAX_TERM_LENGTH_UTF8 + "), all of which were skipped.  Please correct the analyzer to not produce such terms.  The prefix of the first immense term is: '" + docState.maxTermPrefix + "...'";
+            if (docState.infoStream.isEnabled("IW")) {
+              docState.infoStream.message("IW", "ERROR: " + msg);
+            }
+            docState.maxTermPrefix = null;
+            throw new IllegalArgumentException(msg);
+          }
+
           /* if success was false above there is an exception coming through and we won't get here.*/
           succeededInProcessingField = true;
         } finally {

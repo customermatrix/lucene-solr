@@ -163,7 +163,7 @@ public class HdfsDirectory extends BaseDirectory {
   @Override
   public String[] listAll() throws IOException {
     FileStatus[] listStatus = getFileSystem().listStatus(hdfsDirPath);
-    List<String> files = new ArrayList<String>();
+    List<String> files = new ArrayList<>();
     if (listStatus == null) {
       return new String[] {};
     }
@@ -248,13 +248,16 @@ public class HdfsDirectory extends BaseDirectory {
     
     @Override
     public void close() throws IOException {
-      IOException priorE = null;
+      boolean success = false;
       try {
         super.close();
-      } catch (IOException ioe) {
-        priorE = ioe;
+        success = true;
       } finally {
-        IOUtils.closeWhileHandlingException(priorE, writer);
+        if (success) {
+          IOUtils.close(writer);
+        } else {
+          IOUtils.closeWhileHandlingException(writer);
+        }
       }
     }
 

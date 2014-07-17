@@ -35,7 +35,8 @@ import org.slf4j.LoggerFactory;
  * Base test class for ZooKeeper tests.
  */
 public abstract class AbstractZkTestCase extends SolrTestCaseJ4 {
-
+  private static final String ZOOKEEPER_FORCE_SYNC = "zookeeper.forceSync";
+  
   static final int TIMEOUT = 10000;
 
   private static final boolean DEBUG = false;
@@ -62,15 +63,14 @@ public abstract class AbstractZkTestCase extends SolrTestCaseJ4 {
 
   @BeforeClass
   public static void azt_beforeClass() throws Exception {
-    createTempDir();
-    zkDir = dataDir.getAbsolutePath() + File.separator
-        + "zookeeper/server1/data";
+    zkDir = createTempDir("zkData").getAbsolutePath();
     zkServer = new ZkTestServer(zkDir);
     zkServer.run();
     
     System.setProperty("solrcloud.skip.autorecovery", "true");
     System.setProperty("zkHost", zkServer.getZkAddress());
     System.setProperty("jetty.port", "0000");
+    System.setProperty(ZOOKEEPER_FORCE_SYNC, "false");
     
     buildZooKeeper(zkServer.getZkHost(), zkServer.getZkAddress(), SOLRHOME,
         "solrconfig.xml", "schema.xml");
@@ -86,13 +86,13 @@ public abstract class AbstractZkTestCase extends SolrTestCaseJ4 {
   // static to share with distrib test
   public static void buildZooKeeper(String zkHost, String zkAddress, File solrhome, String config,
       String schema) throws Exception {
-    SolrZkClient zkClient = new SolrZkClient(zkHost, AbstractZkTestCase.TIMEOUT);
+    SolrZkClient zkClient = new SolrZkClient(zkHost, AbstractZkTestCase.TIMEOUT, 45000, null);
     zkClient.makePath("/solr", false, true);
     zkClient.close();
 
     zkClient = new SolrZkClient(zkAddress, AbstractZkTestCase.TIMEOUT);
 
-    Map<String,Object> props = new HashMap<String,Object>();
+    Map<String,Object> props = new HashMap<>();
     props.put("configName", "conf1");
     final ZkNodeProps zkProps = new ZkNodeProps(props);
     
@@ -152,14 +152,13 @@ public abstract class AbstractZkTestCase extends SolrTestCaseJ4 {
     System.clearProperty("solr.test.sys.prop2");
     System.clearProperty("solrcloud.skip.autorecovery");
     System.clearProperty("jetty.port");
+    System.clearProperty(ZOOKEEPER_FORCE_SYNC);
 
-    zkServer.shutdown();
-
-    zkServer = null;
+    if (zkServer != null) {
+      zkServer.shutdown();
+      zkServer = null;
+    }
     zkDir = null;
-    
-    // wait just a bit for any zk client threads to outlast timeout
-    Thread.sleep(2000);
   }
 
   protected void printLayout(String zkHost) throws Exception {

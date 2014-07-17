@@ -27,7 +27,8 @@ import org.apache.lucene.analysis.MockTokenizer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.Tokenizer;
 import org.apache.lucene.analysis.core.KeywordTokenizer;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
+import org.junit.Test;
 
 public class TestCodepointCountFilter extends BaseTokenStreamTestCase {
   public void testFilterWithPosIncr() throws Exception {
@@ -53,10 +54,15 @@ public class TestCodepointCountFilter extends BaseTokenStreamTestCase {
   
   public void testRandomStrings() throws IOException {
     for (int i = 0; i < 10000; i++) {
-      String text = _TestUtil.randomUnicodeString(random(), 100);
-      int min = _TestUtil.nextInt(random(), 0, 100);
-      int max = _TestUtil.nextInt(random(), 0, 100);
+      String text = TestUtil.randomUnicodeString(random(), 100);
+      int min = TestUtil.nextInt(random(), 0, 100);
+      int max = TestUtil.nextInt(random(), 0, 100);
       int count = text.codePointCount(0, text.length());
+      if(min>max){
+        int temp = min;
+        min = max;
+        max = temp;
+      }
       boolean expected = count >= min && count <= max;
       TokenStream stream = new KeywordTokenizer(new StringReader(text));
       stream = new CodepointCountFilter(TEST_VERSION_CURRENT, stream, min, max);
@@ -65,5 +71,13 @@ public class TestCodepointCountFilter extends BaseTokenStreamTestCase {
       stream.end();
       stream.close();
     }
+  }
+
+  /**
+   * checking the validity of constructor arguments
+   */
+  @Test(expected = IllegalArgumentException.class)
+  public void testIllegalArguments() throws Exception {
+    new CodepointCountFilter(TEST_VERSION_CURRENT, new MockTokenizer(new StringReader("accept only valid arguments"), MockTokenizer.WHITESPACE, false), 4, 1);
   }
 }

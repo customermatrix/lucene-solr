@@ -141,6 +141,11 @@ public class CollapsingQParserPlugin extends QParserPlugin {
     public static final int NULL_POLICY_COLLAPSE = 1;
     public static final int NULL_POLICY_EXPAND = 2;
 
+
+    public String getField(){
+      return this.field;
+    }
+
     public void setCache(boolean cache) {
 
     }
@@ -257,7 +262,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
             if(termsEnum.seekExact(ref)) {
               docsEnum = termsEnum.docs(liveDocs, docsEnum);
               int doc = docsEnum.nextDoc();
-              if(doc != -1) {
+              if(doc != DocsEnum.NO_MORE_DOCS) {
                 //Found the document.
                 boostDocs.add(doc+docBase);
                 it.remove();
@@ -438,6 +443,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
     private int nullDoc;
     private FloatArrayList nullScores;
     private IntOpenHashSet boostDocs;
+    private int[] boostOrds;
 
     public CollapsingScoreCollector(int maxDoc,
                                     int segments,
@@ -450,11 +456,19 @@ public class CollapsingQParserPlugin extends QParserPlugin {
       this.boostDocs = boostDocs;
       if(this.boostDocs != null) {
         //Set the elevated docs now.
+        IntOpenHashSet boostG = new IntOpenHashSet();
         Iterator<IntCursor> it = this.boostDocs.iterator();
         while(it.hasNext()) {
           IntCursor cursor = it.next();
-          this.collapsedSet.set(cursor.value);
+          int i = cursor.value;
+          this.collapsedSet.set(i);
+          int ord = values.getOrd(i);
+          if(ord > -1) {
+            boostG.add(ord);
+          }
         }
+        boostOrds = boostG.toArray();
+        Arrays.sort(boostOrds);
       }
       this.values = values;
       int valueCount = values.getValueCount();
@@ -484,6 +498,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
     public void collect(int docId) throws IOException {
       int globalDoc = docId+this.docBase;
       int ord = values.getOrd(globalDoc);
+
       if(ord > -1) {
         float score = scorer.score();
         if(score > scores[ord]) {
@@ -515,6 +530,12 @@ public class CollapsingQParserPlugin extends QParserPlugin {
         this.collapsedSet.set(nullDoc);
       }
 
+      if(this.boostOrds != null) {
+        for(int i=0; i<this.boostOrds.length; i++) {
+          ords[boostOrds[i]] = -1;
+        }
+      }
+
       for(int i=0; i<ords.length; i++) {
         int doc = ords[i];
         if(doc > -1) {
@@ -534,6 +555,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
       while((docId = it.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
 
         int ord = values.getOrd(docId);
+
         if(ord > -1) {
           dummy.score = scores[ord];
         } else if(this.boostDocs != null && boostDocs.contains(docId)) {
@@ -595,14 +617,14 @@ public class CollapsingQParserPlugin extends QParserPlugin {
       this.needsScores = needsScores;
       this.boostDocs = boostDocs;
       if(funcQuery != null) {
-        this.fieldValueCollapse =  new ValueSourceCollapse(maxDoc, field, nullPolicy, new int[valueCount], max, this.needsScores, boostDocs, funcQuery, searcher);
+        this.fieldValueCollapse =  new ValueSourceCollapse(maxDoc, field, nullPolicy, new int[valueCount], max, this.needsScores, boostDocs, funcQuery, searcher, values);
       } else {
         if(fieldType instanceof TrieIntField) {
-          this.fieldValueCollapse = new IntValueCollapse(maxDoc, field, nullPolicy, new int[valueCount], max, this.needsScores, boostDocs);
+          this.fieldValueCollapse = new IntValueCollapse(maxDoc, field, nullPolicy, new int[valueCount], max, this.needsScores, boostDocs, values);
         } else if(fieldType instanceof TrieLongField) {
-          this.fieldValueCollapse =  new LongValueCollapse(maxDoc, field, nullPolicy, new int[valueCount], max, this.needsScores, boostDocs);
+          this.fieldValueCollapse =  new LongValueCollapse(maxDoc, field, nullPolicy, new int[valueCount], max, this.needsScores, boostDocs, values);
         } else if(fieldType instanceof TrieFloatField) {
-          this.fieldValueCollapse =  new FloatValueCollapse(maxDoc, field, nullPolicy, new int[valueCount], max, this.needsScores, boostDocs);
+          this.fieldValueCollapse =  new FloatValueCollapse(maxDoc, field, nullPolicy, new int[valueCount], max, this.needsScores, boostDocs, values);
         } else {
           throw new IOException("min/max must be either TrieInt, TrieLong or TrieFloat.");
         }
@@ -691,6 +713,7 @@ public class CollapsingQParserPlugin extends QParserPlugin {
     protected float[] scores;
     protected FixedBitSet collapsedSet;
     protected IntOpenHashSet boostDocs;
+    protected int[] boostOrds;
     protected int nullDoc = -1;
     protected boolean needsScores;
     protected boolean max;
@@ -704,7 +727,8 @@ public class CollapsingQParserPlugin extends QParserPlugin {
                               int nullPolicy,
                               boolean max,
                               boolean needsScores,
-                              IntOpenHashSet boostDocs) {
+                              IntOpenHashSet boostDocs,
+                              SortedDocValues values) {
       this.field = field;
       this.nullPolicy = nullPolicy;
       this.max = max;
@@ -712,17 +736,31 @@ public class CollapsingQParserPlugin extends QParserPlugin {
       this.collapsedSet = new FixedBitSet(maxDoc);
       this.boostDocs = boostDocs;
       if(this.boostDocs != null) {
+        IntOpenHashSet boostG = new IntOpenHashSet();
         Iterator<IntCursor> it = boostDocs.iterator();
         while(it.hasNext()) {
           IntCursor cursor = it.next();
-          this.collapsedSet.set(cursor.value);
+          int i = cursor.value;
+          this.collapsedSet.set(i);
+          int ord = values.getOrd(i);
+          if(ord > -1) {
+            boostG.add(ord);
+          }
         }
+        this.boostOrds = boostG.toArray();
+        Arrays.sort(this.boostOrds);
       }
     }
 
     public FixedBitSet getCollapsedSet() {
       if(nullDoc > -1) {
         this.collapsedSet.set(nullDoc);
+      }
+
+      if(this.boostOrds != null) {
+        for(int i=0; i<this.boostOrds.length; i++) {
+          ords[boostOrds[i]] = -1;
+        }
       }
 
       for(int i=0; i<ords.length; i++) {
@@ -765,8 +803,8 @@ public class CollapsingQParserPlugin extends QParserPlugin {
                             int[] ords,
                             boolean max,
                             boolean needsScores,
-                            IntOpenHashSet boostDocs) throws IOException {
-      super(maxDoc, field, nullPolicy, max, needsScores, boostDocs);
+                            IntOpenHashSet boostDocs, SortedDocValues values) throws IOException {
+      super(maxDoc, field, nullPolicy, max, needsScores, boostDocs, values);
       this.ords = ords;
       this.ordVals = new int[ords.length];
       Arrays.fill(ords, -1);
@@ -833,8 +871,8 @@ public class CollapsingQParserPlugin extends QParserPlugin {
                              int[] ords,
                              boolean max,
                              boolean needsScores,
-                             IntOpenHashSet boostDocs) throws IOException {
-      super(maxDoc, field, nullPolicy, max, needsScores, boostDocs);
+                             IntOpenHashSet boostDocs, SortedDocValues values) throws IOException {
+      super(maxDoc, field, nullPolicy, max, needsScores, boostDocs, values);
       this.ords = ords;
       this.ordVals = new long[ords.length];
       Arrays.fill(ords, -1);
@@ -902,8 +940,8 @@ public class CollapsingQParserPlugin extends QParserPlugin {
                               int[] ords,
                               boolean max,
                               boolean needsScores,
-                              IntOpenHashSet boostDocs) throws IOException {
-      super(maxDoc, field, nullPolicy, max, needsScores, boostDocs);
+                              IntOpenHashSet boostDocs, SortedDocValues values) throws IOException {
+      super(maxDoc, field, nullPolicy, max, needsScores, boostDocs, values);
       this.ords = ords;
       this.ordVals = new float[ords.length];
       Arrays.fill(ords, -1);
@@ -977,8 +1015,8 @@ public class CollapsingQParserPlugin extends QParserPlugin {
                                boolean max,
                                boolean needsScores,
                                IntOpenHashSet boostDocs,
-                               FunctionQuery funcQuery, IndexSearcher searcher) throws IOException {
-      super(maxDoc, null, nullPolicy, max, needsScores, boostDocs);
+                               FunctionQuery funcQuery, IndexSearcher searcher, SortedDocValues values) throws IOException {
+      super(maxDoc, null, nullPolicy, max, needsScores, boostDocs, values);
       this.valueSource = funcQuery.getValueSource();
       this.rcontext = ValueSource.newContext(searcher);
       this.ords = ords;

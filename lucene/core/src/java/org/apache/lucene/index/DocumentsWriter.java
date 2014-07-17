@@ -30,10 +30,13 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.index.DocumentsWriterFlushQueue.SegmentFlushTicket;
 import org.apache.lucene.index.DocumentsWriterPerThread.FlushedSegment;
 import org.apache.lucene.index.DocumentsWriterPerThreadPool.ThreadState;
+import org.apache.lucene.index.DocValuesUpdate.NumericDocValuesUpdate;
+import org.apache.lucene.index.DocValuesUpdate.BinaryDocValuesUpdate;
 import org.apache.lucene.index.IndexWriter.Event;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.InfoStream;
 
 import java.io.IOException;
@@ -144,7 +147,7 @@ final class DocumentsWriter implements Closeable {
     this.perThreadPool = config.getIndexerThreadPool();
     flushPolicy = config.getFlushPolicy();
     this.writer = writer;
-    this.events = new ConcurrentLinkedQueue<Event>();
+    this.events = new ConcurrentLinkedQueue<>();
     flushControl = new DocumentsWriterFlushControl(this, config, writer.bufferedUpdatesStream);
   }
   
@@ -169,7 +172,14 @@ final class DocumentsWriter implements Closeable {
 
   synchronized boolean updateNumericDocValue(Term term, String field, Long value) throws IOException {
     final DocumentsWriterDeleteQueue deleteQueue = this.deleteQueue;
-    deleteQueue.addNumericUpdate(new NumericUpdate(term, field, value));
+    deleteQueue.addNumericUpdate(new NumericDocValuesUpdate(term, field, value));
+    flushControl.doOnDelete();
+    return applyAllDeletes(deleteQueue);
+  }
+  
+  synchronized boolean updateBinaryDocValue(Term term, String field, BytesRef value) throws IOException {
+    final DocumentsWriterDeleteQueue deleteQueue = this.deleteQueue;
+    deleteQueue.addBinaryUpdate(new BinaryDocValuesUpdate(term, field, value));
     flushControl.doOnDelete();
     return applyAllDeletes(deleteQueue);
   }
@@ -216,7 +226,7 @@ final class DocumentsWriter implements Closeable {
   synchronized void abort(IndexWriter writer) {
     assert !Thread.holdsLock(writer) : "IndexWriter lock should never be hold when aborting";
     boolean success = false;
-    final Set<String> newFilesSet = new HashSet<String>();
+    final Set<String> newFilesSet = new HashSet<>();
     try {
       deleteQueue.clear();
       if (infoStream.isEnabled("DW")) {
@@ -252,7 +262,7 @@ final class DocumentsWriter implements Closeable {
     try {
       deleteQueue.clear();
       final int limit = perThreadPool.getMaxThreadStates();
-      final Set<String> newFilesSet = new HashSet<String>();
+      final Set<String> newFilesSet = new HashSet<>();
       for (int i = 0; i < limit; i++) {
         final ThreadState perThread = perThreadPool.getThreadState(i);
         perThread.lock();
@@ -443,7 +453,7 @@ final class DocumentsWriter implements Closeable {
       final boolean isUpdate = delTerm != null;
       flushingDWPT = flushControl.doAfterDocument(perThread, isUpdate);
     } finally {
-      perThread.unlock();
+      perThreadPool.release(perThread);
     }
 
     return postUpdate(flushingDWPT, hasEvents);
@@ -481,7 +491,7 @@ final class DocumentsWriter implements Closeable {
       final boolean isUpdate = delTerm != null;
       flushingDWPT = flushControl.doAfterDocument(perThread, isUpdate);
     } finally {
-      perThread.unlock();
+      perThreadPool.release(perThread);
     }
 
     return postUpdate(flushingDWPT, hasEvents);
@@ -610,7 +620,7 @@ final class DocumentsWriter implements Closeable {
     throws IOException {
     final DocumentsWriterDeleteQueue flushingDeleteQueue;
     if (infoStream.isEnabled("DW")) {
-      infoStream.message("DW", Thread.currentThread().getName() + " startFullFlush");
+      infoStream.message("DW", "startFullFlush");
     }
     
     synchronized (this) {
@@ -658,7 +668,7 @@ final class DocumentsWriter implements Closeable {
         // Release the flush lock
         flushControl.finishFullFlush();
       } else {
-        Set<String> newFilesSet = new HashSet<String>();
+        Set<String> newFilesSet = new HashSet<>();
         flushControl.abortFullFlushes(newFilesSet);
         putEvent(new DeleteNewFilesEvent(newFilesSet));
 

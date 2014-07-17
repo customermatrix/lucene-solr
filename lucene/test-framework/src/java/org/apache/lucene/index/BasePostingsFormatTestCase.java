@@ -38,6 +38,9 @@ import org.apache.lucene.codecs.FieldsProducer;
 import org.apache.lucene.codecs.PostingsConsumer;
 import org.apache.lucene.codecs.TermStats;
 import org.apache.lucene.codecs.TermsConsumer;
+import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.FieldInfo.DocValuesType;
 import org.apache.lucene.index.FieldInfo.IndexOptions;
 import org.apache.lucene.store.Directory;
@@ -47,8 +50,7 @@ import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.FixedBitSet;
-import org.apache.lucene.util.LuceneTestCase;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
@@ -76,12 +78,7 @@ import org.junit.BeforeClass;
     they weren't indexed
 */
 
-public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
-
-  /**
-   * Returns the Codec to run tests against
-   */
-  protected abstract Codec getCodec();
+public abstract class BasePostingsFormatTestCase extends BaseIndexFileFormatTestCase {
 
   private enum Option {
     // Sometimes use .advance():
@@ -139,11 +136,11 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
     public SeedPostings(long seed, int minDocFreq, int maxDocFreq, Bits liveDocs, IndexOptions options) {
       random = new Random(seed);
       docRandom = new Random(random.nextLong());
-      docFreq = _TestUtil.nextInt(random, minDocFreq, maxDocFreq);
+      docFreq = TestUtil.nextInt(random, minDocFreq, maxDocFreq);
       this.liveDocs = liveDocs;
 
       // TODO: more realistic to inversely tie this to numDocs:
-      maxDocSpacing = _TestUtil.nextInt(random, 1, 100);
+      maxDocSpacing = TestUtil.nextInt(random, 1, 100);
 
       if (random.nextInt(10) == 7) {
         // 10% of the time create big payloads:
@@ -182,21 +179,21 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
           docID++;
         } else {
           // TODO: sometimes have a biggish gap here!
-          docID += _TestUtil.nextInt(docRandom, 1, maxDocSpacing);
+          docID += TestUtil.nextInt(docRandom, 1, maxDocSpacing);
         }
 
         if (random.nextInt(200) == 17) {
-          freq = _TestUtil.nextInt(random, 1, 1000);
+          freq = TestUtil.nextInt(random, 1, 1000);
         } else if (random.nextInt(10) == 17) {
-          freq = _TestUtil.nextInt(random, 1, 20);
+          freq = TestUtil.nextInt(random, 1, 20);
         } else {
-          freq = _TestUtil.nextInt(random, 1, 4);
+          freq = TestUtil.nextInt(random, 1, 4);
         }
 
         pos = 0;
         offset = 0;
         posUpto = 0;
-        posSpacing = _TestUtil.nextInt(random, 1, 100);
+        posSpacing = TestUtil.nextInt(random, 1, 100);
 
         upto++;
         return docID;
@@ -228,7 +225,7 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
       } else if (posSpacing == 1) {
         pos++;
       } else {
-        pos += _TestUtil.nextInt(random, 1, posSpacing);
+        pos += TestUtil.nextInt(random, 1, posSpacing);
       }
 
       if (payloadSize != 0) {
@@ -328,9 +325,9 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
   public static void createPostings() throws IOException {
     totalPostings = 0;
     totalPayloadBytes = 0;
-    fields = new TreeMap<String,Map<BytesRef,Long>>();
+    fields = new TreeMap<>();
 
-    final int numFields = _TestUtil.nextInt(random(), 1, 5);
+    final int numFields = TestUtil.nextInt(random(), 1, 5);
     if (VERBOSE) {
       System.out.println("TEST: " + numFields + " fields");
     }
@@ -339,7 +336,7 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
     FieldInfo[] fieldInfoArray = new FieldInfo[numFields];
     int fieldUpto = 0;
     while (fieldUpto < numFields) {
-      String field = _TestUtil.randomSimpleString(random());
+      String field = TestUtil.randomSimpleString(random());
       if (fields.containsKey(field)) {
         continue;
       }
@@ -349,19 +346,19 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
                                                 null, DocValuesType.NUMERIC, null);
       fieldUpto++;
 
-      Map<BytesRef,Long> postings = new TreeMap<BytesRef,Long>();
+      Map<BytesRef,Long> postings = new TreeMap<>();
       fields.put(field, postings);
-      Set<String> seenTerms = new HashSet<String>();
+      Set<String> seenTerms = new HashSet<>();
 
       int numTerms;
       if (random().nextInt(10) == 7) {
         numTerms = atLeast(50);
       } else {
-        numTerms = _TestUtil.nextInt(random(), 2, 20);
+        numTerms = TestUtil.nextInt(random(), 2, 20);
       }
 
       for(int termUpto=0;termUpto<numTerms;termUpto++) {
-        String term = _TestUtil.randomSimpleString(random());
+        String term = TestUtil.randomSimpleString(random());
         if (seenTerms.contains(term)) {
           continue;
         }
@@ -409,7 +406,7 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
       }
     }
 
-    allTerms = new ArrayList<FieldAndTerm>();
+    allTerms = new ArrayList<>();
     for(Map.Entry<String,Map<BytesRef,Long>> fieldEnt : fields.entrySet()) {
       String field = fieldEnt.getKey();
       for(Map.Entry<BytesRef,Long> termEnt : fieldEnt.getValue().entrySet()) {
@@ -453,7 +450,7 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
     for(int fieldUpto=0;fieldUpto<fields.size();fieldUpto++) {
       FieldInfo oldFieldInfo = fieldInfos.fieldInfo(fieldUpto);
 
-      String pf = _TestUtil.getPostingsFormat(codec, oldFieldInfo.name);
+      String pf = TestUtil.getPostingsFormat(codec, oldFieldInfo.name);
       int fieldMaxIndexOption;
       if (doesntSupportOffsets.contains(pf)) {
         fieldMaxIndexOption = Math.min(maxIndexOptionNoOffsets, maxIndexOption);
@@ -730,7 +727,7 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
     }
 
     double skipChance = alwaysTestMax ? 0.5 : random().nextDouble();
-    int numSkips = expected.docFreq < 3 ? 1 : _TestUtil.nextInt(random(), 1, Math.min(20, expected.docFreq/3));
+    int numSkips = expected.docFreq < 3 ? 1 : TestUtil.nextInt(random(), 1, Math.min(20, expected.docFreq/3));
     int skipInc = expected.docFreq/numSkips;
     int skipDocInc = maxDoc/numSkips;
 
@@ -773,7 +770,7 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
         int targetDocID = -1;
         if (expected.upto < stopAt && random().nextBoolean()) {
           // Pick target we know exists:
-          final int skipCount = _TestUtil.nextInt(random(), 1, skipInc);
+          final int skipCount = TestUtil.nextInt(random(), 1, skipInc);
           for(int skip=0;skip<skipCount;skip++) {
             if (expected.nextDoc() == DocsEnum.NO_MORE_DOCS) {
               break;
@@ -781,7 +778,7 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
           }
         } else {
           // Pick random target (might not exist):
-          final int skipDocIDs = _TestUtil.nextInt(random(), 1, skipDocInc);
+          final int skipDocIDs = TestUtil.nextInt(random(), 1, skipDocInc);
           if (skipDocIDs > 0) {
             targetDocID = expected.docID() + skipDocIDs;
             expected.advance(targetDocID);
@@ -935,7 +932,7 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
                          final boolean alwaysTestMax) throws Exception {
 
     if (options.contains(Option.THREADS)) {
-      int numThreads = _TestUtil.nextInt(random(), 2, 5);
+      int numThreads = TestUtil.nextInt(random(), 2, 5);
       Thread[] threads = new Thread[numThreads];
       for(int threadUpto=0;threadUpto<numThreads;threadUpto++) {
         threads[threadUpto] = new TestThread(this, fieldsSource, options, maxTestOptions, maxIndexOptions, alwaysTestMax);
@@ -956,8 +953,8 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
     ThreadState threadState = new ThreadState();
 
     // Test random terms/fields:
-    List<TermState> termStates = new ArrayList<TermState>();
-    List<FieldAndTerm> termStateTerms = new ArrayList<FieldAndTerm>();
+    List<TermState> termStates = new ArrayList<>();
+    List<FieldAndTerm> termStateTerms = new ArrayList<>();
     
     Collections.shuffle(allTerms, random());
     int upto = 0;
@@ -1064,7 +1061,7 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
   /** Indexes all fields/terms at the specified
    *  IndexOptions, and fully tests at that IndexOptions. */
   private void testFull(IndexOptions options, boolean withPayloads) throws Exception {
-    File path = _TestUtil.getTempDir("testPostingsFormat.testExact");
+    File path = createTempDir("testPostingsFormat.testExact");
     Directory dir = newFSDirectory(path);
 
     // TODO test thread safety of buildIndex too
@@ -1085,7 +1082,7 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
 
     fieldsProducer.close();
     dir.close();
-    _TestUtil.rmDir(path);
+    TestUtil.rm(path);
   }
 
   public void testDocsOnly() throws Exception {
@@ -1117,7 +1114,7 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
     int iters = 5;
 
     for(int iter=0;iter<iters;iter++) {
-      File path = _TestUtil.getTempDir("testPostingsFormat");
+      File path = createTempDir("testPostingsFormat");
       Directory dir = newFSDirectory(path);
 
       boolean indexPayloads = random().nextBoolean();
@@ -1134,7 +1131,27 @@ public abstract class BasePostingsFormatTestCase extends LuceneTestCase {
       fieldsProducer = null;
 
       dir.close();
-      _TestUtil.rmDir(path);
+      TestUtil.rm(path);
+    }
+  }
+
+  @Override
+  protected void addRandomFields(Document doc) {
+    for (IndexOptions opts : IndexOptions.values()) {
+      final String field = "f_" + opts;
+      String pf = TestUtil.getPostingsFormat(Codec.getDefault(), field);
+      if (opts == IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS && doesntSupportOffsets.contains(pf)) {
+        continue;
+      }
+      FieldType ft = new FieldType();
+      ft.setIndexOptions(opts);
+      ft.setIndexed(true);
+      ft.setOmitNorms(true);
+      ft.freeze();
+      final int numFields = random().nextInt(5);
+      for (int j = 0; j < numFields; ++j) {
+        doc.add(new Field("f_" + opts, TestUtil.randomSimpleString(random(), 2), ft));
+      }
     }
   }
 }

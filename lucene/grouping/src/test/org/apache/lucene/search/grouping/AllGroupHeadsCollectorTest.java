@@ -46,7 +46,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.LuceneTestCase;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -179,30 +179,30 @@ public class AllGroupHeadsCollectorTest extends LuceneTestCase {
   }
 
   public void testRandom() throws Exception {
-    int numberOfRuns = _TestUtil.nextInt(random(), 3, 6);
+    int numberOfRuns = TestUtil.nextInt(random(), 3, 6);
     for (int iter = 0; iter < numberOfRuns; iter++) {
       if (VERBOSE) {
         System.out.println(String.format(Locale.ROOT, "TEST: iter=%d total=%d", iter, numberOfRuns));
       }
 
-      final int numDocs = _TestUtil.nextInt(random(), 100, 1000) * RANDOM_MULTIPLIER;
-      final int numGroups = _TestUtil.nextInt(random(), 1, numDocs);
+      final int numDocs = TestUtil.nextInt(random(), 100, 1000) * RANDOM_MULTIPLIER;
+      final int numGroups = TestUtil.nextInt(random(), 1, numDocs);
 
       if (VERBOSE) {
         System.out.println("TEST: numDocs=" + numDocs + " numGroups=" + numGroups);
       }
 
-      final List<BytesRef> groups = new ArrayList<BytesRef>();
+      final List<BytesRef> groups = new ArrayList<>();
       for (int i = 0; i < numGroups; i++) {
         String randomValue;
         do {
           // B/c of DV based impl we can't see the difference between an empty string and a null value.
           // For that reason we don't generate empty string groups.
-          randomValue = _TestUtil.randomRealisticUnicodeString(random());
+          randomValue = TestUtil.randomRealisticUnicodeString(random());
         } while ("".equals(randomValue));
         groups.add(new BytesRef(randomValue));
       }
-      final String[] contentStrings = new String[_TestUtil.nextInt(random(), 2, 20)];
+      final String[] contentStrings = new String[TestUtil.nextInt(random(), 2, 20)];
       if (VERBOSE) {
         System.out.println("TEST: create fake content");
       }
@@ -392,10 +392,7 @@ public class AllGroupHeadsCollectorTest extends LuceneTestCase {
             System.out.println("\n===================================================================================");
           }
 
-          assertEquals(expectedGroupHeads.length, actualGroupHeads.length);
-          for (int i = 0; i < expectedGroupHeads.length; i++) {
-            assertEquals(expectedGroupHeads[i], actualGroupHeads[i]);
-          }
+          assertArrayEquals(expectedGroupHeads, actualGroupHeads);
         }
       } finally {
         QueryUtils.purgeFieldCache(r);
@@ -452,14 +449,14 @@ public class AllGroupHeadsCollectorTest extends LuceneTestCase {
   }
 
   private int[] createExpectedGroupHeads(String searchTerm, GroupDoc[] groupDocs, Sort docSort, boolean sortByScoreOnly, int[] fieldIdToDocID) {
-    Map<BytesRef, List<GroupDoc>> groupHeads = new HashMap<BytesRef, List<GroupDoc>>();
+    Map<BytesRef, List<GroupDoc>> groupHeads = new HashMap<>();
     for (GroupDoc groupDoc : groupDocs) {
       if (!groupDoc.content.startsWith(searchTerm)) {
         continue;
       }
 
       if (!groupHeads.containsKey(groupDoc.group)) {
-        List<GroupDoc> list = new ArrayList<GroupDoc>();
+        List<GroupDoc> list = new ArrayList<>();
         list.add(groupDoc);
         groupHeads.put(groupDoc.group, list);
         continue;
@@ -479,7 +476,7 @@ public class AllGroupHeadsCollectorTest extends LuceneTestCase {
   }
 
   private Sort getRandomSort(boolean scoreOnly) {
-    final List<SortField> sortFields = new ArrayList<SortField>();
+    final List<SortField> sortFields = new ArrayList<>();
     if (random().nextInt(7) == 2 || scoreOnly) {
       sortFields.add(SortField.FIELD_SCORE);
     } else {
@@ -544,7 +541,7 @@ public class AllGroupHeadsCollectorTest extends LuceneTestCase {
     AbstractAllGroupHeadsCollector<? extends AbstractAllGroupHeadsCollector.GroupHead> collector;
     if (random().nextBoolean()) {
       ValueSource vs = new BytesRefFieldSource(groupField);
-      collector =  new FunctionAllGroupHeadsCollector(vs, new HashMap<Object, Object>(), sortWithinGroup);
+      collector =  new FunctionAllGroupHeadsCollector(vs, new HashMap<>(), sortWithinGroup);
     } else {
       collector =  TermAllGroupHeadsCollector.create(groupField, sortWithinGroup);
     }

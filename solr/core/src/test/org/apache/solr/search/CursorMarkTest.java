@@ -20,8 +20,7 @@ package org.apache.solr.search;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.TermToBytesRefAttribute;
-import org.apache.lucene.util.IOUtils;
-import org.apache.lucene.util._TestUtil;
+import org.apache.lucene.util.TestUtil;
 import org.apache.lucene.util.BytesRef;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
@@ -213,7 +212,7 @@ public class CursorMarkTest extends SolrTestCaseJ4 {
       if (null == sf) {
         // score or function
         results[i] = (Float) random().nextFloat() * random().nextInt(); break;
-      } else if (0 == _TestUtil.nextInt(random(), 0, 7)) {
+      } else if (0 == TestUtil.nextInt(random(), 0, 7)) {
         // emulate missing value for doc
         results[i] = null;
       } else {
@@ -226,11 +225,11 @@ public class CursorMarkTest extends SolrTestCaseJ4 {
 
         Object val = null;
         if (fieldName.equals("id")) {
-          val = sf.getType().unmarshalSortValue(_TestUtil.randomSimpleString(random()));
+          val = sf.getType().unmarshalSortValue(TestUtil.randomSimpleString(random()));
         } else if (fieldName.startsWith("str")) {
-          val = sf.getType().unmarshalSortValue(_TestUtil.randomRealisticUnicodeString(random()));
+          val = sf.getType().unmarshalSortValue(TestUtil.randomRealisticUnicodeString(random()));
         } else if (fieldName.startsWith("bin")) {
-          byte[] randBytes = new byte[_TestUtil.nextInt(random(), 1, 50)];
+          byte[] randBytes = new byte[TestUtil.nextInt(random(), 1, 50)];
           random().nextBytes(randBytes);
           val = new BytesRef(randBytes);
         } else if (fieldName.startsWith("bcd")) {
@@ -303,12 +302,10 @@ public class CursorMarkTest extends SolrTestCaseJ4 {
   }
 
   private static Object getRandomCollation(SchemaField sf) throws IOException {
-    Object val = null;
+    Object val;
     Analyzer analyzer = sf.getType().getAnalyzer();
-    String term = _TestUtil.randomRealisticUnicodeString(random());
-    TokenStream ts = analyzer.tokenStream("fake", term);
-    IOException priorException = null;
-    try {
+    String term = TestUtil.randomRealisticUnicodeString(random());
+    try (TokenStream ts = analyzer.tokenStream("fake", term)) {
       TermToBytesRefAttribute termAtt = ts.addAttribute(TermToBytesRefAttribute.class);
       val = termAtt.getBytesRef();
       ts.reset();
@@ -316,10 +313,6 @@ public class CursorMarkTest extends SolrTestCaseJ4 {
       termAtt.fillBytesRef();
       assertFalse(ts.incrementToken());
       ts.end();
-    } catch (IOException e) {
-      priorException = e;
-    } finally {
-      IOUtils.closeWhileHandlingException(priorException, ts);
     }
     return val;
   }
@@ -328,7 +321,7 @@ public class CursorMarkTest extends SolrTestCaseJ4 {
    * a list of the fields in the schema - excluding _version_
    */
   private Collection<String> getAllFieldNames() {
-    ArrayList<String> names = new ArrayList<String>(37);
+    ArrayList<String> names = new ArrayList<>(37);
     for (String f : h.getCore().getLatestSchema().getFields().keySet()) {
       if (! f.equals("_version_")) {
         names.add(f);

@@ -72,10 +72,10 @@ public class TestSurrogates extends LuceneTestCase {
       if (r.nextInt(3) == 1) {
         s = makeDifficultRandomUnicodeString(r);
       } else {
-        s = _TestUtil.randomUnicodeString(r);
+        s = TestUtil.randomUnicodeString(r);
       }
     } else {
-      s = _TestUtil.randomRealisticUnicodeString(r);
+      s = TestUtil.randomRealisticUnicodeString(r);
     }
     return s;
   }
@@ -141,7 +141,7 @@ public class TestSurrogates extends LuceneTestCase {
   // from there
   private void doTestSeekExists(Random r, List<Term> fieldTerms, IndexReader reader) throws IOException {
 
-    final Map<String,TermsEnum> tes = new HashMap<String,TermsEnum>();
+    final Map<String,TermsEnum> tes = new HashMap<>();
 
     // Test random seek to existing term, then enum:
     if (VERBOSE) {
@@ -176,7 +176,7 @@ public class TestSurrogates extends LuceneTestCase {
                    te.seekCeil(term.bytes()));
       
       // now .next() this many times:
-      int ct = _TestUtil.nextInt(r, 5, 100);
+      int ct = TestUtil.nextInt(r, 5, 100);
       for(int i=0;i<ct;i++) {
         if (VERBOSE) {
           System.out.println("TEST: now next()");
@@ -204,7 +204,7 @@ public class TestSurrogates extends LuceneTestCase {
 
   private void doTestSeekDoesNotExist(Random r, int numField, List<Term> fieldTerms, Term[] fieldTermsArray, IndexReader reader) throws IOException {
 
-    final Map<String,TermsEnum> tes = new HashMap<String,TermsEnum>();
+    final Map<String,TermsEnum> tes = new HashMap<>();
 
     if (VERBOSE) {
       System.out.println("TEST: top random seeks");
@@ -252,7 +252,7 @@ public class TestSurrogates extends LuceneTestCase {
                          te.term());
 
             // now .next() this many times:
-            int ct = _TestUtil.nextInt(r, 5, 100);
+            int ct = TestUtil.nextInt(r, 5, 100);
             for(int i=0;i<ct;i++) {
               if (VERBOSE) {
                 System.out.println("TEST: now next()");
@@ -291,19 +291,19 @@ public class TestSurrogates extends LuceneTestCase {
                                                 newIndexWriterConfig( TEST_VERSION_CURRENT,
                                                                       new MockAnalyzer(random())).setCodec(new PreFlexRWCodec()));
 
-    final int numField = _TestUtil.nextInt(random(), 2, 5);
+    final int numField = TestUtil.nextInt(random(), 2, 5);
 
     int uniqueTermCount = 0;
 
     int tc = 0;
 
-    List<Term> fieldTerms = new ArrayList<Term>();
+    List<Term> fieldTerms = new ArrayList<>();
 
     for(int f=0;f<numField;f++) {
       String field = "f" + f;
       final int numTerms = atLeast(200);
 
-      final Set<String> uniqueTerms = new HashSet<String>();
+      final Set<String> uniqueTerms = new HashSet<>();
 
       for(int i=0;i<numTerms;i++) {
         String term = getRandomString(random()) + "_ " + (tc++);

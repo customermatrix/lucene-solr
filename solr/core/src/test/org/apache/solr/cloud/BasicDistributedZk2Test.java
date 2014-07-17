@@ -26,6 +26,7 @@ import java.util.regex.Pattern;
 
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.BasicResponseHandler;
+import org.apache.solr.SolrTestCaseJ4.SuppressSSL;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -49,11 +50,12 @@ import org.apache.solr.util.AbstractSolrTestCase;
  * This test simply does a bunch of basic things in solrcloud mode and asserts things
  * work as expected.
  */
+@SuppressSSL(bugUrl = "https://issues.apache.org/jira/browse/SOLR-5776")
 public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
   private static final String SHARD2 = "shard2";
   private static final String SHARD1 = "shard1";
   private static final String ONE_NODE_COLLECTION = "onenodecollection";
-
+  
   public BasicDistributedZk2Test() {
     super();
     fixShardCount = true;
@@ -166,8 +168,7 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
       createCmd.setCoreName(ONE_NODE_COLLECTION + "core");
       createCmd.setCollection(ONE_NODE_COLLECTION);
       createCmd.setNumShards(1);
-      createCmd.setDataDir(getDataDir(dataDir.getAbsolutePath() + File.separator
-          + ONE_NODE_COLLECTION));
+      createCmd.setDataDir(getDataDir(createTempDir(ONE_NODE_COLLECTION).getAbsolutePath()));
       server.request(createCmd);
       server.shutdown();
     } catch (Exception e) {
@@ -400,7 +401,7 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     // make sure we have published we are recovering
     Thread.sleep(1500);
     
-    waitForThingsToLevelOut(30);
+    waitForThingsToLevelOut(45);
     
     Thread.sleep(500);
     
@@ -413,15 +414,15 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     ModifiableSolrParams params = new ModifiableSolrParams();
     params.set("qt", "/replication");
     params.set("command", "backup");
-    File location = new File(TEMP_DIR, BasicDistributedZk2Test.class.getName() + "-backupdir-" + System.currentTimeMillis());
+    File location = createTempDir();
     params.set("location", location.getAbsolutePath());
 
     QueryRequest request = new QueryRequest(params);
     NamedList<Object> results = client.request(request );
     
     checkForBackupSuccess(client, location);
-
   }
+
   private void checkForBackupSuccess(final HttpSolrServer client, File location)
       throws InterruptedException, IOException {
     class CheckStatus extends Thread {

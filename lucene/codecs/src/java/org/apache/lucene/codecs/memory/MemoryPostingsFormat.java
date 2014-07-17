@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
+import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.codecs.FieldsConsumer;
 import org.apache.lucene.codecs.FieldsProducer;
 import org.apache.lucene.codecs.PostingsConsumer;
@@ -42,6 +43,7 @@ import org.apache.lucene.index.SegmentWriteState;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.store.ByteArrayDataInput;
+import org.apache.lucene.store.ChecksumIndexInput;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
@@ -49,6 +51,7 @@ import org.apache.lucene.store.RAMOutputStream;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.IntsRef;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.lucene.util.fst.Builder;
@@ -118,7 +121,7 @@ public final class MemoryPostingsFormat extends PostingsFormat {
       this.field = field;
       this.doPackFST = doPackFST;
       this.acceptableOverheadRatio = acceptableOverheadRatio;
-      builder = new Builder<BytesRef>(FST.INPUT_TYPE.BYTE1, 0, 0, true, true, Integer.MAX_VALUE, outputs, null, doPackFST, acceptableOverheadRatio, true, 15);
+      builder = new Builder<>(FST.INPUT_TYPE.BYTE1, 0, 0, true, true, Integer.MAX_VALUE, outputs, null, doPackFST, acceptableOverheadRatio, true, 15);
     }
 
     private class PostingsWriter extends PostingsConsumer {
@@ -286,12 +289,24 @@ public final class MemoryPostingsFormat extends PostingsFormat {
   }
 
   private static String EXTENSION = "ram";
+  private static final String CODEC_NAME = "MemoryPostings";
+  private static final int VERSION_START = 0;
+  private static final int VERSION_CURRENT = VERSION_START;
 
   @Override
   public FieldsConsumer fieldsConsumer(SegmentWriteState state) throws IOException {
 
     final String fileName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, EXTENSION);
     final IndexOutput out = state.directory.createOutput(fileName, state.context);
+    boolean success = false;
+    try {
+      CodecUtil.writeHeader(out, CODEC_NAME, VERSION_CURRENT);
+      success = true;
+    } finally {
+      if (!success) {
+        IOUtils.closeWhileHandlingException(out);
+      }
+    }
     
     return new FieldsConsumer() {
       @Override
@@ -305,6 +320,7 @@ public final class MemoryPostingsFormat extends PostingsFormat {
         // EOF marker:
         try {
           out.writeVInt(0);
+          CodecUtil.writeFooter(out);
         } finally {
           out.close();
         }
@@ -638,7 +654,7 @@ public final class MemoryPostingsFormat extends PostingsFormat {
 
     public FSTTermsEnum(FieldInfo field, FST<BytesRef> fst) {
       this.field = field;
-      fstEnum = new BytesRefFSTEnum<BytesRef>(fst);
+      fstEnum = new BytesRefFSTEnum<>(fst);
     }
 
     private void decodeMetaData() {
@@ -798,7 +814,7 @@ public final class MemoryPostingsFormat extends PostingsFormat {
       sumDocFreq = in.readVLong();
       docCount = in.readVInt();
       
-      fst = new FST<BytesRef>(in, outputs);
+      fst = new FST<>(in, outputs);
     }
 
     @Override
@@ -859,11 +875,12 @@ public final class MemoryPostingsFormat extends PostingsFormat {
   @Override
   public FieldsProducer fieldsProducer(SegmentReadState state) throws IOException {
     final String fileName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, EXTENSION);
-    final IndexInput in = state.directory.openInput(fileName, IOContext.READONCE);
+    final ChecksumIndexInput in = state.directory.openChecksumInput(fileName, IOContext.READONCE);
 
-    final SortedMap<String,TermsReader> fields = new TreeMap<String,TermsReader>();
+    final SortedMap<String,TermsReader> fields = new TreeMap<>();
 
     try {
+      CodecUtil.checkHeader(in, CODEC_NAME, VERSION_START, VERSION_CURRENT);
       while(true) {
         final int termCount = in.readVInt();
         if (termCount == 0) {
@@ -873,6 +890,7 @@ public final class MemoryPostingsFormat extends PostingsFormat {
         // System.out.println("load field=" + termsReader.field.name);
         fields.put(termsReader.field.name, termsReader);
       }
+      CodecUtil.checkFooter(in);
     } finally {
       in.close();
     }
@@ -910,6 +928,9 @@ public final class MemoryPostingsFormat extends PostingsFormat {
         }
         return sizeInBytes;
       }
+      
+      @Override
+      public void checkIntegrity() throws IOException {}
     };
   }
 }

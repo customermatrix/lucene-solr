@@ -599,7 +599,7 @@ public class TestPhraseQuery extends LuceneTestCase {
     Analyzer analyzer = new MockAnalyzer(random());
 
     RandomIndexWriter w  = new RandomIndexWriter(random(), dir, newIndexWriterConfig(TEST_VERSION_CURRENT, analyzer).setMergePolicy(newLogMergePolicy()));
-    List<List<String>> docs = new ArrayList<List<String>>();
+    List<List<String>> docs = new ArrayList<>();
     Document d = new Document();
     Field f = newTextField("f", "", Field.Store.NO);
     d.add(f);
@@ -609,9 +609,9 @@ public class TestPhraseQuery extends LuceneTestCase {
     int NUM_DOCS = atLeast(10);
     for (int i = 0; i < NUM_DOCS; i++) {
       // must be > 4096 so it spans multiple chunks
-      int termCount = _TestUtil.nextInt(random(), 4097, 8200);
+      int termCount = TestUtil.nextInt(random(), 4097, 8200);
 
-      List<String> doc = new ArrayList<String>();
+      List<String> doc = new ArrayList<>();
 
       StringBuilder sb = new StringBuilder();
       while(doc.size() < termCount) {
@@ -619,14 +619,12 @@ public class TestPhraseQuery extends LuceneTestCase {
           // make new non-empty-string term
           String term;
           while(true) {
-            term = _TestUtil.randomUnicodeString(r);
+            term = TestUtil.randomUnicodeString(r);
             if (term.length() > 0) {
               break;
             }
           }
-          IOException priorException = null;
-          TokenStream ts = analyzer.tokenStream("ignore", term);
-          try {
+          try (TokenStream ts = analyzer.tokenStream("ignore", term)) {
             CharTermAttribute termAttr = ts.addAttribute(CharTermAttribute.class);
             ts.reset();
             while(ts.incrementToken()) {
@@ -635,15 +633,11 @@ public class TestPhraseQuery extends LuceneTestCase {
               sb.append(text).append(' ');
             }
             ts.end();
-          } catch (IOException e) {
-            priorException = e;
-          } finally {
-            IOUtils.closeWhileHandlingException(priorException, ts);
           }
         } else {
           // pick existing sub-phrase
           List<String> lastDoc = docs.get(r.nextInt(docs.size()));
-          int len = _TestUtil.nextInt(r, 1, 10);
+          int len = TestUtil.nextInt(r, 1, 10);
           int start = r.nextInt(lastDoc.size()-len);
           for(int k=start;k<start+len;k++) {
             String t = lastDoc.get(k);
@@ -667,7 +661,7 @@ public class TestPhraseQuery extends LuceneTestCase {
       int docID = r.nextInt(docs.size());
       List<String> doc = docs.get(docID);
       
-      final int numTerm = _TestUtil.nextInt(r, 2, 20);
+      final int numTerm = TestUtil.nextInt(r, 2, 20);
       final int start = r.nextInt(doc.size()-numTerm);
       PhraseQuery pq = new PhraseQuery();
       StringBuilder sb = new StringBuilder();
