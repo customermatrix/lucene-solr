@@ -93,7 +93,7 @@ public class ZkContainer {
 
     String zkRun = System.getProperty("zkRun");
     
-    this.hostPort = System.getProperty("hostPort", hostPort);
+    hostPort = System.getProperty("hostPort", hostPort);
 
     if (zkRun == null && zookeeperHost == null)
         return;  // not in zk mode
@@ -106,6 +106,9 @@ public class ZkContainer {
       log.warn("Solr 'hostPort' has not be explicitly configured, using hardcoded default of " + DEFAULT_HOST_PORT + ".  This default has been deprecated and will be removed in future versions of Solr, please configure this value explicitly");
       hostPort = DEFAULT_HOST_PORT;
     }
+
+    this.hostPort = hostPort;
+
     if (null == hostContext) {
       // throw new ZooKeeperException(SolrException.ErrorCode.SERVER_ERROR,
       //               "'hostContext' must be configured to run SolrCloud");
@@ -249,7 +252,7 @@ public class ZkContainer {
       }
     }
   }
-  
+
   public ZkController getZkController() {
     return zkController;
   }

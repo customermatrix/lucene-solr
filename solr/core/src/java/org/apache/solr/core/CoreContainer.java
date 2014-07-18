@@ -77,7 +77,7 @@ public class CoreContainer {
 
   protected Properties containerProperties;
 
-  private ConfigSetService coreConfigService;
+  protected ConfigSetService coreConfigService;
   
   protected ZkContainer zkSys = new ZkContainer();
   protected ShardHandlerFactory shardHandlerFactory;
