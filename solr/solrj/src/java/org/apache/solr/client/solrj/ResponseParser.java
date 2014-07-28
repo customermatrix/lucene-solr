@@ -19,6 +19,8 @@ package org.apache.solr.client.solrj;
 
 import java.io.Reader;
 import java.io.InputStream;
+
+import org.apache.http.HttpResponse;
 import org.apache.solr.common.util.NamedList;
 
 /**
@@ -52,7 +54,7 @@ public abstract class ResponseParser
   }
 
   // SEA-1051
-  public void checkStatus(int httpStatus) {
+  public void checkStatus(int httpStatus, HttpResponse response) {
   }
   // SEA-1051
 }

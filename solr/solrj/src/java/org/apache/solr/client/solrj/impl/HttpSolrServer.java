@@ -484,7 +484,7 @@ public class HttpSolrServer extends SolrServer {
           }
           // SEA-1051
           else {
-            processor.checkStatus(httpStatus);
+            processor.checkStatus(httpStatus, response);
           }
           // SEA-1051
       }
