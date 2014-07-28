@@ -50,4 +50,9 @@ public abstract class ResponseParser
   {
     return "2.2";
   }
+
+  // SEA-1051
+  public void checkStatus(int httpStatus) {
+  }
+  // SEA-1051
 }
