@@ -102,7 +102,7 @@ public class FacetComponent extends SearchComponent {
         params.add(paramName, deDupe.toArray(new String[deDupe.size()]));
       }
 
-      SimpleFacets f = new SimpleFacets(rb.req, rb.getResults().docSet, params, rb);
+      SimpleFacets f = newSimpleFacets(rb, params);
       
       NamedList<Object> counts = f.getFacetCounts();
       String[] pivots = params.getParams(FacetParams.FACET_PIVOT);
@@ -119,7 +119,13 @@ public class FacetComponent extends SearchComponent {
       rb.rsp.add("facet_counts", counts);
     }
   }
-  
+
+  // SEA
+  protected SimpleFacets newSimpleFacets(ResponseBuilder rb, SolrParams params) {
+    return new SimpleFacets(rb.req, rb.getResults().docSet, params, rb);
+  }
+  // SEA
+
   private static final String commandPrefix = "{!" + CommonParams.TERMS + "=$";
   
   @Override

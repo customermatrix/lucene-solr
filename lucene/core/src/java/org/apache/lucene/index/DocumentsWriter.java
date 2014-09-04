@@ -44,6 +44,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This class accepts multiple added documents and directly
@@ -398,8 +399,8 @@ final class DocumentsWriter implements Closeable, Accountable {
       try {
         state.dwpt = (DocumentsWriterPerThread)Class.forName(config.documentsWriterPerThreadImpl)
             .getConstructor(String.class, Directory.class, LiveIndexWriterConfig.class, InfoStream.class,
-                DocumentsWriterDeleteQueue.class, FieldInfos.Builder.class)
-            .newInstance(writer.newSegmentName(), directory, config, infoStream, deleteQueue, infos);
+                DocumentsWriterDeleteQueue.class, FieldInfos.Builder.class, AtomicLong.class)
+            .newInstance(writer.newSegmentName(), directory, config, infoStream, deleteQueue, infos, writer.pendingNumDocs);
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
