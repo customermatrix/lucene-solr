@@ -31,6 +31,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.lucene.index.AtomicReaderContext;
@@ -54,13 +55,7 @@ import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
-import org.apache.solr.common.params.CommonParams;
-import org.apache.solr.common.params.CursorMarkParams;
-import org.apache.solr.common.params.GroupParams;
-import org.apache.solr.common.params.ModifiableSolrParams;
-import org.apache.solr.common.params.MoreLikeThisParams;
-import org.apache.solr.common.params.ShardParams;
-import org.apache.solr.common.params.SolrParams;
+import org.apache.solr.common.params.*;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.common.util.StrUtils;
@@ -131,7 +126,7 @@ public class QueryComponent extends SearchComponent
 {
   private Logger logger = LoggerFactory.getLogger(QueryComponent.class);
   public static final String COMPONENT_NAME = "query";
-  
+
   @Override
   public void prepare(ResponseBuilder rb) throws IOException
   {
@@ -168,7 +163,7 @@ public class QueryComponent extends SearchComponent
       Query q = parser.getQuery();
       if (q == null) {
         // normalize a null query to a query that matches nothing
-        q = new BooleanQuery();        
+        q = new BooleanQuery();
       }
 
       rb.setQuery( q );
@@ -194,7 +189,7 @@ public class QueryComponent extends SearchComponent
 
       rb.setSortSpec( parser.getSort(true, req.getSchema()) );
       rb.setQparser(parser);
-      
+
       final String cursorStr = rb.req.getParams().get(CursorMarkParams.CURSOR_MARK_PARAM);
       if (null != cursorStr) {
         final CursorMark cursorMark = new CursorMark(rb.req.getSchema(),
@@ -238,10 +233,10 @@ public class QueryComponent extends SearchComponent
     if (null != rb.getCursorMark()) {
       // It's hard to imagine, conceptually, what it would mean to combine
       // grouping with a cursor - so for now we just don't allow the combination at all
-      throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, "Can not use Grouping with " + 
+      throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, "Can not use Grouping with " +
                               CursorMarkParams.CURSOR_MARK_PARAM);
     }
- 
+
     SolrIndexSearcher.QueryCommand cmd = rb.getQueryCommand();
     SolrIndexSearcher searcher = rb.req.getSearcher();
     GroupingSpecification groupingSpec = new GroupingSpecification();
@@ -310,7 +305,7 @@ public class QueryComponent extends SearchComponent
     long timeAllowed = (long)params.getInt( CommonParams.TIME_ALLOWED, -1 );
     if (null != rb.getCursorMark() && 0 < timeAllowed) {
       // fundementally incompatible
-      throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, "Can not search using both " + 
+      throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, "Can not search using both " +
                               CursorMarkParams.CURSOR_MARK_PARAM + " and " + CommonParams.TIME_ALLOWED);
     }
 
@@ -342,7 +337,7 @@ public class QueryComponent extends SearchComponent
         res.docSet = searcher.getDocSet(queries);
       }
       rb.setResults(res);
-      
+
       ResultContext ctx = new ResultContext();
       ctx.docs = rb.getResults().docList;
       ctx.query = null; // anything?
@@ -521,7 +516,7 @@ public class QueryComponent extends SearchComponent
 
     if ( ! rb.req.getParams().getBool(ShardParams.IS_SHARD,false) ) {
       if (null != rb.getNextCursorMark()) {
-        rb.rsp.add(CursorMarkParams.CURSOR_MARK_NEXT, 
+        rb.rsp.add(CursorMarkParams.CURSOR_MARK_NEXT,
                    rb.getNextCursorMark().getSerializedTotem());
       }
     }
@@ -631,7 +626,7 @@ public class QueryComponent extends SearchComponent
           comparator.setScorer(new FakeScorer(doc, score));
           comparator.copy(0, doc);
           Object val = comparator.value(0);
-          if (null != ft) val = ft.marshalSortValue(val); 
+          if (null != ft) val = ft.marshalSortValue(val);
           vals[position] = val;
         }
 
@@ -652,7 +647,7 @@ public class QueryComponent extends SearchComponent
     }
   }
 
-  @Override  
+  @Override
   public int distributedProcess(ResponseBuilder rb) throws IOException {
     if (rb.grouping()) {
       return groupedDistributedProcess(rb);
@@ -812,7 +807,7 @@ public class QueryComponent extends SearchComponent
 
     rb.rsp.add("response", rb._responseDocs);
     if (null != rb.getNextCursorMark()) {
-      rb.rsp.add(CursorMarkParams.CURSOR_MARK_NEXT, 
+      rb.rsp.add(CursorMarkParams.CURSOR_MARK_NEXT,
                  rb.getNextCursorMark().getSerializedTotem());
     }
   }
@@ -830,8 +825,11 @@ public class QueryComponent extends SearchComponent
     // one-pass algorithm if only id and score fields are requested, but not if fl=score since that's the same as fl=*,score
     ReturnFields fields = rb.rsp.getReturnFields();
 
-    if(fields != null && fields.wantsField(keyFieldName)
-        && fields.getRequestedFieldNames() != null && Arrays.asList(keyFieldName, "score").containsAll(fields.getRequestedFieldNames())) {
+    // distrib.singlePass=true forces a one-pass query regardless of requested fields
+    boolean distribSinglePass = rb.req.getParams().getBool(ShardParams.DISTRIB_SINGLE_PASS, false);
+
+    if(distribSinglePass || (fields != null && fields.wantsField(keyFieldName)
+        && fields.getRequestedFieldNames() != null && Arrays.asList(keyFieldName, "score").containsAll(fields.getRequestedFieldNames()))) {
       sreq.purpose |= ShardRequest.PURPOSE_GET_FIELDS;
       rb.onePassDistributedQuery = true;
     }
@@ -861,21 +859,53 @@ public class QueryComponent extends SearchComponent
       sreq.params.set(CommonParams.ROWS, rb.getSortSpec().getOffset() + rb.getSortSpec().getCount());
     }
 
-    // in this first phase, request only the unique key field
-    // and any fields needed for merging.
     sreq.params.set(ResponseBuilder.FIELD_SORT_VALUES,"true");
 
-    if ( (rb.getFieldFlags() & SolrIndexSearcher.GET_SCORES)!=0 || rb.getSortSpec().includesScore()) {
-      sreq.params.set(CommonParams.FL, keyFieldName + ",score");
+    boolean shardQueryIncludeScore = (rb.getFieldFlags() & SolrIndexSearcher.GET_SCORES) != 0 || rb.getSortSpec().includesScore();
+    if (distribSinglePass) {
+      String fl = rb.req.getParams().get(CommonParams.FL);
+      if (fl == null) {
+        if (fields.getRequestedFieldNames() == null && fields.wantsAllFields()) {
+          fl = "*";
+        } else  {
+          fl = "";
+          for (String s : fields.getRequestedFieldNames()) {
+            fl += s + ",";
+          }
+        }
+      }
+      if (!fields.wantsField(keyFieldName))  {
+        // the user has not requested the unique key but
+        // we still need to add it otherwise mergeIds can't work
+        if (fl.endsWith(",")) {
+          fl += keyFieldName;
+        } else  {
+          fl += "," + keyFieldName;
+        }
+      }
+      sreq.params.set(CommonParams.FL, updateFl(fl, shardQueryIncludeScore));
     } else {
-      sreq.params.set(CommonParams.FL, keyFieldName);
+      // in this first phase, request only the unique key field and any fields needed for merging.
+      if (shardQueryIncludeScore) {
+        sreq.params.set(CommonParams.FL, keyFieldName + ",score");
+      } else {
+        sreq.params.set(CommonParams.FL, keyFieldName);
+      }
     }
 
     rb.addRequest(this, sreq);
   }
 
 
+  String updateFl(String originalFields, boolean includeScoreIfMissing) {
+    if (includeScoreIfMissing && !scorePattern.matcher(originalFields).find()) {
+      return originalFields + ",score";
+    } else {
+      return originalFields;
+    }
+  }
 
+  private static final Pattern scorePattern = Pattern.compile("\\bscore\\b");
 
 
   private void mergeIds(ResponseBuilder rb, ShardRequest sreq) {
@@ -1060,7 +1090,9 @@ public class QueryComponent extends SearchComponent
       populateNextCursorMarkFromMergedShards(rb);
 
       if (partialResults) {
-        rb.rsp.getResponseHeader().add( "partialResults", Boolean.TRUE );
+        if(rb.rsp.getResponseHeader().get("partialResults") == null) {
+          rb.rsp.getResponseHeader().add("partialResults", Boolean.TRUE);
+        }
       }
   }
 
@@ -1223,6 +1255,28 @@ public class QueryComponent extends SearchComponent
       boolean removeKeyField = !rb.rsp.getReturnFields().wantsField(keyFieldName);
 
       for (ShardResponse srsp : sreq.responses) {
+        if (srsp.getException() != null) {
+          // Don't try to get the documents if there was an exception in the shard
+          if(rb.req.getParams().getBool(ShardParams.SHARDS_INFO, false)) {
+            @SuppressWarnings("unchecked")
+            NamedList<Object> shardInfo = (NamedList<Object>) rb.rsp.getValues().get(ShardParams.SHARDS_INFO);
+            @SuppressWarnings("unchecked")
+            SimpleOrderedMap<Object> nl = (SimpleOrderedMap<Object>) shardInfo.get(srsp.getShard());
+            if (nl.get("error") == null) {
+              // Add the error to the shards info section if it wasn't added before
+              Throwable t = srsp.getException();
+              if(t instanceof SolrServerException) {
+                t = ((SolrServerException)t).getCause();
+              }
+              nl.add("error", t.toString() );
+              StringWriter trace = new StringWriter();
+              t.printStackTrace(new PrintWriter(trace));
+              nl.add("trace", trace.toString() );
+            }
+          }
+          
+          continue;
+        }
         SolrDocumentList docs = (SolrDocumentList) srsp.getSolrResponse().getResponse().get("response");
 
         for (SolrDocument doc : docs) {
@@ -1253,7 +1307,7 @@ public class QueryComponent extends SearchComponent
 
   @Override
   public String getSource() {
-    return "$URL$";
+    return null;
   }
 
   @Override

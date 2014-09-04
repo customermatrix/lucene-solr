@@ -96,7 +96,6 @@ public class ChaosMonkeySafeLeaderTest extends AbstractFullDistribZkTestBase {
   public void doTest() throws Exception {
     
     handle.clear();
-    handle.put("QTime", SKIPVAL);
     handle.put("timestamp", SKIPVAL);
     
     // randomly turn on 1 seconds 'soft' commit
@@ -172,14 +171,6 @@ public class ChaosMonkeySafeLeaderTest extends AbstractFullDistribZkTestBase {
     numShardsNumReplicas.add(1);
     numShardsNumReplicas.add(1);
     checkForCollection("testcollection",numShardsNumReplicas, null);
-  }
-
-  private void randomlyEnableAutoSoftCommit() {
-    if (r.nextBoolean()) {
-      enableAutoSoftCommit(1000);
-    } else {
-      log.info("Not turning on auto soft commit");
-    }
   }
   
   // skip the randoms - they can deadlock...

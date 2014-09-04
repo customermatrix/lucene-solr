@@ -23,7 +23,6 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,11 +56,10 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.RAMDirectory;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.Constants;
-import org.apache.lucene.util.StringHelper;
 import org.apache.lucene.util.LuceneTestCase.SuppressCodecs;
 import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.util.TestUtil;
+import org.apache.lucene.util.Version;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
@@ -72,7 +70,7 @@ import org.junit.BeforeClass;
 // don't use 3.x codec, its unrealistic since it means
 // we won't even be running the actual code, only the impostor
 // Sep codec cannot yet handle the offsets we add when changing indexes!
-@SuppressCodecs({"Lucene3x", "MockFixedIntBlock", "MockVariableIntBlock", "MockSep", "MockRandom", "Lucene40", "Lucene41", "Appending", "Lucene42", "Lucene45", "Lucene46"})
+@SuppressCodecs({"Lucene3x", "MockFixedIntBlock", "MockVariableIntBlock", "MockSep", "MockRandom", "Lucene40", "Lucene41", "Appending", "Lucene42", "Lucene45", "Lucene46", "Lucene49"})
 public class TestBackwardsCompatibility3x extends LuceneTestCase {
 
   // Uncomment these cases & run them on an older Lucene
@@ -189,8 +187,7 @@ public class TestBackwardsCompatibility3x extends LuceneTestCase {
       }
 
       try {
-        writer = new IndexWriter(dir, newIndexWriterConfig(
-          TEST_VERSION_CURRENT, new MockAnalyzer(random())));
+        writer = new IndexWriter(dir, newIndexWriterConfig(new MockAnalyzer(random())));
         fail("IndexWriter creation should not pass for "+unsupportedNames[i]);
       } catch (IndexFormatTooOldException e) {
         // pass
@@ -243,8 +240,7 @@ public class TestBackwardsCompatibility3x extends LuceneTestCase {
         System.out.println("\nTEST: old index " + name);
       }
       Directory targetDir = newDirectory();
-      IndexWriter w = new IndexWriter(targetDir, newIndexWriterConfig(
-          TEST_VERSION_CURRENT, new MockAnalyzer(random())));
+      IndexWriter w = new IndexWriter(targetDir, newIndexWriterConfig(new MockAnalyzer(random())));
       w.addIndexes(oldIndexDirs.get(name));
       if (VERBOSE) {
         System.out.println("\nTEST: done adding indices; now close");
@@ -260,8 +256,7 @@ public class TestBackwardsCompatibility3x extends LuceneTestCase {
       IndexReader reader = DirectoryReader.open(oldIndexDirs.get(name));
       
       Directory targetDir = newDirectory();
-      IndexWriter w = new IndexWriter(targetDir, newIndexWriterConfig(
-          TEST_VERSION_CURRENT, new MockAnalyzer(random())));
+      IndexWriter w = new IndexWriter(targetDir, newIndexWriterConfig(new MockAnalyzer(random())));
       w.addIndexes(reader);
       w.close();
       reader.close();
@@ -481,7 +476,8 @@ public class TestBackwardsCompatibility3x extends LuceneTestCase {
 
   public void changeIndexWithAdds(Random random, Directory dir, String origOldName) throws IOException {
     // open writer
-    IndexWriter writer = new IndexWriter(dir, newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random)).setOpenMode(OpenMode.APPEND));
+    IndexWriter writer = new IndexWriter(dir, newIndexWriterConfig(new MockAnalyzer(random))
+                                                .setOpenMode(OpenMode.APPEND));
     // add 10 docs
     for(int i=0;i<10;i++) {
       addDoc(writer, 35+i);
@@ -507,7 +503,8 @@ public class TestBackwardsCompatibility3x extends LuceneTestCase {
     reader.close();
 
     // fully merge
-    writer = new IndexWriter(dir, newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random)).setOpenMode(OpenMode.APPEND));
+    writer = new IndexWriter(dir, newIndexWriterConfig(new MockAnalyzer(random))
+                                    .setOpenMode(OpenMode.APPEND));
     writer.forceMerge(1);
     writer.close();
 
@@ -532,7 +529,8 @@ public class TestBackwardsCompatibility3x extends LuceneTestCase {
     reader.close();
 
     // fully merge
-    IndexWriter writer = new IndexWriter(dir, newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random)).setOpenMode(OpenMode.APPEND));
+    IndexWriter writer = new IndexWriter(dir, newIndexWriterConfig(new MockAnalyzer(random))
+                                                .setOpenMode(OpenMode.APPEND));
     writer.forceMerge(1);
     writer.close();
 
@@ -718,12 +716,10 @@ public class TestBackwardsCompatibility3x extends LuceneTestCase {
     riw.close();
     DirectoryReader ir = DirectoryReader.open(currentDir);
     SegmentReader air = (SegmentReader)ir.leaves().get(0).reader();
-    String currentVersion = air.getSegmentInfo().info.getVersion();
+    Version currentVersion = air.getSegmentInfo().info.getVersion();
     assertNotNull(currentVersion); // only 3.0 segments can have a null version
     ir.close();
     currentDir.close();
-    
-    Comparator<String> comparator = StringHelper.getVersionComparator();
     
     // now check all the old indexes, their version should be < the current version
     for (String name : oldNames) {
@@ -731,11 +727,11 @@ public class TestBackwardsCompatibility3x extends LuceneTestCase {
       DirectoryReader r = DirectoryReader.open(dir);
       for (AtomicReaderContext context : r.leaves()) {
         air = (SegmentReader) context.reader();
-        String oldVersion = air.getSegmentInfo().info.getVersion();
+        Version oldVersion = air.getSegmentInfo().info.getVersion();
         // TODO: does preflex codec actually set "3.0" here? This is safe to do I think.
         // assertNotNull(oldVersion);
         assertTrue("current Constants.LUCENE_MAIN_VERSION is <= an old index: did you forget to bump it?!",
-            oldVersion == null || comparator.compare(oldVersion, currentVersion) < 0);
+            oldVersion == null || currentVersion.onOrAfter(oldVersion));
       }
       r.close();
     }
@@ -792,7 +788,7 @@ public class TestBackwardsCompatibility3x extends LuceneTestCase {
       System.out.println("checkAllSegmentsUpgraded: " + infos);
     }
     for (SegmentCommitInfo si : infos) {
-      assertEquals(Constants.LUCENE_MAIN_VERSION, si.info.getVersion());
+      assertEquals(Version.LATEST.toString(), si.info.getVersion().toString());
     }
     return infos.size();
   }
@@ -813,7 +809,7 @@ public class TestBackwardsCompatibility3x extends LuceneTestCase {
       }
       Directory dir = newDirectory(oldIndexDirs.get(name));
 
-      new IndexUpgrader(dir, newIndexWriterConfig(TEST_VERSION_CURRENT, null), false)
+      new IndexUpgrader(dir, newIndexWriterConfig(null), false)
         .upgrade();
 
       checkAllSegmentsUpgraded(dir);
@@ -859,7 +855,7 @@ public class TestBackwardsCompatibility3x extends LuceneTestCase {
       // determine count of segments in modified index
       final int origSegCount = getNumberOfSegments(dir);
       
-      new IndexUpgrader(dir, newIndexWriterConfig(TEST_VERSION_CURRENT, null), false)
+      new IndexUpgrader(dir, newIndexWriterConfig(null), false)
         .upgrade();
 
       final int segCount = checkAllSegmentsUpgraded(dir);
@@ -948,5 +944,40 @@ public class TestBackwardsCompatibility3x extends LuceneTestCase {
     ir.close();
     TestUtil.checkIndex(dir);
     dir.close();
+  }
+
+  // LUCENE-5907
+  public void testUpgradeWithNRTReader() throws Exception {
+    for (String name : oldNames) {
+      Directory dir = newDirectory(oldIndexDirs.get(name));
+
+      IndexWriter writer = new IndexWriter(dir, newIndexWriterConfig(new MockAnalyzer(random()))
+                                           .setOpenMode(OpenMode.APPEND));
+      writer.addDocument(new Document());
+      DirectoryReader r = DirectoryReader.open(writer, true);
+      writer.commit();
+      r.close();
+      writer.forceMerge(1);
+      writer.commit();
+      writer.rollback();
+      new SegmentInfos().read(dir);
+      dir.close();
+    }
+  }
+
+  // LUCENE-5907
+  public void testUpgradeThenMultipleCommits() throws Exception {
+    for (String name : oldNames) {
+      Directory dir = newDirectory(oldIndexDirs.get(name));
+
+      IndexWriter writer = new IndexWriter(dir, newIndexWriterConfig(new MockAnalyzer(random()))
+                                           .setOpenMode(OpenMode.APPEND));
+      writer.addDocument(new Document());
+      writer.commit();
+      writer.addDocument(new Document());
+      writer.commit();
+      writer.close();
+      dir.close();
+    }
   }
 }

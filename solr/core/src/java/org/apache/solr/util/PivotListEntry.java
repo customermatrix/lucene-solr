@@ -17,35 +17,44 @@ package org.apache.solr.util;
  * limitations under the License.
  */
 
+import java.util.Locale;
+
+/**
+ * Enum for modeling the elements of a (nested) pivot entry as expressed in a NamedList
+ */
 public enum PivotListEntry {
   
-  FIELD("field", 0),
+  FIELD(0), 
+  VALUE(1),
+  COUNT(2),
+  PIVOT(3);
   
-  VALUE("value", 1),
-  
-  COUNT("count", 2),
-  
-  STATISTICS("statistics", 3),
-  
-  PIVOT("pivot", 3),
-  
-  MAPPEDPIVOT("mappedpivot",3),
-
-  WEIGHT("weight", 3);
-  
-  private final String name;
-  
+  // we could just use the ordinal(), but safer to be very explicit
   private final int index;
   
-  private PivotListEntry(String name, int index) {
-    this.name = name;
+  private PivotListEntry(int index) {
     this.index = index;
   }
   
+  /**
+   * Case-insensitive lookup of PivotListEntry by name
+   * @see #getName
+   */
+  public static PivotListEntry get(String name) {
+    return PivotListEntry.valueOf(name.toUpperCase(Locale.ROOT));
+  }
+
+  /**
+   * Name of this entry when used in response
+   * @see #get
+   */
   public String getName() {
-    return name;
+    return name().toLowerCase(Locale.ROOT);
   }
   
+  /**
+   * Indec of this entry when used in response
+   */
   public int getIndex() {
     return index;
   }

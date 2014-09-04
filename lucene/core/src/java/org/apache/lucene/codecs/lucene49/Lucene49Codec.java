@@ -17,7 +17,10 @@ package org.apache.lucene.codecs.lucene49;
  * limitations under the License.
  */
 
+import java.io.IOException;
+
 import org.apache.lucene.codecs.Codec;
+import org.apache.lucene.codecs.DocValuesConsumer;
 import org.apache.lucene.codecs.DocValuesFormat;
 import org.apache.lucene.codecs.FieldInfosFormat;
 import org.apache.lucene.codecs.FilterCodec;
@@ -35,6 +38,7 @@ import org.apache.lucene.codecs.lucene46.Lucene46FieldInfosFormat;
 import org.apache.lucene.codecs.lucene46.Lucene46SegmentInfoFormat;
 import org.apache.lucene.codecs.perfield.PerFieldDocValuesFormat;
 import org.apache.lucene.codecs.perfield.PerFieldPostingsFormat;
+import org.apache.lucene.index.SegmentWriteState;
 
 /**
  * Implements the Lucene 4.9 index format, with configurable per-field postings
@@ -131,10 +135,15 @@ public class Lucene49Codec extends Codec {
   private final PostingsFormat defaultFormat = PostingsFormat.forName("Lucene41");
   private final DocValuesFormat defaultDVFormat = DocValuesFormat.forName("Lucene49");
 
-  private final NormsFormat normsFormat = new Lucene49NormsFormat();
+  private final NormsFormat normsFormat = new Lucene49NormsFormat() {
+    @Override
+    public DocValuesConsumer normsConsumer(SegmentWriteState state) throws IOException {
+      throw new UnsupportedOperationException("this codec can only be used for reading");
+    }
+  };
 
   @Override
-  public final NormsFormat normsFormat() {
-    return normsFormat;
+  public NormsFormat normsFormat() {
+   return normsFormat;
   }
 }

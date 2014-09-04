@@ -29,6 +29,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.NoSuchFileException;
 import java.util.ArrayList;
@@ -77,6 +78,7 @@ import org.apache.lucene.index.FieldInfos;
 import org.apache.lucene.index.Fields;
 import org.apache.lucene.index.IndexReader.ReaderClosedListener;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.LiveIndexWriterConfig;
@@ -375,7 +377,7 @@ public abstract class LuceneTestCase extends Assert {
    * Use this constant when creating Analyzers and any other version-dependent stuff.
    * <p><b>NOTE:</b> Change this when development starts for new Lucene version:
    */
-  public static final Version TEST_VERSION_CURRENT = Version.LUCENE_4_9;
+  public static final Version TEST_VERSION_CURRENT = Version.LUCENE_4_10_0;
 
   /**
    * True if and only if tests are run in verbose mode. If this flag is false
@@ -669,8 +671,34 @@ public abstract class LuceneTestCase extends Assert {
   public void tearDown() throws Exception {
     parentChainCallRule.teardownCalled = true;
     fieldToType.clear();
+
+    // Test is supposed to call this itself, but we do this defensively in case it forgot:
+    restoreIndexWriterMaxDocs();
   }
 
+  /** Tells {@link IndexWriter} to enforce the specified limit as the maximum number of documents in one index; call
+   *  {@link #restoreIndexWriterMaxDocs} once your test is done. */
+  public void setIndexWriterMaxDocs(int limit) {
+    Method m;
+    try {
+      m = IndexWriter.class.getDeclaredMethod("setMaxDocs", int.class);
+    } catch (NoSuchMethodException nsme) {
+      throw new RuntimeException(nsme);
+    }
+    m.setAccessible(true);
+    try {
+      m.invoke(IndexWriter.class, limit);
+    } catch (IllegalAccessException iae) {
+      throw new RuntimeException(iae);
+    } catch (InvocationTargetException ite) {
+      throw new RuntimeException(ite);
+    }
+  }
+
+  /** Returns the default {@link IndexWriter#MAX_DOCS} limit. */
+  public void restoreIndexWriterMaxDocs() {
+    setIndexWriterMaxDocs(IndexWriter.MAX_DOCS);
+  }
 
   // -----------------------------------------------------------------
   // Test facilities and facades for subclasses. 
@@ -892,8 +920,8 @@ public abstract class LuceneTestCase extends Assert {
   }
 
   /** create a new index writer config with random defaults */
-  public static IndexWriterConfig newIndexWriterConfig(Version v, Analyzer a) {
-    return newIndexWriterConfig(random(), v, a);
+  public static IndexWriterConfig newIndexWriterConfig(Analyzer a) {
+    return newIndexWriterConfig(random(), TEST_VERSION_CURRENT, a);
   }
   
   /** create a new index writer config with random defaults using the specified random */
@@ -913,8 +941,8 @@ public abstract class LuceneTestCase extends Assert {
     if (r.nextBoolean()) {
       c.setMergeScheduler(new SerialMergeScheduler());
     } else if (rarely(r)) {
-      int maxThreadCount = TestUtil.nextInt(random(), 1, 4);
-      int maxMergeCount = TestUtil.nextInt(random(), maxThreadCount, maxThreadCount+4);
+      int maxThreadCount = TestUtil.nextInt(r, 1, 4);
+      int maxMergeCount = TestUtil.nextInt(r, maxThreadCount, maxThreadCount+4);
       ConcurrentMergeScheduler cms = new ConcurrentMergeScheduler();
       cms.setMaxMergesAndThreads(maxMergeCount, maxThreadCount);
       c.setMergeScheduler(cms);
@@ -1006,7 +1034,7 @@ public abstract class LuceneTestCase extends Assert {
       mergePolicy.setNoCFSRatio(r.nextBoolean() ? 1.0 : 0.0);
     }
     
-    if (rarely()) {
+    if (rarely(r)) {
       mergePolicy.setMaxCFSSegmentSizeMB(0.2 + r.nextDouble() * 2.0);
     } else {
       mergePolicy.setMaxCFSSegmentSizeMB(Double.POSITIVE_INFINITY);
@@ -1076,7 +1104,7 @@ public abstract class LuceneTestCase extends Assert {
           flushByRAM = false;
           break;
         case EITHER:
-          flushByRAM = random().nextBoolean();
+          flushByRAM = r.nextBoolean();
           break;
         default:
           throw new AssertionError();
@@ -2325,8 +2353,6 @@ public abstract class LuceneTestCase extends Assert {
           // numOrds
           assertEquals(info, leftValues.getValueCount(), rightValues.getValueCount());
           // ords
-          BytesRef scratchLeft = new BytesRef();
-          BytesRef scratchRight = new BytesRef();
           for (int i = 0; i < leftValues.getValueCount(); i++) {
             final BytesRef left = BytesRef.deepCopyOf(leftValues.lookupOrd(i));
             final BytesRef right = rightValues.lookupOrd(i);

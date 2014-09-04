@@ -138,10 +138,9 @@ public class TestReplicationHandler extends SolrTestCaseJ4 {
   }
 
   private static JettySolrRunner createJetty(SolrInstance instance) throws Exception {
-    System.setProperty("solr.data.dir", instance.getDataDir());
     FileUtils.copyFile(new File(SolrTestCaseJ4.TEST_HOME(), "solr.xml"), new File(instance.getHomeDir(), "solr.xml"));
     JettySolrRunner jetty = new JettySolrRunner(instance.getHomeDir(), "/solr", 0);
-
+    jetty.setDataDir(instance.getDataDir());
     jetty.start();
     return jetty;
   }
@@ -194,6 +193,7 @@ public class TestReplicationHandler extends SolrTestCaseJ4 {
       Thread.sleep(100);
       res = query(query, server);
     }
+    log.info("Waited for {}ms and found {} docs", timeSlept, numFound(res));
     return res;
   }
   
@@ -556,9 +556,8 @@ public class TestReplicationHandler extends SolrTestCaseJ4 {
 
     assertEquals(1, numFound( rQuery(1, "*:*", masterClient)));
     
-    assertVersions(masterClient, slaveClient);
-
     slaveQueryRsp = rQuery(1, "*:*", slaveClient);
+    assertVersions(masterClient, slaveClient);
     SolrDocument d = ((SolrDocumentList) slaveQueryRsp.get("response")).get(0);
     assertEquals("newname = 2000", (String) d.getFieldValue("newname"));
 

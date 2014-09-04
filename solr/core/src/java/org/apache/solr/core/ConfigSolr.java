@@ -17,8 +17,17 @@ package org.apache.solr.core;
  * limitations under the License.
  */
 
-import com.google.common.base.Charsets;
-import com.google.common.io.ByteStreams;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpressionException;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Properties;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.cloud.CloudConfigSetService;
@@ -33,20 +42,6 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathConstants;
-import javax.xml.xpath.XPathExpressionException;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Properties;
-
 
 public abstract class ConfigSolr {
   protected static Logger log = LoggerFactory.getLogger(ConfigSolr.class);
@@ -60,6 +55,8 @@ public abstract class ConfigSolr {
 
     try {
 
+      // 4x specific behavior, removed in 5.0...
+      // if configFile doesn't exist, and we aren't in cloud mode, use old style default
       if (!configFile.exists()) {
         if (ZkContainer.isZkMode()) {
           throw new SolrException(SolrException.ErrorCode.SERVER_ERROR,
@@ -71,8 +68,10 @@ public abstract class ConfigSolr {
         inputStream = new FileInputStream(configFile);
       }
       return fromInputStream(loader, inputStream);
-    }
-    catch (Exception e) {
+
+    } catch (SolrException exc) {
+      throw exc;
+    } catch (Exception e) {
       throw new SolrException(SolrException.ErrorCode.SERVER_ERROR,
           "Could not load SOLR configuration", e);
     }
@@ -89,9 +88,12 @@ public abstract class ConfigSolr {
     try {
       byte[] buf = IOUtils.toByteArray(is);
       String originalXml = new String(buf, StandardCharsets.UTF_8);
-      ByteArrayInputStream dup = new ByteArrayInputStream(buf);
-      Config config = new Config(loader, null, new InputSource(dup), null, false);
-      return fromConfig(config, originalXml);
+      try (ByteArrayInputStream dup = new ByteArrayInputStream(buf)) {
+        Config config = new Config(loader, null, new InputSource(dup), null, false);
+        return fromConfig(config, originalXml);
+      }
+    } catch (SolrException exc) {
+      throw exc;
     } catch (Exception e) {
       throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, e);
     }
@@ -117,7 +119,7 @@ public abstract class ConfigSolr {
    * @return core root directory
    */
   public String getCoreRootDirectory() {
-    return get(CfgProp.SOLR_COREROOTDIRECTORY, config.getResourceLoader().getInstanceDir());
+    return SolrResourceLoader.normalizeDir( get(CfgProp.SOLR_COREROOTDIRECTORY, config.getResourceLoader().getInstanceDir()) );
   }
 
   public PluginInfo getShardHandlerFactoryPluginInfo() {
@@ -138,13 +140,18 @@ public abstract class ConfigSolr {
     String sysProp = System.getProperty("zkClientTimeout");
     if (sysProp != null)
       return Integer.parseInt(sysProp);
-    return getInt(CfgProp.SOLR_ZKCLIENTTIMEOUT, DEFAULT_ZK_CLIENT_TIMEOUT);
+    return get(CfgProp.SOLR_ZKCLIENTTIMEOUT, DEFAULT_ZK_CLIENT_TIMEOUT);
   }
 
   private static final int DEFAULT_ZK_CLIENT_TIMEOUT = 15000;
   private static final int DEFAULT_LEADER_VOTE_WAIT = 180000;  // 3 minutes
   private static final int DEFAULT_LEADER_CONFLICT_RESOLVE_WAIT = 180000;
   private static final int DEFAULT_CORE_LOAD_THREADS = 3;
+  
+  // TODO: tune defaults
+  private static final int DEFAULT_AUTO_REPLICA_FAILOVER_WAIT_AFTER_EXPIRATION = 30000;
+  private static final int DEFAULT_AUTO_REPLICA_FAILOVER_WORKLOOP_DELAY = 10000;
+  private static final int DEFAULT_AUTO_REPLICA_FAILOVER_BAD_NODE_EXPIRATION = 60000;
 
   protected static final String DEFAULT_CORE_ADMIN_PATH = "/admin/cores";
 
@@ -161,35 +168,47 @@ public abstract class ConfigSolr {
   }
 
   public int getLeaderVoteWait() {
-    return getInt(CfgProp.SOLR_LEADERVOTEWAIT, DEFAULT_LEADER_VOTE_WAIT);
+    return get(CfgProp.SOLR_LEADERVOTEWAIT, DEFAULT_LEADER_VOTE_WAIT);
   }
   
   public int getLeaderConflictResolveWait() {
-    return getInt(CfgProp.SOLR_LEADERCONFLICTRESOLVEWAIT, DEFAULT_LEADER_CONFLICT_RESOLVE_WAIT);
+    return get(CfgProp.SOLR_LEADERCONFLICTRESOLVEWAIT, DEFAULT_LEADER_CONFLICT_RESOLVE_WAIT);
+  }
+  
+  public int getAutoReplicaFailoverWaitAfterExpiration() {
+    return get(CfgProp.SOLR_AUTOREPLICAFAILOVERWAITAFTEREXPIRATION, DEFAULT_AUTO_REPLICA_FAILOVER_WAIT_AFTER_EXPIRATION);
+  }
+  
+  public int getAutoReplicaFailoverWorkLoopDelay() {
+    return get(CfgProp.SOLR_AUTOREPLICAFAILOVERWORKLOOPDELAY, DEFAULT_AUTO_REPLICA_FAILOVER_WORKLOOP_DELAY);
+  }
+  
+  public int getAutoReplicaFailoverBadNodeExpiration() {
+    return get(CfgProp.SOLR_AUTOREPLICAFAILOVERBADNODEEXPIRATION, DEFAULT_AUTO_REPLICA_FAILOVER_BAD_NODE_EXPIRATION);
   }
 
   public boolean getGenericCoreNodeNames() {
-    return getBool(CfgProp.SOLR_GENERICCORENODENAMES, false);
+    return get(CfgProp.SOLR_GENERICCORENODENAMES, false);
   }
 
   public int getDistributedConnectionTimeout() {
-    return getInt(CfgProp.SOLR_DISTRIBUPDATECONNTIMEOUT, 0);
+    return get(CfgProp.SOLR_DISTRIBUPDATECONNTIMEOUT, 0);
   }
 
   public int getDistributedSocketTimeout() {
-    return getInt(CfgProp.SOLR_DISTRIBUPDATESOTIMEOUT, 0);
+    return get(CfgProp.SOLR_DISTRIBUPDATESOTIMEOUT, 0);
   }
   
   public int getMaxUpdateConnections() {
-    return getInt(CfgProp.SOLR_MAXUPDATECONNECTIONS, 10000);
+    return get(CfgProp.SOLR_MAXUPDATECONNECTIONS, 10000);
   }
 
   public int getMaxUpdateConnectionsPerHost() {
-    return getInt(CfgProp.SOLR_MAXUPDATECONNECTIONSPERHOST, 100);
+    return get(CfgProp.SOLR_MAXUPDATECONNECTIONSPERHOST, 100);
   }
 
   public int getCoreLoadThreadCount() {
-    return getInt(ConfigSolr.CfgProp.SOLR_CORELOADTHREADS, DEFAULT_CORE_LOAD_THREADS);
+    return get(ConfigSolr.CfgProp.SOLR_CORELOADTHREADS, DEFAULT_CORE_LOAD_THREADS);
   }
 
   public String getSharedLibDirectory() {
@@ -219,7 +238,7 @@ public abstract class ConfigSolr {
   }
 
   public boolean hasSchemaCache() {
-    return getBool(ConfigSolr.CfgProp.SOLR_SHARESCHEMA, false);
+    return get(ConfigSolr.CfgProp.SOLR_SHARESCHEMA, false);
   }
 
   public String getManagementPath() {
@@ -231,16 +250,18 @@ public abstract class ConfigSolr {
   }
 
   public LogWatcherConfig getLogWatcherConfig() {
+    String loggingClass = get(CfgProp.SOLR_LOGGING_CLASS, null);
+    String loggingWatcherThreshold = get(CfgProp.SOLR_LOGGING_WATCHER_THRESHOLD, null);
     return new LogWatcherConfig(
-        getBool(CfgProp.SOLR_LOGGING_ENABLED, true),
-        get(CfgProp.SOLR_LOGGING_CLASS, null),
-        get(CfgProp.SOLR_LOGGING_WATCHER_THRESHOLD, null),
-        getInt(CfgProp.SOLR_LOGGING_WATCHER_SIZE, 50)
+        get(CfgProp.SOLR_LOGGING_ENABLED, true),
+        loggingClass,
+        loggingWatcherThreshold,
+        get(CfgProp.SOLR_LOGGING_WATCHER_SIZE, 50)
     );
   }
 
   public int getTransientCacheSize() {
-    return getInt(CfgProp.SOLR_TRANSIENTCACHESIZE, Integer.MAX_VALUE);
+    return get(CfgProp.SOLR_TRANSIENTCACHESIZE, Integer.MAX_VALUE);
   }
 
   public ConfigSetService createCoreConfigService(SolrResourceLoader loader, ZkController zkController) {
@@ -280,6 +301,10 @@ public abstract class ConfigSolr {
     SOLR_LEADERCONFLICTRESOLVEWAIT,
     SOLR_CONFIGSETBASEDIR,
 
+    SOLR_AUTOREPLICAFAILOVERWAITAFTEREXPIRATION,
+    SOLR_AUTOREPLICAFAILOVERWORKLOOPDELAY,
+    SOLR_AUTOREPLICAFAILOVERBADNODEEXPIRATION,
+    
     //TODO: Remove all of these elements for 5.0
     SOLR_PERSISTENT,
     SOLR_CORES_DEFAULT_CORE_NAME,
@@ -287,11 +312,11 @@ public abstract class ConfigSolr {
   }
 
   protected Config config;
-  protected Map<CfgProp, String> propMap = new HashMap<>();
+  protected Map<CfgProp, Object> propMap = new HashMap<>();
 
   public ConfigSolr(Config config) {
     this.config = config;
-
+    config.substituteProperties();
   }
 
   // for extension & testing.
@@ -303,22 +328,12 @@ public abstract class ConfigSolr {
     return config;
   }
 
-  public int getInt(CfgProp prop, int def) {
-    String val = propMap.get(prop);
-    if (val != null) val = PropertiesUtil.substituteProperty(val, null);
-    return (val == null) ? def : Integer.parseInt(val);
-  }
-
-  public boolean getBool(CfgProp prop, boolean defValue) {
-    String val = propMap.get(prop);
-    if (val != null) val = PropertiesUtil.substituteProperty(val, null);
-    return (val == null) ? defValue : Boolean.parseBoolean(val);
-  }
-
-  public String get(CfgProp prop, String def) {
-    String val = propMap.get(prop);
-    if (val != null) val = PropertiesUtil.substituteProperty(val, null);
-    return (val == null) ? def : val;
+  @SuppressWarnings("unchecked")
+  public <T> T get(CfgProp key, T defaultValue) {
+    if (propMap.containsKey(key) && propMap.get(key) != null) {
+      return (T) propMap.get(key);
+    }
+    return defaultValue;
   }
 
   public Properties getSolrProperties(String path) {

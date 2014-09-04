@@ -61,7 +61,9 @@ import org.apache.lucene.search.grouping.term.TermGroupFacetCollector;
 import org.apache.lucene.search.join.FixedBitSetCachingWrapperFilter;
 import org.apache.lucene.search.join.ToChildBlockJoinQuery;
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.BytesRefBuilder;
 import org.apache.lucene.util.CharsRef;
+import org.apache.lucene.util.CharsRefBuilder;
 import org.apache.lucene.util.StringHelper;
 import org.apache.lucene.util.UnicodeUtil;
 import org.apache.solr.common.SolrException;
@@ -77,6 +79,7 @@ import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.handler.component.ResponseBuilder;
+import org.apache.solr.request.IntervalFacets.FacetInterval;
 import org.apache.solr.schema.BoolField;
 import org.apache.solr.schema.DateField;
 import org.apache.solr.schema.FieldType;
@@ -294,6 +297,7 @@ public class SimpleFacets {
    * @see #getFacetFieldCounts
    * @see #getFacetDateCounts
    * @see #getFacetRangeCounts
+   * @see #getFacetIntervalCounts
    * @see FacetParams#FACET
    * @return a NamedList of Facet Count info or null
    */
@@ -309,6 +313,7 @@ public class SimpleFacets {
       facetResponse.add("facet_fields", getFacetFieldCounts());
       facetResponse.add("facet_dates", getFacetDateCounts());
       facetResponse.add("facet_ranges", getFacetRangeCounts());
+      facetResponse.add("facet_intervals", getFacetIntervalCounts());
 
     } catch (IOException e) {
       throw new SolrException(ErrorCode.SERVER_ERROR, e);
@@ -385,14 +390,23 @@ public class SimpleFacets {
   enum FacetMethod {
     ENUM, FC, FCS;
   }
-  
+
+  /**
+   * Term counts for use in pivot faceting that resepcts the appropriate mincount
+   * @see FacetParams#FACET_PIVOT_MINCOUNT
+   */
+  public NamedList<Integer> getTermCountsForPivots(String field, DocSet docs) throws IOException {
+    Integer mincount = params.getFieldInt(field, FacetParams.FACET_PIVOT_MINCOUNT, 1);
+    return getTermCounts(field, mincount, docs);
+  }
+
+  /**
+   * Term counts for use in field faceting that resepects the appropriate mincount
+   *
+   * @see FacetParams#FACET_MINCOUNT
+   */
   public NamedList<Integer> getTermCounts(String field) throws IOException {
     return getTermCountsWithSpecifiedMincount(field,params.getFieldInt(field, FacetParams.FACET_MINCOUNT));
-  }
-  
-  public NamedList<Integer> getTermCountsForPivots(String field) throws IOException {
-    Integer count = (params.getFieldInt(field, FacetParams.FACET_PIVOT_MINCOUNT)!=null) ? params.getFieldInt(field, FacetParams.FACET_PIVOT_MINCOUNT) : 1;
-    return getTermCountsWithSpecifiedMincount(field,count);
   }
   
   public NamedList<Integer> getTermCountsWithSpecifiedMincount(String field, Integer incomingMinCount) throws IOException{
@@ -401,9 +415,28 @@ public class SimpleFacets {
   
   public NamedList<Integer> getTermCountsWithMincountAndLimit(String field, Integer incomingMinCount, int limit) throws IOException{  
 
+  /**
+   * Term counts for use in field faceting that resepects the appropriate mincount
+   *
+   * @see FacetParams#FACET_MINCOUNT
+   */
+  public NamedList<Integer> getTermCounts(String field, DocSet base) throws IOException {
+    Integer mincount = params.getFieldInt(field, FacetParams.FACET_MINCOUNT);
+    return getTermCounts(field, mincount, base);
+  }
+
+  /**
+   * Term counts for use in field faceting that resepcts the specified mincount - 
+   * if mincount is null, the "zeros" param is consulted for the appropriate backcompat 
+   * default
+   *
+   * @see FacetParams#FACET_ZEROS
+   */
+  private NamedList<Integer> getTermCounts(String field, Integer mincount, DocSet base) throws IOException {
     int offset = params.getFieldInt(field, FacetParams.FACET_OFFSET, 0);
-    if (limit == 0) return new NamedList<Integer>();
-    if (incomingMinCount==null) {
+    int limit = params.getFieldInt(field, FacetParams.FACET_LIMIT, 100);
+    if (limit == 0) return new NamedList<>();
+    if (mincount==null) {
       Boolean zeros = params.getFieldBool(field, FacetParams.FACET_ZEROS);
       incomingMinCount = (zeros!=null && !zeros) ? 1 : 0;
     }
@@ -600,7 +633,7 @@ public class SimpleFacets {
   public NamedList<Object> getFacetFieldCounts()
       throws IOException, SyntaxError {
 
-    NamedList<Object> res = new SimpleOrderedMap<Object>();
+    NamedList<Object> res = new SimpleOrderedMap<>();
     try {
     String[] facetFs = params.getParams(FacetParams.FACET_FIELD);
     if (null == facetFs) {
@@ -629,7 +662,8 @@ public class SimpleFacets {
             try {
               NamedList<Object> result = new SimpleOrderedMap<>();
               if(termList != null) {
-                result.add(workerKey, getListedTermCounts(workerFacetValue, termList, workerBase));
+                List<String> terms = StrUtils.splitSmart(termList, ",", true);
+                result.add(workerKey, getListedTermCounts(workerFacetValue, workerBase, terms));
               } else {
                 result.add(workerKey, getTermCounts(workerFacetValue));
               }
@@ -675,13 +709,25 @@ public class SimpleFacets {
   }
 
 
-  public NamedList<Integer> getListedTermCounts(String field, String termList) throws IOException {
-    return getListedTermCounts(field, termList, this.docs);
+  /**
+   * Computes the term-&gt;count counts for the specified termList relative to the 
+   * @param field the name of the field to compute term counts against
+   * @param termList a comma seperated (and backslash escaped) list of term values (in the specified field) to compute the counts for
+   * @see StrUtils#splitSmart
+   */
+  private NamedList<Integer> getListedTermCounts(String field, String termList) throws IOException {
+    List<String> terms = StrUtils.splitSmart(termList, ",", true);
+    return getListedTermCounts(field, this.docs, terms);
   }
 
-  private NamedList getListedTermCounts(String field, String termList, DocSet base) throws IOException {
+  /**
+   * Computes the term-&gt;count counts for the specified term values relative to the 
+   * @param field the name of the field to compute term counts against
+   * @param base the docset to compute term counts relative to
+   * @param terms a list of term values (in the specified field) to compute the counts for 
+   */
+  protected NamedList<Integer> getListedTermCounts(String field, DocSet base, List<String> terms) throws IOException {
     FieldType ft = searcher.getSchema().getFieldType(field);
-    List<String> terms = StrUtils.splitSmart(termList, ",", true);
     NamedList<Integer> res = new NamedList<>();
     for (String term : terms) {
       String internal = ft.toInternal(term);
@@ -741,22 +787,23 @@ public class SimpleFacets {
 
     BytesRef br = new BytesRef();
 
-    final BytesRef prefixRef;
+    final BytesRefBuilder prefixRef;
     if (prefix == null) {
       prefixRef = null;
     } else if (prefix.length()==0) {
       prefix = null;
       prefixRef = null;
     } else {
-      prefixRef = new BytesRef(prefix);
+      prefixRef = new BytesRefBuilder();
+      prefixRef.copyChars(prefix);
     }
 
     int startTermIndex, endTermIndex;
     if (prefix!=null) {
-      startTermIndex = si.lookupTerm(prefixRef);
+      startTermIndex = si.lookupTerm(prefixRef.get());
       if (startTermIndex<0) startTermIndex=-startTermIndex-1;
       prefixRef.append(UnicodeUtil.BIG_TERM);
-      endTermIndex = si.lookupTerm(prefixRef);
+      endTermIndex = si.lookupTerm(prefixRef.get());
       assert endTermIndex < 0;
       endTermIndex = -endTermIndex-1;
     } else {
@@ -766,7 +813,7 @@ public class SimpleFacets {
 
     final int nTerms=endTermIndex-startTermIndex;
     int missingCount = -1; 
-    final CharsRef charsRef = new CharsRef(10);
+    final CharsRef charsRef = new CharsRef();
     if (nTerms>0 && docs.size() >= mincount) {
 
       // count collection array only needs to be as big as the number of terms we are
@@ -937,7 +984,7 @@ public class SimpleFacets {
     }
 
     DocsEnum docsEnum = null;
-    CharsRef charsRef = new CharsRef(10);
+    CharsRef charsRef = new CharsRef();
 
     if (docs.size() >= mincount) {
       while (term != null) {
@@ -1654,6 +1701,41 @@ public class SimpleFacets {
       return dmp.parseMath(gap);
     }
   }
-  
+
+  /**
+   * Returns a <code>NamedList</code> with each entry having the "key" of the interval as name and the count of docs 
+   * in that interval as value. All intervals added in the request are included in the returned 
+   * <code>NamedList</code> (included those with 0 count), and it's required that the order of the intervals
+   * is deterministic and equals in all shards of a distributed request, otherwise the collation of results
+   * will fail. 
+   * 
+   */
+  public NamedList<Object> getFacetIntervalCounts() throws IOException, SyntaxError {
+    NamedList<Object> res = new SimpleOrderedMap<Object>();
+    String[] fields = params.getParams(FacetParams.FACET_INTERVAL);
+    if (fields == null || fields.length == 0) return res;
+
+    for (String field : fields) {
+      parseParams(FacetParams.FACET_INTERVAL, field);
+      String[] intervalStrs = required.getFieldParams(field, FacetParams.FACET_INTERVAL_SET);
+      SchemaField schemaField = searcher.getCore().getLatestSchema().getField(field);
+      if (!schemaField.hasDocValues()) {
+        throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, "Interval Faceting only on fields with doc values");
+      }
+      if (params.getBool(GroupParams.GROUP_FACET, false)) {
+        throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, "Interval Faceting can't be used with " + GroupParams.GROUP_FACET);
+      }
+      
+      SimpleOrderedMap<Integer> fieldResults = new SimpleOrderedMap<Integer>();
+      res.add(field, fieldResults);
+      IntervalFacets intervalFacets = new IntervalFacets(schemaField, searcher, docs, intervalStrs, params);
+      for (FacetInterval interval : intervalFacets) {
+        fieldResults.add(interval.getKey(), interval.getCount());
+      }
+    }
+
+    return res;
+  }
+
 }
 

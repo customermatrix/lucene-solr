@@ -20,8 +20,6 @@ package org.apache.lucene.index;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.MergeInfo;
 import org.apache.lucene.util.FixedBitSet;
-import org.apache.lucene.util.SetOnce;
-import org.apache.lucene.util.SetOnce.AlreadySetException;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -57,7 +55,7 @@ import java.util.Map;
  *
  * @lucene.experimental
  */
-public abstract class MergePolicy implements java.io.Closeable {
+public abstract class MergePolicy {
 
   /** A map of doc IDs. */
   public static abstract class DocMap {
@@ -92,7 +90,7 @@ public abstract class MergePolicy implements java.io.Closeable {
 
   public static class OneMerge {
 
-    SegmentCommitInfo info;      // used by IndexWriter
+    SegmentCommitInfo info;         // used by IndexWriter
     boolean registerDone;           // used by IndexWriter
     long mergeGen;                  // used by IndexWriter
     boolean isExternal;             // used by IndexWriter
@@ -109,7 +107,7 @@ public abstract class MergePolicy implements java.io.Closeable {
     /** Segments to be merged. */
     public final List<SegmentCommitInfo> segments;
 
-    /** Number of documents in the merged segment. */
+    /** Total number of documents in segments to be merged, not accounting for deletions. */
     public final int totalDocCount;
     boolean aborted;
     Throwable error;
@@ -448,12 +446,6 @@ public abstract class MergePolicy implements java.io.Closeable {
   public abstract MergeSpecification findForcedDeletesMerges(
       SegmentInfos segmentInfos, IndexWriter writer) throws IOException;
 
-  /**
-   * Release all resources for the policy.
-   */
-  @Override
-  public abstract void close();
-  
   /**
    * Returns true if a new segment (regardless of its origin) should use the
    * compound file format. The default implementation returns <code>true</code>

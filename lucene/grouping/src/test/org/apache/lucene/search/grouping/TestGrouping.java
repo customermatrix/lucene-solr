@@ -65,8 +65,7 @@ public class TestGrouping extends LuceneTestCase {
     RandomIndexWriter w = new RandomIndexWriter(
                                random(),
                                dir,
-                               newIndexWriterConfig(TEST_VERSION_CURRENT,
-                                                    new MockAnalyzer(random())).setMergePolicy(newLogMergePolicy()));
+                               newIndexWriterConfig(new MockAnalyzer(random())).setMergePolicy(newLogMergePolicy()));
     boolean canUseIDV = !"Lucene3x".equals(w.w.getConfig().getCodec().getName());
     // 0
     Document doc = new Document();
@@ -243,9 +242,8 @@ public class TestGrouping extends LuceneTestCase {
         SearchGroup<MutableValue> sg = new SearchGroup<>();
         MutableValueStr groupValue = new MutableValueStr();
         if (mergedTopGroup.groupValue != null) {
-          groupValue.value =  mergedTopGroup.groupValue;
+          groupValue.value.copyBytes(mergedTopGroup.groupValue);
         } else {
-          groupValue.value = new BytesRef();
           groupValue.exists = false;
         }
         sg.groupValue = groupValue;
@@ -283,7 +281,7 @@ public class TestGrouping extends LuceneTestCase {
       assertEquals(new BytesRef(expected), group.groupValue);
     } else if (group.groupValue.getClass().isAssignableFrom(MutableValueStr.class)) {
       MutableValueStr v = new MutableValueStr();
-      v.value = new BytesRef(expected);
+      v.value.copyChars(expected);
       assertEquals(v, group.groupValue);
     } else {
       fail();
@@ -554,8 +552,7 @@ public class TestGrouping extends LuceneTestCase {
     RandomIndexWriter w = new RandomIndexWriter(
                                                 random(),
                                                 dir,
-                                                newIndexWriterConfig(TEST_VERSION_CURRENT,
-                                                                     new MockAnalyzer(random())));
+                                                newIndexWriterConfig(new MockAnalyzer(random())));
 
     final List<List<Document>> updateDocs = new ArrayList<>();
 
@@ -671,8 +668,7 @@ public class TestGrouping extends LuceneTestCase {
       RandomIndexWriter w = new RandomIndexWriter(
                                                   random(),
                                                   dir,
-                                                  newIndexWriterConfig(TEST_VERSION_CURRENT,
-                                                                       new MockAnalyzer(random())));
+                                                  newIndexWriterConfig(new MockAnalyzer(random())));
       final boolean preFlex = "Lucene3x".equals(w.w.getConfig().getCodec().getName());
       boolean canUseIDV = !preFlex;
 

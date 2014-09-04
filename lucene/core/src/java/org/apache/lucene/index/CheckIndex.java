@@ -43,10 +43,12 @@ import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.BytesRefBuilder;
 import org.apache.lucene.util.CommandLineUtil;
 import org.apache.lucene.util.FixedBitSet;
+import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.LongBitSet;
-import org.apache.lucene.util.StringHelper;
+import org.apache.lucene.util.Version;
 
 
 /**
@@ -344,6 +346,20 @@ public class CheckIndex {
     return crossCheckTermVectors;
   }
 
+  private boolean failFast;
+
+  /** If true, just throw the original exception immediately when
+   *  corruption is detected, rather than continuing to iterate to other
+   *  segments looking for more corruption.  */
+  public void setFailFast(boolean v) {
+    failFast = v;
+  }
+
+  /** See {@link #setFailFast}. */
+  public boolean getFailFast() {
+    return failFast;
+  }
+
   private boolean verbose;
 
   /** Set infoStream where messages should go.  If null, no
@@ -397,6 +413,9 @@ public class CheckIndex {
     try {
       sis.read(dir);
     } catch (Throwable t) {
+      if (failFast) {
+        IOUtils.reThrow(t);
+      }
       msg(infoStream, "ERROR: could not read any segments file in directory");
       result.missingSegments = true;
       if (infoStream != null)
@@ -405,21 +424,19 @@ public class CheckIndex {
     }
 
     // find the oldest and newest segment versions
-    String oldest = Integer.toString(Integer.MAX_VALUE), newest = Integer.toString(Integer.MIN_VALUE);
+    Version oldest = null;
+    Version newest = null;
     String oldSegs = null;
-    boolean foundNonNullVersion = false;
-    Comparator<String> versionComparator = StringHelper.getVersionComparator();
     for (SegmentCommitInfo si : sis) {
-      String version = si.info.getVersion();
+      Version version = si.info.getVersion();
       if (version == null) {
         // pre-3.1 segment
         oldSegs = "pre-3.1";
       } else {
-        foundNonNullVersion = true;
-        if (versionComparator.compare(version, oldest) < 0) {
+        if (oldest == null || version.onOrAfter(oldest) == false) {
           oldest = version;
         }
-        if (versionComparator.compare(version, newest) > 0) {
+        if (newest == null || version.onOrAfter(newest)) {
           newest = version;
         }
       }
@@ -432,6 +449,9 @@ public class CheckIndex {
     try {
       input = dir.openInput(segmentsFileName, IOContext.READONCE);
     } catch (Throwable t) {
+      if (failFast) {
+        IOUtils.reThrow(t);
+      }
       msg(infoStream, "ERROR: could not open segments file in directory");
       if (infoStream != null)
         t.printStackTrace(infoStream);
@@ -442,6 +462,9 @@ public class CheckIndex {
     try {
       format = input.readInt();
     } catch (Throwable t) {
+      if (failFast) {
+        IOUtils.reThrow(t);
+      }
       msg(infoStream, "ERROR: could not read segment file version in directory");
       if (infoStream != null)
         t.printStackTrace(infoStream);
@@ -465,14 +488,14 @@ public class CheckIndex {
       userDataString = "";
     }
 
-    String versionString = null;
+    String versionString = "";
     if (oldSegs != null) {
-      if (foundNonNullVersion) {
+      if (newest != null) {
         versionString = "versions=[" + oldSegs + " .. " + newest + "]";
       } else {
         versionString = "version=" + oldSegs;
       }
-    } else {
+    } else if (newest != null) { // implies oldest != null
       versionString = oldest.equals(newest) ? ( "version=" + oldest ) : ("versions=[" + oldest + " .. " + newest + "]");
     }
 
@@ -517,8 +540,8 @@ public class CheckIndex {
       segInfoStat.name = info.info.name;
       segInfoStat.docCount = info.info.getDocCount();
       
-      final String version = info.info.getVersion();
-      if (info.info.getDocCount() <= 0 && version != null && versionComparator.compare(version, "4.5") >= 0) {
+      final Version version = info.info.getVersion();
+      if (info.info.getDocCount() <= 0 && version != null && version.onOrAfter(Version.LUCENE_4_5_0)) {
         throw new RuntimeException("illegal number of documents: maxDoc=" + info.info.getDocCount());
       }
 
@@ -527,6 +550,7 @@ public class CheckIndex {
       AtomicReader reader = null;
 
       try {
+        msg(infoStream, "    version=" + (version == null ? "3.0" : version));
         final Codec codec = info.info.getCodec();
         msg(infoStream, "    codec=" + codec);
         segInfoStat.codec = codec;
@@ -625,18 +649,18 @@ public class CheckIndex {
         segInfoStat.numFields = fieldInfos.size();
         
         // Test Field Norms
-        segInfoStat.fieldNormStatus = testFieldNorms(reader, infoStream);
+        segInfoStat.fieldNormStatus = testFieldNorms(reader, infoStream, failFast);
 
         // Test the Term Index
-        segInfoStat.termIndexStatus = testPostings(reader, infoStream, verbose);
+        segInfoStat.termIndexStatus = testPostings(reader, infoStream, verbose, failFast);
 
         // Test Stored Fields
-        segInfoStat.storedFieldStatus = testStoredFields(reader, infoStream);
+        segInfoStat.storedFieldStatus = testStoredFields(reader, infoStream, failFast);
 
         // Test Term Vectors
-        segInfoStat.termVectorStatus = testTermVectors(reader, infoStream, verbose, crossCheckTermVectors);
+        segInfoStat.termVectorStatus = testTermVectors(reader, infoStream, verbose, crossCheckTermVectors, failFast);
 
-        segInfoStat.docValuesStatus = testDocValues(reader, infoStream);
+        segInfoStat.docValuesStatus = testDocValues(reader, infoStream, failFast);
 
         // Rethrow the first exception we encountered
         //  This will cause stats for failed segments to be incremented properly
@@ -655,6 +679,9 @@ public class CheckIndex {
         msg(infoStream, "");
 
       } catch (Throwable t) {
+        if (failFast) {
+          IOUtils.reThrow(t);
+        }
         msg(infoStream, "FAILED");
         String comment;
         comment = "fixIndex() would remove reference to this segment";
@@ -696,7 +723,7 @@ public class CheckIndex {
    * Test field norms.
    * @lucene.experimental
    */
-  public static Status.FieldNormStatus testFieldNorms(AtomicReader reader, PrintStream infoStream) {
+  public static Status.FieldNormStatus testFieldNorms(AtomicReader reader, PrintStream infoStream, boolean failFast) throws IOException {
     final Status.FieldNormStatus status = new Status.FieldNormStatus();
 
     try {
@@ -719,6 +746,9 @@ public class CheckIndex {
 
       msg(infoStream, "OK [" + status.totFields + " fields]");
     } catch (Throwable e) {
+      if (failFast) {
+        IOUtils.reThrow(e);
+      }
       msg(infoStream, "ERROR [" + String.valueOf(e.getMessage()) + "]");
       status.error = e;
       if (infoStream != null) {
@@ -841,12 +871,13 @@ public class CheckIndex {
       boolean hasOrd = true;
       final long termCountStart = status.delTermCount + status.termCount;
       
-      BytesRef lastTerm = null;
+      BytesRefBuilder lastTerm = null;
       
       Comparator<BytesRef> termComp = terms.getComparator();
       
       long sumTotalTermFreq = 0;
       long sumDocFreq = 0;
+      long upto = 0;
       FixedBitSet visitedDocs = new FixedBitSet(maxDoc);
       while(true) {
         
@@ -854,15 +885,16 @@ public class CheckIndex {
         if (term == null) {
           break;
         }
-        
+
         assert term.isValid();
         
         // make sure terms arrive in order according to
         // the comp
         if (lastTerm == null) {
-          lastTerm = BytesRef.deepCopyOf(term);
+          lastTerm = new BytesRefBuilder();
+          lastTerm.copyBytes(term);
         } else {
-          if (termComp.compare(lastTerm, term) >= 0) {
+          if (termComp.compare(lastTerm.get(), term) >= 0) {
             throw new RuntimeException("terms out of order: lastTerm=" + lastTerm + " term=" + term);
           }
           lastTerm.copyBytes(term);
@@ -1174,7 +1206,7 @@ public class CheckIndex {
         
         // Test seek to last term:
         if (lastTerm != null) {
-          if (termsEnum.seekCeil(lastTerm) != TermsEnum.SeekStatus.FOUND) { 
+          if (termsEnum.seekCeil(lastTerm.get()) != TermsEnum.SeekStatus.FOUND) { 
             throw new RuntimeException("seek to last term " + lastTerm + " failed");
           }
           
@@ -1298,15 +1330,15 @@ public class CheckIndex {
    * Test the term index.
    * @lucene.experimental
    */
-  public static Status.TermIndexStatus testPostings(AtomicReader reader, PrintStream infoStream) {
-    return testPostings(reader, infoStream, false);
+  public static Status.TermIndexStatus testPostings(AtomicReader reader, PrintStream infoStream) throws IOException {
+    return testPostings(reader, infoStream, false, false);
   }
   
   /**
    * Test the term index.
    * @lucene.experimental
    */
-  public static Status.TermIndexStatus testPostings(AtomicReader reader, PrintStream infoStream, boolean verbose) {
+  public static Status.TermIndexStatus testPostings(AtomicReader reader, PrintStream infoStream, boolean verbose, boolean failFast) throws IOException {
 
     // TODO: we should go and verify term vectors match, if
     // crossCheckTermVectors is on...
@@ -1330,6 +1362,9 @@ public class CheckIndex {
         checkFields(fields, null, maxDoc, fieldInfos, true, false, infoStream, verbose);
       }
     } catch (Throwable e) {
+      if (failFast) {
+        IOUtils.reThrow(e);
+      }
       msg(infoStream, "ERROR: " + e);
       status = new Status.TermIndexStatus();
       status.error = e;
@@ -1345,7 +1380,7 @@ public class CheckIndex {
    * Test stored fields.
    * @lucene.experimental
    */
-  public static Status.StoredFieldStatus testStoredFields(AtomicReader reader, PrintStream infoStream) {
+  public static Status.StoredFieldStatus testStoredFields(AtomicReader reader, PrintStream infoStream, boolean failFast) throws IOException {
     final Status.StoredFieldStatus status = new Status.StoredFieldStatus();
 
     try {
@@ -1373,6 +1408,9 @@ public class CheckIndex {
       msg(infoStream, "OK [" + status.totFields + " total field count; avg " + 
           NumberFormat.getInstance(Locale.ROOT).format((((float) status.totFields)/status.docCount)) + " fields per doc]");      
     } catch (Throwable e) {
+      if (failFast) {
+        IOUtils.reThrow(e);
+      }
       msg(infoStream, "ERROR [" + String.valueOf(e.getMessage()) + "]");
       status.error = e;
       if (infoStream != null) {
@@ -1388,7 +1426,8 @@ public class CheckIndex {
    * @lucene.experimental
    */
   public static Status.DocValuesStatus testDocValues(AtomicReader reader,
-                                                     PrintStream infoStream) {
+                                                     PrintStream infoStream,
+                                                     boolean failFast) throws IOException {
     final Status.DocValuesStatus status = new Status.DocValuesStatus();
     try {
       if (infoStream != null) {
@@ -1416,6 +1455,9 @@ public class CheckIndex {
                              + status.totalSortedNumericFields + " SORTED_NUMERIC; "
                              + status.totalSortedSetFields + " SORTED_SET]");
     } catch (Throwable e) {
+      if (failFast) {
+        IOUtils.reThrow(e);
+      }
       msg(infoStream, "ERROR [" + String.valueOf(e.getMessage()) + "]");
       status.error = e;
       if (infoStream != null) {
@@ -1655,15 +1697,15 @@ public class CheckIndex {
    * Test term vectors.
    * @lucene.experimental
    */
-  public static Status.TermVectorStatus testTermVectors(AtomicReader reader, PrintStream infoStream) {
-    return testTermVectors(reader, infoStream, false, false);
+  public static Status.TermVectorStatus testTermVectors(AtomicReader reader, PrintStream infoStream) throws IOException {
+    return testTermVectors(reader, infoStream, false, false, false);
   }
 
   /**
    * Test term vectors.
    * @lucene.experimental
    */
-  public static Status.TermVectorStatus testTermVectors(AtomicReader reader, PrintStream infoStream, boolean verbose, boolean crossCheckTermVectors) {
+  public static Status.TermVectorStatus testTermVectors(AtomicReader reader, PrintStream infoStream, boolean verbose, boolean crossCheckTermVectors, boolean failFast) throws IOException {
     final Status.TermVectorStatus status = new Status.TermVectorStatus();
     final FieldInfos fieldInfos = reader.getFieldInfos();
     final Bits onlyDocIsDeleted = new FixedBitSet(1);
@@ -1875,6 +1917,9 @@ public class CheckIndex {
       msg(infoStream, "OK [" + status.totVectors + " total vector count; avg " + 
           NumberFormat.getInstance(Locale.ROOT).format(vectorAvg) + " term/freq vector fields per doc]");
     } catch (Throwable e) {
+      if (failFast) {
+        IOUtils.reThrow(e);
+      }
       msg(infoStream, "ERROR [" + String.valueOf(e.getMessage()) + "]");
       status.error = e;
       if (infoStream != null) {

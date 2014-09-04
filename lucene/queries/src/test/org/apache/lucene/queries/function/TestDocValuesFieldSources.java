@@ -46,7 +46,7 @@ public class TestDocValuesFieldSources extends LuceneTestCase {
 
   public void test(DocValuesType type) throws IOException {
     Directory d = newDirectory();
-    IndexWriterConfig iwConfig = newIndexWriterConfig(TEST_VERSION_CURRENT, new MockAnalyzer(random()));
+    IndexWriterConfig iwConfig = newIndexWriterConfig(new MockAnalyzer(random()));
     final int nDocs = atLeast(50);
     final Field id = new NumericDocValuesField("id", 0);
     final Field f;
@@ -145,11 +145,12 @@ public class TestDocValuesFieldSources extends LuceneTestCase {
   }
 
   public void test() throws IOException {
-    for (DocValuesType type : DocValuesType.values()) {
+    DocValuesType type = DocValuesType.SORTED;
+    //for (DocValuesType type : DocValuesType.values()) {
       if (type != DocValuesType.SORTED_SET && type != DocValuesType.SORTED_NUMERIC) {
         test(type);
       }
-    }
+    //}
   }
 
 }
