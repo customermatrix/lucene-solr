@@ -444,4 +444,9 @@ public class SolrReturnFields extends ReturnFields {
   {
     return transformer;
   }
+
+  @Override
+  public boolean hasGlobs() {
+    return !globs.isEmpty();
+  }
 }

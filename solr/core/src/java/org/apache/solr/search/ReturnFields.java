@@ -56,4 +56,9 @@ public abstract class ReturnFields {
 
   /** Returns the DocTransformer used to modify documents, or <code>null</code> */
   public abstract DocTransformer getTransformer();
+
+  // SEA
+  public abstract boolean hasGlobs();
+  // SEA
+
 }
