@@ -377,7 +377,7 @@ public abstract class LuceneTestCase extends Assert {
    * Use this constant when creating Analyzers and any other version-dependent stuff.
    * <p><b>NOTE:</b> Change this when development starts for new Lucene version:
    */
-  public static final Version TEST_VERSION_CURRENT = Version.LUCENE_4_10_0;
+  public static final Version TEST_VERSION_CURRENT = Version.LATEST;
 
   /**
    * True if and only if tests are run in verbose mode. If this flag is false
@@ -395,6 +395,8 @@ public abstract class LuceneTestCase extends Assert {
    * multiply it by the number of iterations to scale your tests (for nightly builds).
    */
   public static final int RANDOM_MULTIPLIER = systemPropertyAsInt("tests.multiplier", 1);
+
+  public static final boolean TEST_ASSERTS_ENABLED = systemPropertyAsBoolean("tests.asserts", true);
 
   /** TODO: javadoc? */
   public static final String DEFAULT_LINE_DOCS_FILE = "europarl.lines.txt.gz";
@@ -2689,5 +2691,14 @@ public abstract class LuceneTestCase extends Assert {
         }
       }
     }
+  }
+
+  /** True if assertions (-ea) are enabled (at least for this class). */
+  public static final boolean assertsAreEnabled;
+
+  static {
+    boolean enabled = false;
+    assert enabled = true; // Intentional side-effect!!!
+    assertsAreEnabled = enabled;
   }
 }

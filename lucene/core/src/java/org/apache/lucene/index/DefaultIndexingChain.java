@@ -131,6 +131,10 @@ final class DefaultIndexingChain extends DocConsumer {
         PerField perField = fieldHash[i];
         while (perField != null) {
           if (perField.docValuesWriter != null) {
+            if (perField.fieldInfo.hasDocValues() == false) {
+              // BUG
+              throw new AssertionError("segment=" + state.segmentInfo + ": field=\"" + perField.fieldInfo.name + "\" has no docValues but wrote them");
+            }
             if (dvConsumer == null) {
               // lazy init
               DocValuesFormat fmt = state.segmentInfo.getCodec().docValuesFormat();
@@ -140,6 +144,9 @@ final class DefaultIndexingChain extends DocConsumer {
             perField.docValuesWriter.finish(docCount);
             perField.docValuesWriter.flush(state, dvConsumer);
             perField.docValuesWriter = null;
+          } else if (perField.fieldInfo.hasDocValues()) {
+            // BUG
+            throw new AssertionError("segment=" + state.segmentInfo + ": field=\"" + perField.fieldInfo.name + "\" has docValues but did not write them");
           }
           perField = perField.next;
         }
@@ -156,6 +163,16 @@ final class DefaultIndexingChain extends DocConsumer {
       } else {
         IOUtils.closeWhileHandlingException(dvConsumer);
       }
+    }
+
+    if (state.fieldInfos.hasDocValues() == false) {
+      if (dvConsumer != null) {
+        // BUG
+        throw new AssertionError("segment=" + state.segmentInfo + ": fieldInfos has no docValues but wrote them");
+      }
+    } else if (dvConsumer == null) {
+      // BUG
+      throw new AssertionError("segment=" + state.segmentInfo + ": fieldInfos has docValues but did not wrote them");
     }
   }
 
@@ -403,12 +420,12 @@ final class DefaultIndexingChain extends DocConsumer {
 
     boolean hasDocValues = fp.fieldInfo.hasDocValues();
 
-    // This will throw an exc if the caller tried to
-    // change the DV type for the field:
-    fp.fieldInfo.setDocValuesType(dvType);
     if (hasDocValues == false) {
+      // This will throw an exc if the caller tried to
+      // change the DV type for the field:
       fieldInfos.globalFieldNumbers.setDocValuesType(fp.fieldInfo.number, fp.fieldInfo.name, dvType);
     }
+    fp.fieldInfo.setDocValuesType(dvType);
 
     int docID = docState.docID;
 
@@ -584,9 +601,6 @@ final class DefaultIndexingChain extends DocConsumer {
       // TODO: after we fix analyzers, also check if termVectorOffsets will be indexed.
       final boolean checkOffsets = fieldType.indexOptions() == IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS;
 
-      int lastStartOffset = 0;
-      int lastPosition = 0;
-        
       /*
        * To assist people in tracking down problems in analysis components, we wish to write the field name to the infostream
        * when we fail. We expect some caller to eventually deal with the real exception, so we don't want any 'catch' clauses,
@@ -612,13 +626,13 @@ final class DefaultIndexingChain extends DocConsumer {
 
           int posIncr = invertState.posIncrAttribute.getPositionIncrement();
           invertState.position += posIncr;
-          if (invertState.position < lastPosition) {
+          if (invertState.position < invertState.lastPosition) {
             if (posIncr == 0) {
               throw new IllegalArgumentException("first position increment must be > 0 (got 0) for field '" + field.name() + "'");
             }
             throw new IllegalArgumentException("position increments (and gaps) must be >= 0 (got " + posIncr + ") for field '" + field.name() + "'");
           }
-          lastPosition = invertState.position;
+          invertState.lastPosition = invertState.position;
           if (posIncr == 0) {
             invertState.numOverlap++;
           }
@@ -626,11 +640,11 @@ final class DefaultIndexingChain extends DocConsumer {
           if (checkOffsets) {
             int startOffset = invertState.offset + invertState.offsetAttribute.startOffset();
             int endOffset = invertState.offset + invertState.offsetAttribute.endOffset();
-            if (startOffset < lastStartOffset || endOffset < startOffset) {
+            if (startOffset < invertState.lastStartOffset || endOffset < startOffset) {
               throw new IllegalArgumentException("startOffset must be non-negative, and endOffset must be >= startOffset, and offsets must not go backwards "
-                                                 + "startOffset=" + startOffset + ",endOffset=" + endOffset + ",lastStartOffset=" + lastStartOffset + " for field '" + field.name() + "'");
+                                                 + "startOffset=" + startOffset + ",endOffset=" + endOffset + ",lastStartOffset=" + invertState.lastStartOffset + " for field '" + field.name() + "'");
             }
-            lastStartOffset = startOffset;
+            invertState.lastStartOffset = startOffset;
           }
 
           //System.out.println("  term=" + invertState.termAttribute);
