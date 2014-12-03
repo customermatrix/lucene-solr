@@ -159,7 +159,7 @@ public final class StopFilter extends FilteringTokenFilter {
    */
   @Override
   protected boolean accept() {
-    return !stopWords.contains(termAtt.buffer(), 0, termAtt.length());
+    return stopWords != null && termAtt != null && !stopWords.contains(termAtt.buffer(), 0, termAtt.length());
   }
 
 }
