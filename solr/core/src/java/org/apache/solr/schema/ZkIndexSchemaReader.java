@@ -34,7 +34,7 @@ import java.util.concurrent.TimeUnit;
 /** Keeps a ManagedIndexSchema up-to-date when changes are made to the serialized managed schema in ZooKeeper */
 public class ZkIndexSchemaReader {
   private static final Logger log = LoggerFactory.getLogger(ZkIndexSchemaReader.class);
-  private final ManagedIndexSchemaFactory managedIndexSchemaFactory;
+  private ManagedIndexSchemaFactory managedIndexSchemaFactory;
   private SolrZkClient zkClient;
   private String managedSchemaPath;
 
@@ -107,5 +107,10 @@ public class ZkIndexSchemaReader {
         log.info("Finished refreshing schema in " + TimeUnit.MILLISECONDS.convert(stop - start, TimeUnit.NANOSECONDS) + " ms");
       }
     }
+  }
+
+  public void close() {
+    managedIndexSchemaFactory = null;
+    zkClient = null;
   }
 }

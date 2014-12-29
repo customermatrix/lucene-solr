@@ -394,6 +394,13 @@ public class IndexSchema {
     return false;
   }
 
+  public void close() {
+    loader = null;
+    solrConfig = null;
+    queryAnalyzer = null;
+    indexAnalyzer = null;
+  }
+
   private class SolrIndexAnalyzer extends DelegatingAnalyzerWrapper {
     protected final HashMap<String, Analyzer> analyzers;
 

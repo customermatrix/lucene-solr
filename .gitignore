@@ -1,5 +1,7 @@
 # .
 /eclipse-build
+/maven-build
+atlassian-ide-plugin.xml
 /classes
 **/build
 /idea-build
