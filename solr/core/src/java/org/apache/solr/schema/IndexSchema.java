@@ -137,7 +137,7 @@ public class IndexSchema {
 
   protected Map<String, List<CopyField>> copyFieldsMap = new HashMap<>();
   public Map<String,List<CopyField>> getCopyFieldsMap() { return Collections.unmodifiableMap(copyFieldsMap); }
-  
+
   protected DynamicCopy[] dynamicCopyFields;
   public DynamicCopy[] getDynamicCopyFields() { return dynamicCopyFields; }
 
@@ -172,14 +172,14 @@ public class IndexSchema {
       throw new RuntimeException(e);
     }
   }
-  
+
   /**
    * @since solr 1.4
    */
   public SolrResourceLoader getResourceLoader() {
     return loader;
   }
-  
+
   /** Gets the name of the resource used to instantiate this schema. */
   public String getResourceName() {
     return resourceName;
@@ -194,7 +194,7 @@ public class IndexSchema {
   public String getSchemaName() {
     return name;
   }
-  
+
   /** The Default Lucene Match Version for this IndexSchema */
   public Version getDefaultLuceneMatchVersion() {
     return solrConfig.luceneMatchVersion;
@@ -212,7 +212,7 @@ public class IndexSchema {
    * <p>
    * Modifying this Map (or any item in it) will affect the real schema
    * </p>
-   * 
+   *
    * <p>
    * NOTE: this function is not thread safe.  However, it is safe to use within the standard
    * <code>inform( SolrCore core )</code> function for <code>SolrCoreAware</code> classes.
@@ -230,7 +230,7 @@ public class IndexSchema {
    * make any modifications, be sure to call {@link IndexSchema#refreshAnalyzers()} to
    * update the Analyzers for the registered fields.
    * </p>
-   * 
+   *
    * <p>
    * NOTE: this function is not thread safe.  However, it is safe to use within the standard
    * <code>inform( SolrCore core )</code> function for <code>SolrCoreAware</code> classes.
@@ -259,7 +259,7 @@ public class IndexSchema {
     if (null == similarity) {
       similarity = similarityFactory.getSimilarity();
     }
-    return similarity; 
+    return similarity;
   }
 
   protected SimilarityFactory similarityFactory;
@@ -268,7 +268,7 @@ public class IndexSchema {
 
   /** Returns the SimilarityFactory that constructed the Similarity for this index */
   public SimilarityFactory getSimilarityFactory() { return similarityFactory; }
-  
+
   /**
    * Returns the Analyzer used when indexing documents for this index
    *
@@ -304,7 +304,7 @@ public class IndexSchema {
    */
   public Analyzer getQueryAnalyzer() { return queryAnalyzer; }
 
-  
+
   /**
    * Name of the default search field specified in the schema file.
    * <br/><b>Note:</b>Avoid calling this, try to use this method so that the 'df' param is consulted as an override:
@@ -362,12 +362,12 @@ public class IndexSchema {
     }
     return f;
   }
-  
+
   /**
    * This will re-create the Analyzers.  If you make any modifications to
    * the Field map ({@link IndexSchema#getFields()}, this function is required
    * to synch the internally cached field analyzers.
-   * 
+   *
    * @since solr 1.3
    */
   public void refreshAnalyzers() {
@@ -391,6 +391,13 @@ public class IndexSchema {
 
   public boolean isMutable() {
     return false;
+  }
+
+  public void close() {
+    loader = null;
+    solrConfig = null;
+    queryAnalyzer = null;
+    indexAnalyzer = null;
   }
 
   private class SolrIndexAnalyzer extends DelegatingAnalyzerWrapper {
@@ -424,7 +431,7 @@ public class IndexSchema {
     @Override
     protected HashMap<String, Analyzer> analyzerCache() {
       HashMap<String, Analyzer> cache = new HashMap<>();
-       for (SchemaField f : getFields().values()) {
+      for (SchemaField f : getFields().values()) {
         Analyzer analyzer = f.getType().getQueryAnalyzer();
         cache.put(f.getName(), analyzer);
       }
@@ -510,7 +517,7 @@ public class IndexSchema {
         for (FieldType ft : fieldTypes.values()) {
           if (null != ft.getSimilarity()) {
             String msg = "FieldType '" + ft.getTypeName()
-                + "' is configured with a similarity, but the global similarity does not support it: " 
+                + "' is configured with a similarity, but the global similarity does not support it: "
                 + similarityFactory.getClass();
             log.error(msg);
             throw new SolrException(ErrorCode.SERVER_ERROR, msg);
@@ -574,18 +581,18 @@ public class IndexSchema {
         uniqueKeyFieldName=uniqueKeyField.getName();
         uniqueKeyFieldType=uniqueKeyField.getType();
         log.info("unique key field: "+uniqueKeyFieldName);
-      
+
         // Unless the uniqueKeyField is marked 'required=false' then make sure it exists
         if( Boolean.FALSE != explicitRequiredProp.get( uniqueKeyFieldName ) ) {
           uniqueKeyField.required = true;
           requiredFields.add(uniqueKeyField);
         }
-      }                
+      }
 
       /////////////// parse out copyField commands ///////////////
       // Map<String,ArrayList<SchemaField>> cfields = new HashMap<String,ArrayList<SchemaField>>();
       // expression = "/schema/copyField";
-    
+
       dynamicCopyFields = new DynamicCopy[] {};
       loadCopyFields(document, xpath);
 
@@ -607,15 +614,15 @@ public class IndexSchema {
     refreshAnalyzers();
   }
 
-  /** 
+  /**
    * Loads fields and dynamic fields.
-   * 
+   *
    * @return a map from field name to explicit required value  
-   */ 
+   */
   protected synchronized Map<String,Boolean> loadFields(Document document, XPath xpath) throws XPathExpressionException {
     // Hang on to the fields that say if they are required -- this lets us set a reasonable default for the unique key
     Map<String,Boolean> explicitRequiredProp = new HashMap<>();
-    
+
     ArrayList<DynamicField> dFields = new ArrayList<>();
 
     //                  /schema/field | /schema/dynamicField | /schema/fields/field | /schema/fields/dynamicField
@@ -652,7 +659,7 @@ public class IndexSchema {
         SchemaField old = fields.put(f.getName(),f);
         if( old != null ) {
           String msg = "[schema.xml] Duplicate field definition for '"
-            + f.getName() + "' [[["+old.toString()+"]]] and [[["+f.toString()+"]]]";
+              + f.getName() + "' [[["+old.toString()+"]]] and [[["+f.toString()+"]]]";
           throw new SolrException(ErrorCode.SERVER_ERROR, msg );
         }
         log.debug("field defined: " + f);
@@ -667,17 +674,17 @@ public class IndexSchema {
       } else if (node.getNodeName().equals(DYNAMIC_FIELD)) {
         if( f.getDefaultValue() != null ) {
           throw new SolrException(ErrorCode.SERVER_ERROR,
-                                  DYNAMIC_FIELD + " can not have a default value: " + name);
+              DYNAMIC_FIELD + " can not have a default value: " + name);
         }
         if ( f.isRequired() ) {
           throw new SolrException(ErrorCode.SERVER_ERROR,
-                                  DYNAMIC_FIELD + " can not be required: " + name);
+              DYNAMIC_FIELD + " can not be required: " + name);
         }
         if (isValidFieldGlob(name)) {
           // make sure nothing else has the same path
           addDynamicField(dFields, f);
         } else {
-          String msg = "Dynamic field name '" + name 
+          String msg = "Dynamic field name '" + name
               + "' should have either a leading or a trailing asterisk, and no others.";
           throw new SolrException(ErrorCode.SERVER_ERROR, msg);
         }
@@ -726,20 +733,20 @@ public class IndexSchema {
           maxCharsInt = Integer.parseInt(maxChars);
         } catch (NumberFormatException e) {
           log.warn("Couldn't parse " + MAX_CHARS + " attribute for " + COPY_FIELD + " from "
-                  + source + " to " + dest + " as integer. The whole field will be copied.");
+              + source + " to " + dest + " as integer. The whole field will be copied.");
         }
       }
 
       if (dest.equals(uniqueKeyFieldName)) {
         String msg = UNIQUE_KEY + " field ("+uniqueKeyFieldName+
-          ") can not be the " + DESTINATION + " of a " + COPY_FIELD + "(" + SOURCE + "=" +source+")";
+            ") can not be the " + DESTINATION + " of a " + COPY_FIELD + "(" + SOURCE + "=" +source+")";
         log.error(msg);
         throw new SolrException(ErrorCode.SERVER_ERROR, msg);
       }
-      
+
       registerCopyField(source, dest, maxCharsInt);
     }
-      
+
     for (Map.Entry<SchemaField, Integer> entry : copyFieldTargetCounts.entrySet()) {
       if (entry.getValue() > 1 && !entry.getKey().multiValued())  {
         log.warn("Field " + entry.getKey().name + " is not multivalued "+
@@ -769,7 +776,7 @@ public class IndexSchema {
     }
     return false;
   }
-  
+
   private void addDynamicField(List<DynamicField> dFields, SchemaField f) {
     if (isDuplicateDynField(dFields, f)) {
       String msg = "[schema.xml] Duplicate DynamicField definition for '" + f.getName() + "'";
@@ -819,26 +826,26 @@ public class IndexSchema {
    * <code>inform( SolrCore core )</code> function for <code>SolrCoreAware</code> classes.
    * Outside <code>inform</code>, this could potentially throw a ConcurrentModificationException
    * </p>
-   * 
+   *
    * @see SolrCoreAware
    */
   public void registerCopyField(String source, String dest, int maxChars) {
     log.debug(COPY_FIELD + " " + SOURCE + "='" + source + "' " + DESTINATION + "='" + dest
-              + "' " + MAX_CHARS + "=" + maxChars);
+        + "' " + MAX_CHARS + "=" + maxChars);
 
     DynamicField destDynamicField = null;
     SchemaField destSchemaField = fields.get(dest);
     SchemaField sourceSchemaField = fields.get(source);
-    
+
     DynamicField sourceDynamicBase = null;
     DynamicField destDynamicBase = null;
-    
+
     boolean sourceIsDynamicFieldReference = false;
     boolean sourceIsExplicitFieldGlob = false;
 
 
     final String invalidGlobMessage = "is an invalid glob: either it contains more than one asterisk,"
-                                    + " or the asterisk occurs neither at the start nor at the end.";
+        + " or the asterisk occurs neither at the start nor at the end.";
     final boolean sourceIsGlob = isValidFieldGlob(source);
     if (source.contains("*") && ! sourceIsGlob) {
       String msg = "copyField source :'" + source + "' " + invalidGlobMessage;
@@ -858,7 +865,7 @@ public class IndexSchema {
         }
       }
     }
-    
+
     if (null == destSchemaField || (null == sourceSchemaField && ! sourceIsExplicitFieldGlob)) {
       // Go through dynamicFields array only once, collecting info for both source and dest fields, if needed
       for (DynamicField dynamicField : dynamicFields) {
@@ -880,7 +887,7 @@ public class IndexSchema {
             destDynamicBase = dynamicField;
           }
         }
-        if (null != destSchemaField 
+        if (null != destSchemaField
             && (null != sourceSchemaField || sourceIsDynamicFieldReference || sourceIsExplicitFieldGlob)) {
           break;
         }
@@ -903,7 +910,7 @@ public class IndexSchema {
         registerDynamicCopyField(new DynamicCopy(source, destDynamicField, maxChars, sourceDynamicBase, null));
         incrementCopyFieldTargetCount(destSchemaField);
       }
-    } else {                          
+    } else {
       if (null != destDynamicField) { // source: explicit field; dest: dynamic field reference
         if (destDynamicField.pattern instanceof DynamicReplacement.DynamicPattern.NameEquals) {
           // Dynamic dest with no asterisk is acceptable
@@ -911,7 +918,7 @@ public class IndexSchema {
           incrementCopyFieldTargetCount(destSchemaField);
         } else {
           String msg = "copyField only supports a dynamic destination with an asterisk "
-                     + "if the source also has an asterisk";
+              + "if the source also has an asterisk";
           throw new SolrException(ErrorCode.SERVER_ERROR, msg);
         }
       } else {                        // source & dest: explicit fields 
@@ -925,11 +932,11 @@ public class IndexSchema {
       }
     }
   }
-  
+
   private void incrementCopyFieldTargetCount(SchemaField dest) {
     copyFieldTargetCounts.put(dest, copyFieldTargetCounts.containsKey(dest) ? copyFieldTargetCounts.get(dest) + 1 : 1);
   }
-  
+
   private void registerDynamicCopyField( DynamicCopy dcopy ) {
     if( dynamicCopyFields == null ) {
       dynamicCopyFields = new DynamicCopy[] {dcopy};
@@ -984,7 +991,7 @@ public class IndexSchema {
         else { return new NameEquals(regex);
         }
       }
-      
+
       /** Returns true if the given name matches this pattern */
       abstract boolean matches(String name);
 
@@ -993,7 +1000,7 @@ public class IndexSchema {
 
       /** Returns the result of combining this pattern's fixed string component with the given replacement */
       abstract String subst(String replacement);
-      
+
       /** Returns the length of the original regex, including the asterisk, if any. */
       public int length() { return regex.length(); }
 
@@ -1070,7 +1077,7 @@ public class IndexSchema {
 
   public static class DynamicCopy extends DynamicReplacement {
     private final DynamicField destination;
-    
+
     private final int maxChars;
     public int getMaxChars() { return maxChars; }
 
@@ -1080,7 +1087,7 @@ public class IndexSchema {
     final DynamicField destDynamicBase;
     public DynamicField getDestDynamicBase() { return destDynamicBase; }
 
-    DynamicCopy(String sourceRegex, DynamicField destination, int maxChars, 
+    DynamicCopy(String sourceRegex, DynamicField destination, int maxChars,
                 DynamicField sourceDynamicBase, DynamicField destDynamicBase) {
       super(sourceRegex);
       this.destination = destination;
@@ -1102,7 +1109,7 @@ public class IndexSchema {
       return destination.makeSchemaField(targetFieldName);
     }
 
-    
+
     @Override
     public String toString() {
       return destination.prototype.toString();
@@ -1118,12 +1125,12 @@ public class IndexSchema {
   }
 
   public String getDynamicPattern(String fieldName) {
-   for (DynamicField df : dynamicFields) {
-     if (df.matches(fieldName)) return df.getRegex();
-   }
-   return  null; 
+    for (DynamicField df : dynamicFields) {
+      if (df.matches(fieldName)) return df.getRegex();
+    }
+    return  null;
   }
-  
+
   /**
    * Does the schema explicitly define the specified field, i.e. not as a result
    * of a copyField declaration?  We consider it explicitly defined if it matches
@@ -1156,7 +1163,7 @@ public class IndexSchema {
     }
 
     return false;
-  }   
+  }
 
   /**
    * Returns the SchemaField that should be used for the specified field name, or
@@ -1197,8 +1204,8 @@ public class IndexSchema {
     // Hmmm, default field could also be implemented with a dynamic field of "*".
     // It would have to be special-cased and only used if nothing else matched.
     /***  REMOVED -YCS
-    if (defaultFieldType != null) return new SchemaField(fieldName,defaultFieldType);
-    ***/
+     if (defaultFieldType != null) return new SchemaField(fieldName,defaultFieldType);
+     ***/
     throw new SolrException(ErrorCode.BAD_REQUEST,"undefined field: \""+fieldName+"\"");
   }
 
@@ -1265,14 +1272,14 @@ public class IndexSchema {
    * @see #getFieldTypeNoEx
    */
   public FieldType getDynamicFieldType(String fieldName) {
-     for (DynamicField df : dynamicFields) {
+    for (DynamicField df : dynamicFields) {
       if (df.matches(fieldName)) return df.prototype.getType();
     }
     throw new SolrException(ErrorCode.BAD_REQUEST,"undefined field "+fieldName);
   }
 
   private FieldType dynFieldType(String fieldName) {
-     for (DynamicField df : dynamicFields) {
+    for (DynamicField df : dynamicFields) {
       if (df.matches(fieldName)) return df.prototype.getType();
     }
     return null;
@@ -1326,10 +1333,10 @@ public class IndexSchema {
 
     return result;
   }
-  
+
   /**
    * Check if a field is used as the destination of a copyField operation 
-   * 
+   *
    * @since solr 1.3
    */
   public boolean isCopyFieldTarget( SchemaField f ) {
@@ -1362,7 +1369,7 @@ public class IndexSchema {
     for (FieldType fieldType : sortedFieldTypes.values()) {
       fieldTypeProperties.add(fieldType.getNamedPropertyValues(false));
     }
-    topLevel.add(FIELD_TYPES, fieldTypeProperties);  
+    topLevel.add(FIELD_TYPES, fieldTypeProperties);
     List<SimpleOrderedMap<Object>> fieldProperties = new ArrayList<>();
     SortedSet<String> fieldNames = new TreeSet<>(fields.keySet());
     for (String fieldName : fieldNames) {
@@ -1383,7 +1390,7 @@ public class IndexSchema {
   /**
    * Returns a list of copyField directives, with optional details and optionally restricting to those
    * directives that contain the requested source and/or destination field names.
-   * 
+   *
    * @param showDetails If true, source and destination dynamic bases, and explicit fields matched by source globs,
    *                    will be added to dynamic copyField directives where appropriate
    * @param requestedSourceFields If not null, output is restricted to those copyField directives
@@ -1393,7 +1400,7 @@ public class IndexSchema {
    * @return a list of copyField directives 
    */
   public List<SimpleOrderedMap<Object>> getCopyFieldProperties
-      (boolean showDetails, Set<String> requestedSourceFields, Set<String> requestedDestinationFields) {
+  (boolean showDetails, Set<String> requestedSourceFields, Set<String> requestedDestinationFields) {
     List<SimpleOrderedMap<Object>> copyFieldProperties = new ArrayList<>();
     SortedMap<String,List<CopyField>> sortedCopyFields = new TreeMap<>(copyFieldsMap);
     for (List<CopyField> copyFields : sortedCopyFields.values()) {
@@ -1412,9 +1419,9 @@ public class IndexSchema {
           SimpleOrderedMap<Object> props = new SimpleOrderedMap<>();
           props.add(SOURCE, source);
           props.add(DESTINATION, destination);
-            if (0 != copyField.getMaxChars()) {
-              props.add(MAX_CHARS, copyField.getMaxChars());
-            }
+          if (0 != copyField.getMaxChars()) {
+            props.add(MAX_CHARS, copyField.getMaxChars());
+          }
           copyFieldProperties.add(props);
         }
       }
@@ -1445,7 +1452,7 @@ public class IndexSchema {
             }
           }
         }
-        
+
         dynamicCopyProps.add(DESTINATION, dynamicCopy.getDestFieldName());
         if (showDetails) {
           IndexSchema.DynamicField destDynamicBase = dynamicCopy.getDestDynamicBase();

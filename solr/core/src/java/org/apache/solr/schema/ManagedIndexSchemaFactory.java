@@ -25,6 +25,7 @@ import org.apache.solr.common.cloud.SolrZkClient;
 import org.apache.solr.common.cloud.ZkCmdExecutor;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
+import org.apache.solr.core.CloseHook;
 import org.apache.solr.core.CoreDescriptor;
 import org.apache.solr.core.SolrConfig;
 import org.apache.solr.core.SolrCore;
@@ -410,6 +411,16 @@ public class ManagedIndexSchemaFactory extends IndexSchemaFactory implements Sol
     } else {
       this.zkIndexSchemaReader = null;
     }
+    core.addCloseHook(new CloseHook() {
+      @Override
+      public void preClose(SolrCore core) {
+      }
+
+      @Override
+      public void postClose(SolrCore core) {
+        ManagedIndexSchemaFactory.this.close();
+      }
+    });
   }
 
   public ManagedIndexSchema getSchema() {
@@ -427,5 +438,15 @@ public class ManagedIndexSchemaFactory extends IndexSchemaFactory implements Sol
     for (SchemaUpdateListener updateListener : updateListeners) {
       updateListener.onUpdate(coreDescriptor, lastSchema);
     }
+  }
+
+  public void close() {
+    if (zkIndexSchemaReader != null) {
+      zkIndexSchemaReader.close();
+    }
+    loader = null;
+    zkIndexSchemaReader = null;
+    schema = null;
+
   }
 }
