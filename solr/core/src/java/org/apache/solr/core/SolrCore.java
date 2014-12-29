@@ -1104,7 +1104,10 @@ public class SolrCore implements SolrInfoMBean {
          }
       }
     }
-    
+
+    schema.close();
+    schema = null;
+
     // For debugging 
 //    numCloses.incrementAndGet();
 //    openHandles.remove(this);
