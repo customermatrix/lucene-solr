@@ -39,7 +39,6 @@ import org.apache.lucene.util.Version;
  * </ul>
  */
 public final class StopFilter extends FilteringTokenFilter {
-
   private final CharArraySet stopWords;
   private final CharTermAttribute termAtt = addAttribute(CharTermAttribute.class);
   
@@ -159,7 +158,7 @@ public final class StopFilter extends FilteringTokenFilter {
    */
   @Override
   protected boolean accept() {
-    return stopWords != null && termAtt != null && !stopWords.contains(termAtt.buffer(), 0, termAtt.length());
+    return termAtt != null && !stopWords.contains(termAtt.buffer(), 0, termAtt.length());
   }
 
 }
