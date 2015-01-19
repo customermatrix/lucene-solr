@@ -1108,6 +1108,9 @@ public class FacetComponent extends SearchComponent {
     }
     
     protected void fillParams(ResponseBuilder rb, SolrParams params, String field) {
+      if (localParams != null) {
+        params = SolrParams.wrapDefaults(localParams, params);
+      }
       this.field = field;
       this.ftype = rb.req.getSchema().getFieldTypeNoEx(this.field);
       this.offset = params.getFieldInt(field, FacetParams.FACET_OFFSET, 0);
