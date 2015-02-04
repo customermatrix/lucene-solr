@@ -47,6 +47,7 @@ import java.util.HashMap;
 public abstract class SolrQueryRequestBase implements SolrQueryRequest {
   public static final String COLLECTION_PARAM = "collection";
   public static final String API_CORE_NAME = "api";
+  public static final String META_INDEX_CORE_NAME = "Meta_Index";
   protected final SolrCore core;
   protected final SolrParams origParams;
   protected volatile IndexSchema schema;
@@ -115,7 +116,7 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
   // The index schema associated with this request
   @Override
   public IndexSchema getSchema() {
-    if (core != null && core.getName().equals(API_CORE_NAME)) {
+    if (core != null && (core.getName().equals(API_CORE_NAME) || core.getName().equals(META_INDEX_CORE_NAME))) {
       Collection<String> collections = getCollections();
 
       if (!collections.isEmpty()) {
