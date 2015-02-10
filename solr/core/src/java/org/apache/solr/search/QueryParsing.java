@@ -754,12 +754,11 @@ public class QueryParsing {
       eatws();
       int id_start = pos;
       char ch;
-      if (pos < end && (ch = val.charAt(pos)) != '$' && Character.isJavaIdentifierStart(ch)) {
+      if (pos < end && (ch = val.charAt(pos)) != '$' && Character.isJavaIdentifierStart(ch)) { 
         pos++;
         while (pos < end) {
           ch = val.charAt(pos);
-//          if (!Character.isJavaIdentifierPart(ch) && ch != '.' && ch != ':') {
-          if (!Character.isJavaIdentifierPart(ch) && ch != '.') {
+          if (!Character.isJavaIdentifierPart(ch) && ch != '.' && ch != '-' ) {
             break;
           }
           pos++;
