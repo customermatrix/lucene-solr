@@ -2268,7 +2268,10 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable {
 
   /** Aborts running merges.  Be careful when using this
    *  method: when you abort a long-running merge, you lose
-   *  a lot of work that must later be redone. */
+   *  a lot of work that must later be redone.
+   *
+   * @deprecated This will be removed in 5.0 */
+  @Deprecated
   public synchronized void abortMerges() {
     stopMerges = true;
 
@@ -2316,7 +2319,11 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable {
    *
    * <p>It is guaranteed that any merges started prior to calling this method
    *    will have completed once this method completes.</p>
+   *
+   * @deprecated This will be removed in Lucene 5.x.  Interact with {@link ConcurrentMergeScheduler} if you really must know the specific
+   * timing of merges.
    */
+  @Deprecated
   public void waitForMerges() throws IOException {
 
     // Give merge scheduler last chance to run, in case
@@ -4465,7 +4472,9 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable {
 
       synchronized(this) {
 
-        assert lastCommitChangeCount <= changeCount: "lastCommitChangeCount=" + lastCommitChangeCount + " changeCount=" + changeCount;
+        if (lastCommitChangeCount > changeCount) {
+          throw new IllegalStateException("lastCommitChangeCount=" + lastCommitChangeCount + ",changeCount=" + changeCount);
+        }
 
         if (pendingCommitChangeCount == lastCommitChangeCount) {
           if (infoStream.isEnabled("IW")) {
@@ -4573,7 +4582,10 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable {
    * Caution: this should only be used by failure recovery code,
    * when it is known that no other process nor thread is in fact
    * currently accessing this index.
+   *
+   * @deprecated This method is very dangerous and will be removed in Lucene 5.0
    */
+  @Deprecated
   public static void unlock(Directory directory) throws IOException {
     directory.makeLock(IndexWriter.WRITE_LOCK_NAME).close();
   }
@@ -4651,10 +4663,13 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable {
   synchronized boolean nrtIsCurrent(SegmentInfos infos) {
     //System.out.println("IW.nrtIsCurrent " + (infos.version == segmentInfos.version && !docWriter.anyChanges() && !bufferedDeletesStream.any()));
     ensureOpen();
+    boolean isCurrent = infos.version == segmentInfos.version && !docWriter.anyChanges() && !bufferedUpdatesStream.any();
     if (infoStream.isEnabled("IW")) {
-      infoStream.message("IW", "nrtIsCurrent: infoVersion matches: " + (infos.version == segmentInfos.version) + "; DW changes: " + docWriter.anyChanges() + "; BD changes: "+ bufferedUpdatesStream.any());
+      if (isCurrent == false) {
+        infoStream.message("IW", "nrtIsCurrent: infoVersion matches: " + (infos.version == segmentInfos.version) + "; DW changes: " + docWriter.anyChanges() + "; BD changes: "+ bufferedUpdatesStream.any());
+      }
     }
-    return infos.version == segmentInfos.version && !docWriter.anyChanges() && !bufferedUpdatesStream.any();
+    return isCurrent;
   }
 
   synchronized boolean isClosed() {

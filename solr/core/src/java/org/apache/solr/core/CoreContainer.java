@@ -597,7 +597,7 @@ public class CoreContainer {
       solrCores.waitAddPendingCoreOps(name);
       ConfigSet coreConfig = coreConfigService.getConfig(cd);
       log.info("Reloading SolrCore '{}' using configuration from {}", cd.getName(), coreConfig.getName());
-      SolrCore newCore = core.reload(coreConfig, core);
+      SolrCore newCore = core.reload(coreConfig);
       registerCore(name, newCore, false);
     }
     catch (Exception e) {
