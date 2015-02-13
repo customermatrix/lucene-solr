@@ -244,9 +244,11 @@ public class SortField {
     return field;
   }
 
+// SEA
   public void setField(String name) {
     field = name;
   }
+// SEA
 
   /** Returns the type of contents in the field.
    * @return One of the constants SCORE, DOC, STRING, INT or FLOAT.

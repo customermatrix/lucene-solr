@@ -100,7 +100,9 @@ public class SolrResourceLoader implements ResourceLoader,Closeable
   //TODO: Solr5. Remove this completely when you obsolete putting <core> tags in solr.xml (See Solr-4196)
   private final Properties coreProperties;
 
+// SEA
   public volatile boolean live;
+// SEA
   
   // Provide a registry so that managed resources can register themselves while the XML configuration
   // documents are being parsed ... after all are registered, they are asked by the RestManager to
@@ -659,6 +661,7 @@ public class SolrResourceLoader implements ResourceLoader,Closeable
   /**
    * Tell all {@link ResourceLoaderAware} instances about the loader
    */
+// SEA
   public List<ResourceLoaderAware> inform(ResourceLoader loader) throws IOException
   {
 
@@ -680,6 +683,7 @@ public class SolrResourceLoader implements ResourceLoader,Closeable
 
     return awareList;
   }
+// SEA
 
   /**
    * Register any {@link org.apache.solr.core.SolrInfoMBean}s

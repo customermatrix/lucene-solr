@@ -396,6 +396,7 @@ final class DocumentsWriter implements Closeable, Accountable {
     if (state.isActive() && state.dwpt == null) {
       final FieldInfos.Builder infos = new FieldInfos.Builder(
           writer.globalFieldNumberMap);
+// SEA
       try {
         state.dwpt = (DocumentsWriterPerThread)Class.forName(config.documentsWriterPerThreadImpl)
             .getConstructor(String.class, Directory.class, LiveIndexWriterConfig.class, InfoStream.class,
@@ -404,9 +405,9 @@ final class DocumentsWriter implements Closeable, Accountable {
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
+// SEA
     }
   }
-
 
   boolean updateDocuments(final Iterable<? extends Iterable<? extends IndexableField>> docs, final Analyzer analyzer,
                           final Term delTerm) throws IOException {

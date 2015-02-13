@@ -124,7 +124,9 @@ import java.util.Map;
  */
 public class QueryComponent extends SearchComponent
 {
+// SEA
   private Logger logger = LoggerFactory.getLogger(QueryComponent.class);
+// SEA
   public static final String COMPONENT_NAME = "query";
 
   @Override
@@ -186,8 +188,9 @@ public class QueryComponent extends SearchComponent
           throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,"rq parameter must be a RankQuery");
         }
       }
-
+// SEA
       rb.setSortSpec( parser.getSort(true, req.getSchema()) );
+// SEA
       rb.setQparser(parser);
 
       final String cursorStr = rb.req.getParams().get(CursorMarkParams.CURSOR_MARK_PARAM);
@@ -364,6 +367,7 @@ public class QueryComponent extends SearchComponent
               .setSearcher(searcher);
 
           for (String field : groupingSpec.getFields()) {
+// SEA
             try {
               topsGroupsActionBuilder.addCommandField(new SearchGroupsFieldCommand.Builder()
                   .setField(searcher.getSchema().getField(field))
@@ -379,7 +383,7 @@ public class QueryComponent extends SearchComponent
               }
             }
           }
-
+// SEA
           CommandHandler commandHandler = topsGroupsActionBuilder.build();
           commandHandler.execute();
           //SEA-1039
@@ -1064,11 +1068,13 @@ public class QueryComponent extends SearchComponent
         shardDoc.positionInResponse = i;
         // Need the toString() for correlation with other lists that must
         // be strings (like keys in highlighting, explain, etc)
+// SEA
         if (shardDoc.id != null) {
           resultIds.put(shardDoc.id.toString(), shardDoc);
         } else {
           logger.error("Invalid document detected in the shard results. Check if there is empty documents!");
         }
+// SEA
       }
 
       // Add hits for distributed requests

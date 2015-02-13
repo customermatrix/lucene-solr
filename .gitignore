@@ -1,7 +1,5 @@
 # .
 /eclipse-build
-/maven-build
-atlassian-ide-plugin.xml
 /classes
 **/build
 /idea-build
@@ -47,3 +45,8 @@ solr/contrib/dataimporthandler/test-lib/
 solr/contrib/morphlines-core/test-lib/
 
 solr/core/test-lib/
+
+# SEA
+/maven-build
+atlassian-ide-plugin.xml
+# SEA

@@ -78,14 +78,20 @@ public abstract class SolrQueryParserBase extends QueryBuilder {
   public static final Operator OR_OPERATOR = Operator.OR;
 
   /** The default operator that parser uses to combine query terms */
+// SEA
   public Operator operator = OR_OPERATOR;
+// SEA
 
   MultiTermQuery.RewriteMethod multiTermRewriteMethod = MultiTermQuery.CONSTANT_SCORE_AUTO_REWRITE_DEFAULT;
   boolean allowLeadingWildcard = true;
+// SEA
   public boolean enablePositionIncrements = true;
+// SEA
 
   String defaultField;
+// SEA
   public int phraseSlop = 0;     // default slop for phrase queries
+// SEA
   float fuzzyMinSim = FuzzyQuery.defaultMinSimilarity;
   int fuzzyPrefixLength = FuzzyQuery.defaultPrefixLength;
 
@@ -409,6 +415,7 @@ public abstract class SolrQueryParserBase extends QueryBuilder {
   * @param disableCoord disable coord
   * @return new BooleanQuery instance
   */
+// SEA
   public BooleanQuery newBooleanQuery(boolean disableCoord) {
     return new BooleanQuery(disableCoord);
   }
@@ -447,6 +454,7 @@ public abstract class SolrQueryParserBase extends QueryBuilder {
   public MultiPhraseQuery newMultiPhraseQuery(){
     return new MultiPhraseQuery();
   }
+// SEA
 
   /**
    * Builds a new PrefixQuery instance
@@ -463,7 +471,9 @@ public abstract class SolrQueryParserBase extends QueryBuilder {
    * @param regexp Regexp term
    * @return new RegexpQuery instance
    */
+// SEA
   public Query newRegexpQuery(Term regexp) {
+// SEA
     RegexpQuery query = new RegexpQuery(regexp);
     SchemaField sf = schema.getField(regexp.field());
     query.setRewriteMethod(sf.getType().getRewriteMethod(parser, sf));
@@ -477,7 +487,9 @@ public abstract class SolrQueryParserBase extends QueryBuilder {
    * @param prefixLength prefix length
    * @return new FuzzyQuery Instance
    */
+// SEA
   public Query newFuzzyQuery(Term term, float minimumSimilarity, int prefixLength) {
+// SEA
     // FuzzyQuery doesn't yet allow constant score rewrite
     String text = term.text();
     int numEdits = FuzzyQuery.floatToEdits(minimumSimilarity, 
@@ -489,7 +501,9 @@ public abstract class SolrQueryParserBase extends QueryBuilder {
    * Builds a new MatchAllDocsQuery instance
    * @return new MatchAllDocsQuery instance
    */
+// SEA
   public Query newMatchAllDocsQuery() {
+// SEA
     return new MatchAllDocsQuery();
   }
 
@@ -498,7 +512,9 @@ public abstract class SolrQueryParserBase extends QueryBuilder {
    * @param t wildcard term
    * @return new WildcardQuery instance
    */
+// SEA
   public Query newWildcardQuery(Term t) {
+// SEA
     WildcardQuery query = new WildcardQuery(t);
     SchemaField sf = schema.getField(t.field());
     query.setRewriteMethod(sf.getType().getRewriteMethod(parser, sf));
@@ -517,7 +533,9 @@ public abstract class SolrQueryParserBase extends QueryBuilder {
    *
    * @return Resulting {@link org.apache.lucene.search.Query} object.
    */
+// SEA
   public Query getBooleanQuery(List<BooleanClause> clauses) throws SyntaxError {
+// SEA
     return getBooleanQuery(clauses, false);
   }
 
@@ -534,7 +552,9 @@ public abstract class SolrQueryParserBase extends QueryBuilder {
    *
    * @return Resulting {@link org.apache.lucene.search.Query} object.
    */
+// SEA
   public Query getBooleanQuery(List<BooleanClause> clauses, boolean disableCoord)
+// SEA
     throws SyntaxError
   {
     if (clauses.size()==0) {

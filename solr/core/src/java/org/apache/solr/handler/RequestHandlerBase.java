@@ -47,11 +47,13 @@ public abstract class RequestHandlerBase implements SolrRequestHandler, SolrInfo
   protected boolean httpCaching = true;
 
   // Statistics
+// SEA
   protected final AtomicLong numRequests = new AtomicLong();
   protected final AtomicLong numErrors = new AtomicLong();
   protected final AtomicLong numTimeouts = new AtomicLong();
   protected final Timer requestTimes = new Timer();
   protected final long handlerStart = System.currentTimeMillis();
+// SEA
 
   /**
    * Initializes the {@link org.apache.solr.request.SolrRequestHandler} by creating three {@link org.apache.solr.common.params.SolrParams} named.

@@ -142,7 +142,9 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  *
  */
+// SEA
 public class SolrCore implements SolrInfoMBean, Closeable {
+// SEA
   public static final String version="1.0";  
 
   // These should *only* be used for debugging or monitoring purposes
@@ -1134,8 +1136,10 @@ public class SolrCore implements SolrInfoMBean, Closeable {
       }
     }
 
+// SEA
     schema.close();
     schema = null;
+// SEA
 
     // For debugging 
 //    numCloses.incrementAndGet();
@@ -1871,6 +1875,7 @@ public class SolrCore implements SolrInfoMBean, Closeable {
           // and throwing another exception would be very unexpected.
           SolrException.log(log, "Error closing searcher:" + this, e);
         }
+
       }
     };
     holder.incref();  // set ref count to 1 to account for this._searcher

@@ -916,7 +916,9 @@ public class BasicFunctionalityTest extends SolrTestCaseJ4 {
             "*[count(//doc)=1]");
   }
 
+// SEA
   @Ignore
+// SEA
   @Test
   public void testAbuseOfSort() {
 

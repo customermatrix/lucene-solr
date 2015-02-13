@@ -1,4 +1,5 @@
 #!/bin/sh
+# Copy web stuff to polyspot workspace directory
 DESTINATION=$1/search/solr/src/main/webapp
 SOURCE=solr/webapp/web
 EXCLUDE=WEB-INF

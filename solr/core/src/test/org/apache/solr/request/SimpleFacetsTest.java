@@ -17,13 +17,14 @@
 
 package org.apache.solr.request;
 
+import org.junit.Ignore;
 import org.noggit.ObjectBuilder;
 import org.apache.solr.SolrTestCaseJ4;
+import org.apache.solr.common.SolrException;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.schema.SchemaField;
 import org.apache.solr.util.TimeZoneUtils;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -319,7 +320,8 @@ public class SimpleFacetsTest extends SolrTestCaseJ4 {
         "*[count(//lst[@name='airport_s1']/int)=1]",
         "//lst[@name='airport_s1']/int[@name='ams'][.='2']"
     );
-    
+
+// SEA
 //    try {
 //      h.query(
 //           req(
@@ -335,6 +337,7 @@ public class SimpleFacetsTest extends SolrTestCaseJ4 {
 //    } catch (SolrException e) {
 //      assertEquals(SolrException.ErrorCode.BAD_REQUEST.code, e.code());
 //    }
+// SEA
   }
 
   @Test

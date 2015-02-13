@@ -34,6 +34,8 @@ import org.apache.solr.handler.RequestHandlerBase;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.response.RawResponseWriter;
 import org.apache.solr.response.SolrQueryResponse;
+import org.apache.solr.schema.IndexSchema;
+import org.apache.solr.schema.ManagedIndexSchema;
 import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -277,6 +279,7 @@ public class ShowFileRequestHandler extends RequestHandlerBase
     // Make sure that if the schema is managed, we don't allow editing. Don't really want to put
     // this in the init since we're not entirely sure when the managed schema will get initialized relative to this
     // handler.
+// SEA
 //    SolrCore core = req.getCore();
 //    IndexSchema schema = core.getLatestSchema();
 //    if (schema instanceof ManagedIndexSchema) {
@@ -286,6 +289,7 @@ public class ShowFileRequestHandler extends RequestHandlerBase
 //        return true;
 //      }
 //    }
+// SEA
     return false;
   }
 

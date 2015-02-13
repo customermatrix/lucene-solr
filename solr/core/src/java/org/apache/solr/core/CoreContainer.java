@@ -84,12 +84,16 @@ public class CoreContainer {
 
   protected Properties containerProperties;
 
+// SEA
   protected ConfigSetService coreConfigService;
+// SEA
   
   protected ZkContainer zkSys = new ZkContainer();
   protected ShardHandlerFactory shardHandlerFactory;
 
+// SEA
   protected UpdateShardHandler updateShardHandler;
+// SEA
 
   protected LogWatcher logging = null;
 
@@ -211,7 +215,9 @@ public class CoreContainer {
       loader.reloadLuceneSPI();
     }
 
+// SEA
     shardHandlerFactory = initShardHandlerFactory();
+// SEA
     
     updateShardHandler = new UpdateShardHandler(cfg);
 
@@ -226,7 +232,9 @@ public class CoreContainer {
 
     collectionsHandler = createHandler(cfg.getCollectionsHandlerClass(), CollectionsHandler.class);
     infoHandler        = createHandler(cfg.getInfoHandlerClass(), InfoHandler.class);
+// SEA
     coreAdminHandler   = createMultiCoreHandler();
+// SEA
 
     coreConfigService = cfg.createCoreConfigService(loader, zkSys.getZkController());
 
@@ -246,6 +254,7 @@ public class CoreContainer {
       List<Callable<SolrCore>> creators = new ArrayList<>();
       for (final CoreDescriptor cd : cds) {
 
+// SEA
         final String name = cd.getName();
         try {
 
@@ -260,6 +269,7 @@ public class CoreContainer {
         } catch (Exception e) {
           SolrException.log(log, null, e);
         }
+// SEA
       }
 
       try {
@@ -321,14 +331,8 @@ public class CoreContainer {
     isShutDown = true;
     
     if (isZooKeeperAware()) {
-      executeZKTask(new Callable<Object>() {
-        @Override
-        public Object call() throws Exception {
-          cancelCoreRecoveries();
-          zkSys.publishCoresAsDown(solrCores.getCores());
-          return null;
-        }
-      });
+      cancelCoreRecoveries();
+      zkSys.publishCoresAsDown(solrCores.getCores());
     }
 
     try {
@@ -373,36 +377,12 @@ public class CoreContainer {
             updateShardHandler.close();
           }
         } finally {
-          int timeout = Integer.parseInt(System.getProperty("solr.shutdown.zk.delay", "0"));
-          try {
-            if (timeout > 0) {
-              Thread.sleep(timeout);
-            }
-          } catch (InterruptedException e) {
-            log.error("", e);
-          } finally {
-            zkSys.close();
-          }
+          // we want to close zk stuff last
+          zkSys.close();
         }
       }
     }
     org.apache.lucene.util.IOUtils.closeWhileHandlingException(loader); // best effort
-  }
-
-  private void executeZKTask(Callable<Object> task) {
-    ExecutorService zkExecutor = Executors.newSingleThreadExecutor(new NamedThreadFactory("executeZKTask"));
-    Future<Object> zkTask = null;
-    try {
-      zkTask = zkExecutor.submit(task);
-      zkTask.get(30, TimeUnit.SECONDS);
-    } catch (Exception e) {
-      log.error("", e);
-    } finally {
-      if (zkTask != null) {
-        zkTask.cancel(true);
-      }
-      zkExecutor.shutdownNow();
-    }
   }
 
   public void cancelCoreRecoveries() {
@@ -811,10 +791,6 @@ public class CoreContainer {
     return loader.newInstance(handlerClass, clazz, null, new Class[] { CoreContainer.class }, new Object[] { this });
   }
 
-  protected CoreAdminHandler createMultiCoreHandler() {
-    return createHandler(cfg.getCoreAdminHandlerClass(), CoreAdminHandler.class);
-  }
-
   public CoreAdminHandler getMultiCoreHandler() {
     return coreAdminHandler;
   }
@@ -920,6 +896,11 @@ public class CoreContainer {
 
 
 
+// SEA
+
+  protected CoreAdminHandler createMultiCoreHandler() {
+    return createHandler(cfg.getCoreAdminHandlerClass(), CoreAdminHandler.class);
+  }
 
   protected ShardHandlerFactory initShardHandlerFactory() {
     return ShardHandlerFactory.newInstance(cfg.getShardHandlerFactoryPluginInfo(), loader);
@@ -941,7 +922,9 @@ public class CoreContainer {
         return create(cd, false);
       }
     });
+// SEA
 
+  }
 }
 
 class CloserThread extends Thread {
@@ -962,7 +945,7 @@ class CloserThread extends Thread {
   // essentially create a single-threaded process anyway.
   @Override
   public void run() {
-    while (! container.isShutDown()) {
+    while (!container.isShutDown()) {
       synchronized (solrCores.getModifyLock()) { // need this so we can wait and be awoken.
         try {
           solrCores.getModifyLock().wait();
@@ -982,5 +965,5 @@ class CloserThread extends Thread {
       }
     }
   }
-}
+
 }

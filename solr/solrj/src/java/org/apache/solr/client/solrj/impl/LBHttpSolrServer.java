@@ -100,13 +100,17 @@ public class LBHttpSolrServer extends SolrServer {
 
   // keys to the maps are currently of the form "http://localhost:8983/solr"
   // which should be equivalent to HttpSolrServer.getBaseURL()
+// SEA
   protected final Map<String, ServerWrapper> aliveServers = new LinkedHashMap<>();
+// SEA
   // access to aliveServers should be synchronized on itself
   
   protected final Map<String, ServerWrapper> zombieServers = new ConcurrentHashMap<>();
 
   // changes to aliveServers are reflected in this array, no need to synchronize
+// SEA
   protected volatile ServerWrapper[] aliveServerList = new ServerWrapper[0];
+// SEA
 
 
   private ScheduledExecutorService aliveCheckExecutor;
@@ -120,8 +124,10 @@ public class LBHttpSolrServer extends SolrServer {
 
   private Set<String> queryParams;
 
+// SEA
   public static class ServerWrapper {
-    public final HttpSolrServer solrServer;
+  public final HttpSolrServer solrServer;
+// SEA
 
     long lastUsed;     // last time used for a real request
     long lastChecked;  // last time checked for liveness
@@ -385,7 +391,9 @@ public class LBHttpSolrServer extends SolrServer {
     }
   }
 
+// SEA
   protected ServerWrapper removeFromAlive(String key) {
+// SEA
     synchronized (aliveServers) {
       ServerWrapper wrapper = aliveServers.remove(key);
       if (wrapper != null)
@@ -394,7 +402,9 @@ public class LBHttpSolrServer extends SolrServer {
     }
   }
 
+// SEA
   protected void addToAlive(ServerWrapper wrapper) {
+// SEA
     synchronized (aliveServers) {
       ServerWrapper prev = aliveServers.put(wrapper.getKey(), wrapper);
       // TODO: warn if there was a previous entry?
@@ -534,7 +544,9 @@ public class LBHttpSolrServer extends SolrServer {
     long currTime = System.currentTimeMillis();
     try {
       zombieServer.lastChecked = currTime;
+// SEA
       QueryResponse resp = newPingQuery(zombieServer);
+// SEA
       if (resp.getStatus() == 0) {
         // server has come back up.
         // make sure to remove from zombies before adding to alive to avoid a race condition
@@ -562,7 +574,9 @@ public class LBHttpSolrServer extends SolrServer {
     }
   }
 
+// SEA
   protected void moveAliveToDead(ServerWrapper wrapper) {
+// SEA
     wrapper = removeFromAlive(wrapper.getKey());
     if (wrapper == null)
       return;  // another thread already detected the failure and removed it
@@ -650,7 +664,7 @@ public class LBHttpSolrServer extends SolrServer {
   private static final int CHECK_INTERVAL = 60 * 1000; //1 minute between checks
   private static final int NONSTANDARD_PING_LIMIT = 5;  // number of times we'll ping dead servers not in the server list
 
-
+// SEA
   protected QueryResponse newPingQuery(ServerWrapper zombieServer) throws SolrServerException {
     return zombieServer.solrServer.query(newPingQuery());
   }
@@ -663,4 +677,5 @@ public class LBHttpSolrServer extends SolrServer {
     solrQuery.setDistrib(false);
     return solrQuery;
   }
+// SEA
 }

@@ -556,4 +556,3 @@ public class DistributedFacetPivotTest extends BaseDistributedSearchTestCase {
   }
   
 }
-

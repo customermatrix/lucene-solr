@@ -41,7 +41,9 @@ require
     'lib/order!scripts/dataimport',
     'lib/order!scripts/dashboard',
     'lib/order!scripts/files',
+// SEA
     'lib/order!scripts/file',
+// SEA
     'lib/order!scripts/index',
     'lib/order!scripts/java-properties',
     'lib/order!scripts/logging',

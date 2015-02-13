@@ -22,9 +22,11 @@
     <conf name="compile" transitive="false"/>
   </configurations>
   <dependencies>
+<!-- SEA -->
     <dependency org="org.slf4j" name="slf4j-api" rev="1.6.4" transitive="false"/>
     <dependency org="org.slf4j" name="slf4j-log4j12" rev="1.6.4" transitive="false"/>
     <dependency org="log4j" name="log4j" rev="1.2.16" transitive="false"/>
+<!-- SEA -->
     <dependency org="com.spatial4j" name="spatial4j" rev="${/com.spatial4j/spatial4j}" conf="compile"/>
     <exclude org="*" ext="*" matcher="regexp" type="${ivy.exclude.types}"/> 
   </dependencies>

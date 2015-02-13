@@ -49,7 +49,9 @@ public class ZkContainer {
   
   protected ZkController zkController;
   private SolrZkServer zkServer;
+// SEA
   private String hostPort;
+// SEA
 
   private ExecutorService coreZkRegister = Executors.newFixedThreadPool(Integer.MAX_VALUE,
       new DefaultSolrThreadFactory("coreZkRegister") );
@@ -93,7 +95,9 @@ public class ZkContainer {
 
     String zkRun = System.getProperty("zkRun");
     
+// SEA
     hostPort = System.getProperty("hostPort", hostPort);
+// SEA
 
     if (zkRun == null && zookeeperHost == null)
         return;  // not in zk mode
@@ -107,7 +111,9 @@ public class ZkContainer {
       hostPort = DEFAULT_HOST_PORT;
     }
 
+// SEA
     this.hostPort = hostPort;
+// SEA
 
     if (null == hostContext) {
       // throw new ZooKeeperException(SolrException.ErrorCode.SERVER_ERROR,
@@ -252,7 +258,7 @@ public class ZkContainer {
       }
     }
   }
-
+  
   public ZkController getZkController() {
     return zkController;
   }

@@ -288,14 +288,18 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
     query("q","*:*", "sort",i1+" desc", "stats", "true", "stats.field", "stats_dt");
     query("q","*:*", "sort",i1+" desc", "stats", "true", "stats.field", i1);
     query("q","*:*", "sort",i1+" desc", "stats", "true", "stats.field", tdate_a);
+// SEA
 //    query("q","*:*", "sort",i1+" desc", "stats", "true", "stats.field", tdate_b);
-
+// SEA
     handle.put("stats_fields", UNORDERED);
+
+// SEA
 //    query("q","*:*", "sort",i1+" desc", "stats", "true",
 //          "stats.field", "stats_dt",
 //          "stats.field", i1,
 //          "stats.field", tdate_a,
 //          "stats.field", tdate_b);
+// SEA
 
     /*** TODO: the failure may come back in "exception"
     try {

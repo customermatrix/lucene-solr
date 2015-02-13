@@ -335,8 +335,9 @@ sammy.get
                 );
 
                 var core_data = cores[current_core];
+// SEA
                 var core_basepath = $( '#' + current_core.replace(/\./g, '__'), app.menu_element ).attr( 'data-basepath' );
-
+// SEA
                 // core-data
 
                 $( '.startTime dd', core_data_element )

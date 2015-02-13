@@ -17,11 +17,11 @@ package org.apache.lucene.search.vectorhighlight;
  * limitations under the License.
  */
 
-import org.apache.lucene.search.vectorhighlight.FieldFragList.WeightedFragInfo.SubInfo;
-import org.apache.lucene.search.vectorhighlight.FieldPhraseList.WeightedPhraseInfo;
-
 import java.util.ArrayList;
 import java.util.List;
+
+import org.apache.lucene.search.vectorhighlight.FieldFragList.WeightedFragInfo.SubInfo;
+import org.apache.lucene.search.vectorhighlight.FieldPhraseList.WeightedPhraseInfo;
 
 /**
  * A simple implementation of {@link FieldFragList}.

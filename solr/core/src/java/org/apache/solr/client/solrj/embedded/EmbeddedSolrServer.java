@@ -17,6 +17,11 @@
 
 package org.apache.solr.client.solrj.embedded;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+
 import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -39,11 +44,6 @@ import org.apache.solr.response.BinaryResponseWriter;
 import org.apache.solr.response.ResultContext;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.servlet.SolrRequestParsers;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
 
 /**
  * SolrServer that connects directly to SolrCore.
@@ -146,7 +146,9 @@ public class EmbeddedSolrServer extends SolrServer
       req.getContext().put( "path", path );
       SolrQueryResponse rsp = new SolrQueryResponse();
       SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, rsp));
+// SEA
       execute( handler, req, rsp );
+// SEA
       core.execute( handler, req, rsp );
       if( rsp.getException() != null ) {
         if(rsp.getException() instanceof SolrException) {
@@ -229,9 +231,11 @@ public class EmbeddedSolrServer extends SolrServer
     }
   }
 
+// SEA
   protected void execute(SolrRequestHandler handler, SolrQueryRequest req, SolrQueryResponse rsp) {
 
   }
+// SEA
   
   /**
    * Returns a response object equivalent to what you get from the XML/JSON/javabin parser. Documents

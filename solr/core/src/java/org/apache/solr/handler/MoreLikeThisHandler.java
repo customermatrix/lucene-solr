@@ -55,23 +55,23 @@ import org.apache.solr.util.SolrPluginUtils;
 
 /**
  * Solr MoreLikeThis --
- *
+ * 
  * Return similar documents either based on a single document or based on posted text.
- *
+ * 
  * @since solr 1.3
  */
-public class MoreLikeThisHandler extends RequestHandlerBase
+public class MoreLikeThisHandler extends RequestHandlerBase  
 {
   // Pattern is thread safe -- TODO? share this with general 'fl' param
   private static final Pattern splitList = Pattern.compile(",| ");
-
+  
   @Override
   public void init(NamedList args) {
     super.init(args);
   }
 
   @Override
-  public void handleRequestBody(SolrQueryRequest req, SolrQueryResponse rsp) throws Exception
+  public void handleRequestBody(SolrQueryRequest req, SolrQueryResponse rsp) throws Exception 
   {
     SolrParams params = req.getParams();
 
@@ -93,7 +93,9 @@ public class MoreLikeThisHandler extends RequestHandlerBase
       if (q != null) {
         QParser parser = QParser.getParser(q, defType, req);
         query = parser.getQuery();
+// SEA
         sortSpec = parser.getSort(true,req.getSchema());
+// SEA
       }
 
       String[] fqs = req.getParams().getParams(CommonParams.FQ);
@@ -117,8 +119,8 @@ public class MoreLikeThisHandler extends RequestHandlerBase
     // Hold on to the interesting terms if relevant
     TermStyle termStyle = TermStyle.get( params.get( MoreLikeThisParams.INTERESTING_TERMS ) );
     List<InterestingTerm> interesting = (termStyle == TermStyle.NONE )
-        ? null : new ArrayList<InterestingTerm>( mlt.mlt.getMaxQueryTerms() );
-
+      ? null : new ArrayList<InterestingTerm>( mlt.mlt.getMaxQueryTerms() );
+    
     DocListAndSet mltDocs = null;
 
     // Parse Required Params
@@ -177,13 +179,13 @@ public class MoreLikeThisHandler extends RequestHandlerBase
         reader.close();
       }
     }
-
+    
     if( mltDocs == null ) {
       mltDocs = new DocListAndSet(); // avoid NPE
     }
     rsp.add( "response", mltDocs.docList );
-
-
+    
+  
     if( interesting != null ) {
       if( termStyle == TermStyle.DETAILS ) {
         NamedList<Float> it = new NamedList<>();
@@ -200,7 +202,7 @@ public class MoreLikeThisHandler extends RequestHandlerBase
         rsp.add( "interestingTerms", it );
       }
     }
-
+    
     // maybe facet the results
     if (params.getBool(FacetParams.FACET,false)) {
       if( mltDocs.docSet == null ) {
@@ -250,12 +252,12 @@ public class MoreLikeThisHandler extends RequestHandlerBase
       }
     }
   }
-
+  
   public static class InterestingTerm
   {
     public Term term;
     public float boost;
-
+        
     public static Comparator<InterestingTerm> BOOST_ORDER = new Comparator<InterestingTerm>() {
       @Override
       public int compare(InterestingTerm t1, InterestingTerm t2) {
@@ -267,39 +269,39 @@ public class MoreLikeThisHandler extends RequestHandlerBase
       }
     };
   }
-
+  
   /**
    * Helper class for MoreLikeThis that can be called from other request handlers
    */
-  public static class MoreLikeThisHelper
-  {
+  public static class MoreLikeThisHelper 
+  { 
     final SolrIndexSearcher searcher;
     final MoreLikeThis mlt;
     final IndexReader reader;
     final SchemaField uniqueKeyField;
     final boolean needDocSet;
     Map<String,Float> boostFields;
-
+    
     public MoreLikeThisHelper( SolrParams params, SolrIndexSearcher searcher )
     {
       this.searcher = searcher;
       this.reader = searcher.getIndexReader();
       this.uniqueKeyField = searcher.getSchema().getUniqueKeyField();
       this.needDocSet = params.getBool(FacetParams.FACET,false);
-
+      
       SolrParams required = params.required();
       String[] fields = splitList.split( required.get(MoreLikeThisParams.SIMILARITY_FIELDS) );
       if( fields.length < 1 ) {
-        throw new SolrException( SolrException.ErrorCode.BAD_REQUEST,
+        throw new SolrException( SolrException.ErrorCode.BAD_REQUEST, 
             "MoreLikeThis requires at least one similarity field: "+MoreLikeThisParams.SIMILARITY_FIELDS );
       }
-
+      
       this.mlt = new MoreLikeThis( reader ); // TODO -- after LUCENE-896, we can use , searcher.getSimilarity() );
       mlt.setFieldNames(fields);
       mlt.setAnalyzer( searcher.getSchema().getIndexAnalyzer() );
       
       // configurable params
-
+      
       mlt.setMinTermFreq(       params.getInt(MoreLikeThisParams.MIN_TERM_FREQ,         MoreLikeThis.DEFAULT_MIN_TERM_FREQ));
       mlt.setMinDocFreq(        params.getInt(MoreLikeThisParams.MIN_DOC_FREQ,          MoreLikeThis.DEFAULT_MIN_DOC_FREQ));
       mlt.setMaxDocFreq(        params.getInt(MoreLikeThisParams.MAX_DOC_FREQ,          MoreLikeThis.DEFAULT_MAX_DOC_FREQ));
@@ -310,23 +312,23 @@ public class MoreLikeThisHandler extends RequestHandlerBase
       mlt.setBoost(            params.getBool(MoreLikeThisParams.BOOST, false ) );
       boostFields = SolrPluginUtils.parseFieldBoosts(params.getParams(MoreLikeThisParams.QF));
     }
-
+    
     private Query rawMLTQuery;
     private Query boostedMLTQuery;
     private BooleanQuery realMLTQuery;
-
+    
     public Query getRawMLTQuery(){
       return rawMLTQuery;
     }
-
+    
     public Query getBoostedMLTQuery(){
       return boostedMLTQuery;
     }
-
+    
     public Query getRealMLTQuery(){
       return realMLTQuery;
     }
-
+    
     private Query getBoostedQuery(Query mltquery) {
       BooleanQuery boostedQuery = (BooleanQuery)mltquery.clone();
       if (boostFields.size() > 0) {
@@ -341,7 +343,7 @@ public class MoreLikeThisHandler extends RequestHandlerBase
       }
       return boostedQuery;
     }
-
+    
     public DocListAndSet getMoreLikeThis( int id, int start, int rows, List<Query> filters, List<InterestingTerm> terms, int flags ) throws IOException
     {
       Document doc = reader.document(id);
@@ -355,9 +357,9 @@ public class MoreLikeThisHandler extends RequestHandlerBase
       realMLTQuery = new BooleanQuery();
       realMLTQuery.add(boostedMLTQuery, BooleanClause.Occur.MUST);
       realMLTQuery.add(
-          new TermQuery(new Term(uniqueKeyField.getName(), uniqueKeyField.getType().storedToIndexed(doc.getField(uniqueKeyField.getName())))),
-          BooleanClause.Occur.MUST_NOT);
-
+          new TermQuery(new Term(uniqueKeyField.getName(), uniqueKeyField.getType().storedToIndexed(doc.getField(uniqueKeyField.getName())))), 
+            BooleanClause.Occur.MUST_NOT);
+      
       DocListAndSet results = new DocListAndSet();
       if (this.needDocSet) {
         results = searcher.getDocListAndSet(realMLTQuery, filters, null, start, rows, flags);
@@ -392,7 +394,7 @@ public class MoreLikeThisHandler extends RequestHandlerBase
       DocIterator iterator = docs.iterator();
       while( iterator.hasNext() ) {
         int id = iterator.nextDoc();
-
+        
         DocListAndSet sim = getMoreLikeThis( id, 0, rows, null, null, flags );
         String name = schema.printableUniqueKey( reader.document( id ) );
 
@@ -400,7 +402,7 @@ public class MoreLikeThisHandler extends RequestHandlerBase
       }
       return mlt;
     }
-
+    
     public NamedList<BooleanQuery> getMoreLikeTheseQuery(DocList docs)
         throws IOException {
       IndexSchema schema = searcher.getSchema();
@@ -415,11 +417,11 @@ public class MoreLikeThisHandler extends RequestHandlerBase
           return result;
         }
         mltquery = (BooleanQuery) getBoostedQuery(mltquery);
-
+        
         // exclude current document from results
         BooleanQuery mltQuery = new BooleanQuery();
         mltQuery.add(mltquery, BooleanClause.Occur.MUST);
-
+        
         mltQuery.add(
             new TermQuery(new Term(uniqueKeyField.getName(), uniqueId)), BooleanClause.Occur.MUST_NOT);
         result.add(uniqueId, mltQuery);
@@ -427,9 +429,9 @@ public class MoreLikeThisHandler extends RequestHandlerBase
 
       return result;
     }
-
+    
     private void fillInterestingTermsFromMLTQuery( Query query, List<InterestingTerm> terms )
-    {
+    { 
       List clauses = ((BooleanQuery)query).clauses();
       for( Object o : clauses ) {
         TermQuery q = (TermQuery)((BooleanClause)o).getQuery();
@@ -437,18 +439,18 @@ public class MoreLikeThisHandler extends RequestHandlerBase
         it.boost = q.getBoost();
         it.term = q.getTerm();
         terms.add( it );
-      }
+      } 
       // alternatively we could use
       // mltquery.extractTerms( terms );
     }
-
+    
     public MoreLikeThis getMoreLikeThis()
     {
       return mlt;
     }
   }
-
-
+  
+  
   //////////////////////// SolrInfoMBeans methods //////////////////////
 
   @Override

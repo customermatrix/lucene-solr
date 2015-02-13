@@ -29,7 +29,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
-import com.google.common.base.Charsets;
+import org.apache.commons.io.Charsets;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.cloud.CloudConfigSetService;
 import org.apache.solr.cloud.ZkController;
@@ -46,7 +46,7 @@ import org.xml.sax.InputSource;
 
 public abstract class ConfigSolr {
   protected static Logger log = LoggerFactory.getLogger(ConfigSolr.class);
-
+  
   public final static String SOLR_XML_FILE = "solr.xml";
 
   public static ConfigSolr fromFile(SolrResourceLoader loader, File configFile) {
@@ -107,9 +107,9 @@ public abstract class ConfigSolr {
   public static ConfigSolr fromConfig(Config config, String originalXml) {
     boolean oldStyle = (config.getNode("solr/cores", false) != null);
     return oldStyle ? new ConfigSolrXmlOld(config, originalXml)
-        : new ConfigSolrXml(config);
+                    : new ConfigSolrXml(config);
   }
-
+  
   public abstract CoresLocator getCoresLocator();
 
 
@@ -324,7 +324,7 @@ public abstract class ConfigSolr {
   protected ConfigSolr() {
 
   }
-
+  
   public Config getConfig() {
     return config;
   }
@@ -347,7 +347,7 @@ public abstract class ConfigSolr {
     return null;
 
   }
-
+  
   protected Properties readProperties(Node node) throws XPathExpressionException {
     XPath xpath = config.getXPath();
     NodeList props = (NodeList) xpath.evaluate("property", node, XPathConstants.NODESET);
@@ -360,6 +360,7 @@ public abstract class ConfigSolr {
     return properties;
   }
 
+// SEA
   public static ConfigSolr fromFile2(SolrResourceLoader loader, File configFile) {
     log.info("Loading container configuration from {}", configFile.getAbsolutePath());
 
@@ -387,6 +388,6 @@ public abstract class ConfigSolr {
   public static ConfigSolr fromSolrHome2(SolrResourceLoader loader, String solrHome) {
     return fromFile2(loader, new File(solrHome, SOLR_XML_FILE));
   }
-
+// SEA
 }
 

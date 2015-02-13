@@ -21,7 +21,7 @@
   </description>
 
   <import file="../module-build.xml"/>
-
+<!-- SEA -->
   <path id="queriesjar">
     <fileset dir="lib"/>
   </path>
@@ -36,5 +36,5 @@
     <path refid="test.base.classpath" />
     <path refid="queriesjar"/>
   </path>
-
+<!-- SEA -->
 </project>

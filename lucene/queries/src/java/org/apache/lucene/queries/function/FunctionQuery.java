@@ -40,7 +40,9 @@ import java.util.Map;
  *
  */
 public class FunctionQuery extends Query {
+// SEA
   private final Logger logger = LoggerFactory.getLogger(FunctionQuery.class);
+// SEA
   final ValueSource func;
 
   /**
@@ -152,6 +154,7 @@ public class FunctionQuery extends Query {
 
     @Override
     public float score() throws IOException {
+// SEA
       float v = -Float.MAX_VALUE ;
 
       try {
@@ -160,6 +163,7 @@ public class FunctionQuery extends Query {
         logger.error("", e);
       }
       float score = qWeight * v;
+// SEA
 
       // Current Lucene priority queues can't handle NaN and -Infinity, so
       // map to -Float.MAX_VALUE. This conditional handles both -infinity

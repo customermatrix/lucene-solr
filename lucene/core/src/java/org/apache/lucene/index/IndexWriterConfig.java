@@ -112,8 +112,10 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig {
    *  others to finish. Default value is 8. */
   public final static int DEFAULT_MAX_THREAD_STATES = 8;
 
+// SEA
   public static final String DEFAULT_DOCUMENTS_WRITER_PER_THREAD_IMPL = DocumentsWriterPerThread.class.getName();
-  
+// SEA
+
   /** Default value for compound file system for newly written segments
    *  (set to <code>true</code>). For batch indexing with very large 
    *  ram buffers use <code>false</code> */
@@ -528,7 +530,7 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig {
   public IndexWriterConfig setReaderTermsIndexDivisor(int divisor) {
     return (IndexWriterConfig) super.setReaderTermsIndexDivisor(divisor);
   }
-
+  
   @Override
   public IndexWriterConfig setTermIndexInterval(int interval) {
     return (IndexWriterConfig) super.setTermIndexInterval(interval);
@@ -539,10 +541,12 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig {
     return (IndexWriterConfig) super.setUseCompoundFile(useCompoundFile);
   }
 
+// SEA
   @Override
   public IndexWriterConfig setDocumentsWriterPerThreadImpl(String impl) {
     return (IndexWriterConfig) super.setDocumentsWriterPerThreadImpl(impl);
   }
+// SEA
 
   @Override
   public String toString() {

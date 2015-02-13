@@ -32,12 +32,12 @@ public class TestImplicitCoreProperties extends SolrTestCaseJ4 {
     try {
       cc.load();
       assertQ(req("q", "*:*")
-          , "//str[@name='dummy1'][.='collection1']"
-          , "//str[@name='dummy2'][.='data"+File.separator+"']"
-          , "//str[@name='dummy3'][.='solrconfig-implicitproperties.xml']"
-          , "//str[@name='dummy4'][.='schema.xml']"
-          , "//str[@name='dummy5'][.='false']"
-      );
+              , "//str[@name='dummy1'][.='collection1']"
+              , "//str[@name='dummy2'][.='data"+File.separator+"']"
+              , "//str[@name='dummy3'][.='solrconfig-implicitproperties.xml']"
+              , "//str[@name='dummy4'][.='schema.xml']"
+              , "//str[@name='dummy5'][.='false']"
+              );
       // Test for SOLR-5279 - make sure properties are there on core reload
       cc.reload("collection1");
     }

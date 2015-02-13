@@ -184,8 +184,8 @@ public class HttpShardHandler extends ShardHandler {
     pending.add( completionService.submit(task) );
   }
 
-  /** returns a ShardResponse of the last response correlated with a ShardRequest.  This won't
-   * return early if it runs into an error.
+  /** returns a ShardResponse of the last response correlated with a ShardRequest.  This won't 
+   * return early if it runs into an error.  
    **/
   @Override
   public ShardResponse takeCompletedIncludingErrors() {
@@ -200,9 +200,9 @@ public class HttpShardHandler extends ShardHandler {
   public ShardResponse takeCompletedOrError() {
     return take(true);
   }
-
+  
   private ShardResponse take(boolean bailOnError) {
-
+    
     while (pending.size() > 0) {
       try {
         Future<ShardResponse> future = completionService.take();
@@ -251,7 +251,7 @@ public class HttpShardHandler extends ShardHandler {
     // search is distributed.
     boolean hasShardURL = shards != null && shards.indexOf('/') > 0;
     rb.isDistrib = hasShardURL | rb.isDistrib;
-
+    
     if (rb.isDistrib) {
       // since the cost of grabbing cloud state is still up in the air, we grab it only
       // if we need it.
@@ -312,6 +312,7 @@ public class HttpShardHandler extends ShardHandler {
           addSlices(slices, clusterState, params, collectionName,  shardKeys, false);
         }
 
+        
         // Store the logical slices in the ResponseBuilder and create a new
         // String array to hold the physical shards (which will be mapped
         // later).

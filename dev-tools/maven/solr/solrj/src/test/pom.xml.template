@@ -56,6 +56,7 @@
     </dependency>
 @solr-solrj.internal.test.dependencies@
 @solr-solrj.external.test.dependencies@
+<!-- SEA -->
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-log4j12</artifactId>
@@ -66,6 +67,7 @@
       <artifactId>log4j</artifactId>
       <scope>test</scope>
     </dependency>
+<!-- SEA -->
   </dependencies>
   <build>
     <sourceDirectory/>

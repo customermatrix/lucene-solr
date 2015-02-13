@@ -19,7 +19,6 @@ package org.apache.solr.client.solrj;
 
 
 import com.google.common.collect.Maps;
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import junit.framework.Assert;
 import org.apache.lucene.util.TestUtil;
 import org.apache.solr.SolrTestCaseJ4.SuppressSSL;

@@ -39,7 +39,9 @@ import java.lang.reflect.Constructor;
  */
 public class LiveIndexWriterConfig {
 
+// SEA
   protected Analyzer analyzer;
+// SEA
   
   private volatile int maxBufferedDocs;
   private volatile double ramBufferSizeMB;
@@ -107,7 +109,9 @@ public class LiveIndexWriterConfig {
   /** True if merging should check integrity of segments before merge */
   protected volatile boolean checkIntegrityAtMerge = IndexWriterConfig.DEFAULT_CHECK_INTEGRITY_AT_MERGE;
 
+// SEA
   protected volatile String documentsWriterPerThreadImpl;
+// SEA
 
   // used by IndexWriterConfig
   LiveIndexWriterConfig(Analyzer analyzer, Version matchVersion) {
@@ -117,7 +121,9 @@ public class LiveIndexWriterConfig {
     maxBufferedDocs = IndexWriterConfig.DEFAULT_MAX_BUFFERED_DOCS;
     maxBufferedDeleteTerms = IndexWriterConfig.DEFAULT_MAX_BUFFERED_DELETE_TERMS;
     readerTermsIndexDivisor = IndexWriterConfig.DEFAULT_READER_TERMS_INDEX_DIVISOR;
+// SEA
     documentsWriterPerThreadImpl = IndexWriterConfig.DEFAULT_DOCUMENTS_WRITER_PER_THREAD_IMPL;
+// SEA
     mergedSegmentWarmer = null;
     termIndexInterval = IndexWriterConfig.DEFAULT_TERM_INDEX_INTERVAL; // TODO: this should be private to the codec, not settable here
     delPolicy = new KeepOnlyLastCommitDeletionPolicy();
@@ -143,11 +149,6 @@ public class LiveIndexWriterConfig {
   /** Returns the default analyzer to use for indexing documents. */
   public Analyzer getAnalyzer() {
     return analyzer;
-  }
-
-  public LiveIndexWriterConfig setAnalyzer(Analyzer analyzer) {
-    this.analyzer = analyzer;
-    return this;
   }
   
   /**
@@ -548,6 +549,7 @@ public class LiveIndexWriterConfig {
     return infoStream;
   }
 
+// SEA
   public String getDocumentsWriterPerThreadImpl() {
     return documentsWriterPerThreadImpl;
   }
@@ -556,6 +558,7 @@ public class LiveIndexWriterConfig {
     this.documentsWriterPerThreadImpl = documentsWriterPerThreadImpl;
     return this;
   }
+// SEA
   
   /**
    * Sets if the {@link IndexWriter} should pack newly written segments in a
@@ -629,7 +632,9 @@ public class LiveIndexWriterConfig {
     sb.append("indexerThreadPool=").append(getIndexerThreadPool()).append("\n");
     sb.append("readerPooling=").append(getReaderPooling()).append("\n");
     sb.append("perThreadHardLimitMB=").append(getRAMPerThreadHardLimitMB()).append("\n");
+// CM
     sb.append("documentsWriterPerThreadImpl=").append(getDocumentsWriterPerThreadImpl()).append("\n");
+// CM
     sb.append("useCompoundFile=").append(getUseCompoundFile()).append("\n");
     sb.append("checkIntegrityAtMerge=").append(getCheckIntegrityAtMerge()).append("\n");
     return sb.toString();

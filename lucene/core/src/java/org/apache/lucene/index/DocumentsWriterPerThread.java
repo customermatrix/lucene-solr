@@ -45,7 +45,9 @@ import static org.apache.lucene.util.ByteBlockPool.BYTE_BLOCK_MASK;
 import static org.apache.lucene.util.ByteBlockPool.BYTE_BLOCK_SIZE;
 
 
+// SEA
 public class DocumentsWriterPerThread {
+// SEA
 
   /**
    * The IndexingChain must define the {@link #getChain(DocumentsWriterPerThread)} method
@@ -55,7 +57,7 @@ public class DocumentsWriterPerThread {
   abstract static class IndexingChain {
     abstract DocConsumer getChain(DocumentsWriterPerThread documentsWriterPerThread) throws IOException;
   }
-
+  
 
   static final IndexingChain defaultIndexingChain = new IndexingChain() {
 
@@ -139,7 +141,7 @@ public class DocumentsWriterPerThread {
   final DocState docState;
   final DocConsumer consumer;
   final Counter bytesUsed;
-
+  
   SegmentWriteState flushState;
   // Updates for our still-in-RAM (to be flushed next) segment
   final BufferedUpdates pendingUpdates;
@@ -181,13 +183,13 @@ public class DocumentsWriterPerThread {
     segmentInfo = new SegmentInfo(directoryOrig, Version.LATEST, segmentName, -1, false, codec, null);
     assert numDocsInRAM == 0;
     if (INFO_VERBOSE && infoStream.isEnabled("DWPT")) {
-      infoStream.message("DWPT", Thread.currentThread().getName() + " init seg=" + segmentName + " delQueue=" + deleteQueue);
+      infoStream.message("DWPT", Thread.currentThread().getName() + " init seg=" + segmentName + " delQueue=" + deleteQueue);  
     }
     // this should be the last call in the ctor 
     // it really sucks that we need to pull this within the ctor and pass this ref to the chain!
     consumer = indexWriterConfig.getIndexingChain().getChain(this);
   }
-
+  
   void setAborting() {
     aborting = true;
   }
@@ -323,7 +325,7 @@ public class DocumentsWriterPerThread {
 
     return docCount;
   }
-
+  
   private void finishDocument(Term delTerm) {
     /*
      * here we actually finish the document in two steps 1. push the delete into
@@ -340,7 +342,7 @@ public class DocumentsWriterPerThread {
     } else  {
       applySlice &= deleteQueue.updateSlice(deleteSlice);
     }
-
+    
     if (applySlice) {
       deleteSlice.apply(pendingUpdates, numDocsInRAM);
     } else { // if we don't need to apply we must reset!
@@ -380,7 +382,7 @@ public class DocumentsWriterPerThread {
     return numDocsInRAM;
   }
 
-
+  
   /**
    * Prepares this DWPT for flushing. This method will freeze and return the
    * {@link DocumentsWriterDeleteQueue}s global buffer and apply all pending
@@ -445,11 +447,11 @@ public class DocumentsWriterPerThread {
       if (infoStream.isEnabled("DWPT")) {
         infoStream.message("DWPT", "new segment has " + (flushState.liveDocs == null ? 0 : flushState.delCountOnFlush) + " deleted docs");
         infoStream.message("DWPT", "new segment has " +
-            (flushState.fieldInfos.hasVectors() ? "vectors" : "no vectors") + "; " +
-            (flushState.fieldInfos.hasNorms() ? "norms" : "no norms") + "; " +
-            (flushState.fieldInfos.hasDocValues() ? "docValues" : "no docValues") + "; " +
-            (flushState.fieldInfos.hasProx() ? "prox" : "no prox") + "; " +
-            (flushState.fieldInfos.hasFreq() ? "freqs" : "no freqs"));
+                           (flushState.fieldInfos.hasVectors() ? "vectors" : "no vectors") + "; " +
+                           (flushState.fieldInfos.hasNorms() ? "norms" : "no norms") + "; " + 
+                           (flushState.fieldInfos.hasDocValues() ? "docValues" : "no docValues") + "; " + 
+                           (flushState.fieldInfos.hasProx() ? "prox" : "no prox") + "; " + 
+                           (flushState.fieldInfos.hasFreq() ? "freqs" : "no freqs"));
         infoStream.message("DWPT", "flushedFiles=" + segmentInfoPerCommit.files());
         infoStream.message("DWPT", "flushed codec=" + codec);
       }
@@ -464,16 +466,16 @@ public class DocumentsWriterPerThread {
 
       if (infoStream.isEnabled("DWPT")) {
         final double newSegmentSize = segmentInfoPerCommit.sizeInBytes()/1024./1024.;
-        infoStream.message("DWPT", "flushed: segment=" + segmentInfo.name +
-            " ramUsed=" + nf.format(startMBUsed) + " MB" +
-            " newFlushedSize(includes docstores)=" + nf.format(newSegmentSize) + " MB" +
-            " docs/MB=" + nf.format(flushState.segmentInfo.getDocCount() / newSegmentSize));
+        infoStream.message("DWPT", "flushed: segment=" + segmentInfo.name + 
+                " ramUsed=" + nf.format(startMBUsed) + " MB" +
+                " newFlushedSize(includes docstores)=" + nf.format(newSegmentSize) + " MB" +
+                " docs/MB=" + nf.format(flushState.segmentInfo.getDocCount() / newSegmentSize));
       }
 
       assert segmentInfo != null;
 
       FlushedSegment fs = new FlushedSegment(segmentInfoPerCommit, flushState.fieldInfos,
-          segmentDeletes, flushState.liveDocs, flushState.delCountOnFlush);
+                                             segmentDeletes, flushState.liveDocs, flushState.delCountOnFlush);
       sealFlushedSegment(fs);
       success = true;
 
@@ -500,12 +502,12 @@ public class DocumentsWriterPerThread {
     SegmentCommitInfo newSegment = flushedSegment.segmentInfo;
 
     IndexWriter.setDiagnostics(newSegment.info, IndexWriter.SOURCE_FLUSH);
-
+    
     IOContext context = new IOContext(new FlushInfo(newSegment.info.getDocCount(), newSegment.sizeInBytes()));
 
     boolean success = false;
     try {
-
+      
       if (indexWriterConfig.getUseCompoundFile()) {
         filesToDelete.addAll(IndexWriter.createCompoundFile(infoStream, directory, MergeState.CheckAbort.NONE, newSegment.info, context));
         newSegment.info.setUseCompoundFile(true);
@@ -538,7 +540,7 @@ public class DocumentsWriterPerThread {
         // shortly-to-be-opened SegmentReader and let it
         // carry the changes; there's no reason to use
         // filesystem as intermediary here.
-
+          
         SegmentCommitInfo info = flushedSegment.segmentInfo;
         Codec codec = info.info.getCodec();
         codec.liveDocsFormat().writeLiveDocs(flushedSegment.liveDocs, directory, info, delCount, context);
@@ -551,7 +553,7 @@ public class DocumentsWriterPerThread {
       if (!success) {
         if (infoStream.isEnabled("DWPT")) {
           infoStream.message("DWPT",
-              "hit exception creating compound file for newly flushed segment " + newSegment.info.name);
+                             "hit exception creating compound file for newly flushed segment " + newSegment.info.name);
         }
       }
     }
@@ -577,12 +579,12 @@ public class DocumentsWriterPerThread {
 
   private static class IntBlockAllocator extends IntBlockPool.Allocator {
     private final Counter bytesUsed;
-
+    
     public IntBlockAllocator(Counter bytesUsed) {
       super(IntBlockPool.INT_BLOCK_SIZE);
       this.bytesUsed = bytesUsed;
     }
-
+    
     /* Allocate another int[] from the shared pool */
     @Override
     public int[] getIntBlock() {
@@ -591,19 +593,19 @@ public class DocumentsWriterPerThread {
           * RamUsageEstimator.NUM_BYTES_INT);
       return b;
     }
-
+    
     @Override
     public void recycleIntBlocks(int[][] blocks, int offset, int length) {
       bytesUsed.addAndGet(-(length * (IntBlockPool.INT_BLOCK_SIZE * RamUsageEstimator.NUM_BYTES_INT)));
     }
-
+    
   }
-
+  
   @Override
   public String toString() {
     return "DocumentsWriterPerThread [pendingDeletes=" + pendingUpdates
-        + ", segment=" + (segmentInfo != null ? segmentInfo.name : "null") + ", aborting=" + aborting + ", numDocsInRAM="
+      + ", segment=" + (segmentInfo != null ? segmentInfo.name : "null") + ", aborting=" + aborting + ", numDocsInRAM="
         + numDocsInRAM + ", deleteQueue=" + deleteQueue + "]";
   }
-
+  
 }

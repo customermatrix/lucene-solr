@@ -50,7 +50,9 @@ public abstract class EphemeralDirectoryFactory extends CachingDirectoryFactory 
   
   @Override
   public boolean isAbsolute(String path) {
+// SEA
     return new File(path).isAbsolute();
+// SEA
   }
   
   

@@ -62,10 +62,12 @@ class PerSegmentSingleValuedFaceting {
 
   int nThreads;
 
+// SEA
   public PerSegmentSingleValuedFaceting(TermValidator termValidator, SolrIndexSearcher searcher, DocSet docs,
                                         String fieldName, int offset, int limit, int mincount, boolean missing,
                                         String sort, String prefix) {
     this.termValidator = termValidator;
+// SEA
     this.searcher = searcher;
     this.docs = docs;
     this.fieldName = fieldName;
@@ -169,11 +171,13 @@ class PerSegmentSingleValuedFaceting {
     }
 
     FacetCollector collector;
+// SEA
     if (sort.equals(FacetParams.FACET_SORT_COUNT) || sort.equals(FacetParams.FACET_SORT_COUNT_LEGACY)) {
       collector = new CountSortedFacetCollector(termValidator, fieldName, offset, limit, mincount);
     } else {
       collector = new IndexSortedFacetCollector(termValidator, fieldName, offset, limit, mincount);
     }
+// SEA
 
     BytesRefBuilder val = new BytesRefBuilder();
 
@@ -304,18 +308,22 @@ abstract class FacetCollector {
 class CountSortedFacetCollector extends FacetCollector {
   private final CharsRefBuilder spare = new CharsRefBuilder();
 
-  private String fieldName;
   final int offset;
   final int limit;
   final int maxsize;
   final BoundedTreeSet<SimpleFacets.CountPair<String,Integer>> queue;
+// SEA
   final TermValidator termValidator;
+  private String fieldName;
+// SEA
 
   int min;  // the smallest value in the top 'N' values
 
+// SEA
   public CountSortedFacetCollector(TermValidator termValidator, String fieldName, int offset, int limit, int mincount) {
     this.termValidator = termValidator;
     this.fieldName = fieldName;
+// SEA
     this.offset = offset;
     this.limit = limit;
     maxsize = limit>0 ? offset+limit : Integer.MAX_VALUE-1;
@@ -330,10 +338,12 @@ class CountSortedFacetCollector extends FacetCollector {
       // index order, so we already know that the keys are ordered.  This can be very
       // important if a lot of the counts are repeated (like zero counts would be).
       spare.copyUTF8Bytes(term);
+// SEA
       if (termValidator.validate(fieldName, spare.toString())) {
         queue.add(new SimpleFacets.CountPair<>(spare.toString(), count));
         if (queue.size() >= maxsize) min = queue.last().val;
       }
+// SEA
     }
     return false;
   }
@@ -359,14 +369,18 @@ class IndexSortedFacetCollector extends FacetCollector {
 
   int offset;
   int limit;
+// SEA
   final TermValidator termValidator;
-  final int mincount;
-  final NamedList<Integer> res = new NamedList<Integer>();
   final String fieldName;
+// SEA
+  final int mincount;
+  final NamedList<Integer> res = new NamedList<>();
 
+// SEA
   public IndexSortedFacetCollector(TermValidator termValidator, String fieldName, int offset, int limit, int mincount) {
     this.termValidator = termValidator;
     this.fieldName = fieldName;
+// SEA
     this.offset = offset;
     this.limit = limit>0 ? limit : Integer.MAX_VALUE;
     this.mincount = mincount;
@@ -385,10 +399,12 @@ class IndexSortedFacetCollector extends FacetCollector {
 
     if (limit > 0) {
       spare.copyUTF8Bytes(term);
+// SEA
       if (termValidator.validate(fieldName, spare.toString())) {
         res.add(spare.toString(), count);
         limit--;
       }
+// SEA
     }
 
     return limit <= 0;

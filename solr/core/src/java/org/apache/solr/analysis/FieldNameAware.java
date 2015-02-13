@@ -1,3 +1,4 @@
+// SEA
 package org.apache.solr.analysis;
 
 import org.apache.lucene.analysis.TokenStream;
@@ -10,3 +11,4 @@ public interface FieldNameAware {
   /** Transform the specified input TokenStream */
   public TokenStream create(TokenStream input, String fieldName);
 }
+// SEA

@@ -62,7 +62,9 @@ public class SolrStopwordsCarrot2LexicalDataFactory implements ILexicalDataFacto
   @Init
   @Input
   @Attribute(key = "solrCore")
+// SEA
   @ImplementingClasses(classes = { SolrCore.class, })
+// SEA
   private SolrCore core;
 
   @Processing

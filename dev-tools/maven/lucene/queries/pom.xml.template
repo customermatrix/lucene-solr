@@ -51,7 +51,8 @@
 @lucene-queries.internal.dependencies@
 @lucene-queries.external.dependencies@
 @lucene-queries.internal.test.dependencies@
-@lucene-queries.external.test.dependencies@     
+@lucene-queries.external.test.dependencies@ 
+<!-- SEA -->
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-log4j12</artifactId>
@@ -60,6 +61,7 @@
       <groupId>log4j</groupId>
       <artifactId>log4j</artifactId>
     </dependency>
+<!-- SEA -->
   </dependencies>
   <build>
     <sourceDirectory>${module-path}/src/java</sourceDirectory>

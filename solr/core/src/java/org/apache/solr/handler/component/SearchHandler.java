@@ -143,10 +143,12 @@ public class SearchHandler extends RequestHandlerBase implements SolrCoreAware ,
       components.add(dbgCmp);
       log.debug("Adding  debug component:" + dbgCmp);
     }
+// SEA
     if(shfInfo ==null) {
       shardHandlerFactory = wrapShardHandlerFactory(core.getCoreDescriptor().getCoreContainer().getShardHandlerFactory());
     } else {
       shardHandlerFactory = wrapShardHandlerFactory(core.createInitInstance(shfInfo, ShardHandlerFactory.class, null, null));
+// SEA
       core.addCloseHook(new CloseHook() {
         @Override
         public void preClose(SolrCore core) {
@@ -160,9 +162,11 @@ public class SearchHandler extends RequestHandlerBase implements SolrCoreAware ,
 
   }
 
+// SEA
   protected ShardHandlerFactory wrapShardHandlerFactory(ShardHandlerFactory initInstance) {
     return initInstance;
   }
+// SEA
 
   public List<SearchComponent> getComponents() {
     return components;

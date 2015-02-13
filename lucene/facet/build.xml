@@ -28,12 +28,16 @@
   "/>
 
   <import file="../module-build.xml"/>
+<!-- SEA -->
   <import file="../common-build.xml"/>
+<!-- SEA -->
 
   <path id="classpath">
     <path refid="base.classpath"/>
     <pathelement path="${queries.jar}"/>
+<!-- SEA -->
     <fileset dir="${common.dir}/facet/lib" excludes="${common.classpath.excludes}"/>
+<!-- SEA -->
   </path>
 
   <target name="compile-core" depends="jar-queries,common.compile-core" />
