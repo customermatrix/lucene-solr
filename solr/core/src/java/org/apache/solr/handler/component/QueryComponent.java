@@ -876,10 +876,7 @@ public class QueryComponent extends SearchComponent
         // additional fields below
         sreq.params.set(CommonParams.FL, "*");
       }
-    } else { //SEA-1303
-      sreq.params.remove(CommonParams.FL);
-    } //SEA-1303
-
+    }
     StringBuilder additionalFL = new StringBuilder();
     boolean additionalAdded = false;
     if (!distribSinglePass || !fields.wantsField(keyFieldName)) 
