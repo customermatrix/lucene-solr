@@ -668,7 +668,7 @@ public class SimpleFacets {
                 List<String> terms = StrUtils.splitSmart(termList, ",", true);
                 result.add(workerKey, getListedTermCounts(workerFacetValue, workerBase, terms));
               } else {
-                result.add(workerKey, getTermCounts(workerFacetValue));
+                result.add(workerKey, getTermCounts(workerFacetValue, workerBase));
               }
               return result;
             } catch (SolrException se) {
