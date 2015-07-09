@@ -381,11 +381,10 @@ public class QueryComponent extends SearchComponent
                 throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, e); //grouping on inexisting field ?
               }
             }
-          }
 // SEA
+          }
           CommandHandler commandHandler = topsGroupsActionBuilder.build();
           commandHandler.execute();
-          //SEA-1039
           SearchGroupsResultTransformer serializer = new SearchGroupsResultTransformer(rb);
           rsp.add("firstPhase", commandHandler.processResult(result, serializer));
           rsp.add("totalHitCount", commandHandler.getTotalHitCount());
@@ -832,7 +831,7 @@ public class QueryComponent extends SearchComponent
     boolean distribSinglePass = rb.req.getParams().getBool(ShardParams.DISTRIB_SINGLE_PASS, false);
 
     if(distribSinglePass || (fields != null && fields.wantsField(keyFieldName)
-        && fields.getRequestedFieldNames() != null  
+        && fields.getRequestedFieldNames() != null
         && (!fields.hasPatternMatching() && Arrays.asList(keyFieldName, "score").containsAll(fields.getRequestedFieldNames())))) {
       sreq.purpose |= ShardRequest.PURPOSE_GET_FIELDS;
       rb.onePassDistributedQuery = true;
@@ -866,31 +865,37 @@ public class QueryComponent extends SearchComponent
     sreq.params.set(ResponseBuilder.FIELD_SORT_VALUES,"true");
 
     boolean shardQueryIncludeScore = (rb.getFieldFlags() & SolrIndexSearcher.GET_SCORES) != 0 || rb.getSortSpec().includesScore();
-    if (distribSinglePass) {
+    StringBuilder additionalFL = new StringBuilder();
+    boolean additionalAdded = false;
+    if (distribSinglePass)  {
       String[] fls = rb.req.getParams().getParams(CommonParams.FL);
       if (fls != null && fls.length > 0 && (fls.length != 1 || !fls[0].isEmpty())) {
         // If the outer request contains actual FL's use them...
         sreq.params.set(CommonParams.FL, fls);
+        if (!fields.wantsField(keyFieldName))  {
+          additionalAdded = addFL(additionalFL, keyFieldName, additionalAdded);
+        }
       } else {
         // ... else we need to explicitly ask for all fields, because we are going to add
         // additional fields below
         sreq.params.set(CommonParams.FL, "*");
       }
-    } else { //SEA-1303
-      sreq.params.remove(CommonParams.FL);
-    } //SEA-1303
+      if (!fields.wantsScore() && shardQueryIncludeScore) {
+        additionalAdded = addFL(additionalFL, "score", additionalAdded);
+      }
+    } else {
+      // reset so that only unique key is requested in shard requests
+      sreq.params.set(CommonParams.FL, rb.req.getSchema().getUniqueKeyField().getName());
+      if (shardQueryIncludeScore) {
+        additionalAdded = addFL(additionalFL, "score", additionalAdded);
+      }
+    }
 
-    StringBuilder additionalFL = new StringBuilder();
-    boolean additionalAdded = false;
-    if (!distribSinglePass || !fields.wantsField(keyFieldName)) 
-      additionalAdded = addFL(additionalFL, keyFieldName, additionalAdded);
-    if ((!distribSinglePass || !fields.wantsScore()) && shardQueryIncludeScore) 
-      additionalAdded = addFL(additionalFL, "score", additionalAdded);
     if (additionalAdded) sreq.params.add(CommonParams.FL, additionalFL.toString());
 
     rb.addRequest(this, sreq);
   }
-  
+
   private boolean addFL(StringBuilder fl, String field, boolean additionalAdded) {
     if (additionalAdded) fl.append(",");
     fl.append(field);
@@ -922,7 +927,7 @@ public class QueryComponent extends SearchComponent
       else {
         sortFields = new SortField[]{SortField.FIELD_SCORE};
       }
- 
+
       IndexSchema schema = rb.req.getSchema();
       SchemaField uniqueKeyField = schema.getUniqueKeyField();
 
@@ -940,7 +945,7 @@ public class QueryComponent extends SearchComponent
         shardInfo = new SimpleOrderedMap<>();
         rb.rsp.getValues().add(ShardParams.SHARDS_INFO,shardInfo);
       }
-      
+
       long numFound = 0;
       Float maxScore=null;
       boolean partialResults = false;
@@ -949,7 +954,7 @@ public class QueryComponent extends SearchComponent
 
         if(shardInfo!=null) {
           SimpleOrderedMap<Object> nl = new SimpleOrderedMap<>();
-          
+
           if (srsp.getException() != null) {
             Throwable t = srsp.getException();
             if(t instanceof SolrServerException) {
@@ -984,12 +989,12 @@ public class QueryComponent extends SearchComponent
         if (docs == null) { // could have been initialized in the shards info block above
           docs = (SolrDocumentList)srsp.getSolrResponse().getResponse().get("response");
         }
-        
+
         NamedList<?> responseHeader = (NamedList<?>)srsp.getSolrResponse().getResponse().get("responseHeader");
         if (responseHeader != null && Boolean.TRUE.equals(responseHeader.get("partialResults"))) {
           partialResults = true;
         }
-        
+
         // calculate global maxScore and numDocsFound
         if (docs.getMaxScore() != null) {
           maxScore = maxScore==null ? docs.getMaxScore() : Math.max(maxScore, docs.getMaxScore());
@@ -1052,13 +1057,7 @@ public class QueryComponent extends SearchComponent
         shardDoc.positionInResponse = i;
         // Need the toString() for correlation with other lists that must
         // be strings (like keys in highlighting, explain, etc)
-// SEA
-        if (shardDoc.id != null) {
-          resultIds.put(shardDoc.id.toString(), shardDoc);
-        } else {
-          logger.error("Invalid document detected in the shard results. Check if there is empty documents!");
-        }
-// SEA
+        resultIds.put(shardDoc.id.toString(), shardDoc);
       }
 
       // Add hits for distributed requests
@@ -1138,13 +1137,13 @@ public class QueryComponent extends SearchComponent
     rb.setNextCursorMark(nextCursorMark);
   }
 
-  private NamedList unmarshalSortValues(SortSpec sortSpec, 
-                                        NamedList sortFieldValues, 
+  private NamedList unmarshalSortValues(SortSpec sortSpec,
+                                        NamedList sortFieldValues,
                                         IndexSchema schema) {
     NamedList unmarshalledSortValsPerField = new NamedList();
 
     if (0 == sortFieldValues.size()) return unmarshalledSortValsPerField;
-    
+
     List<SchemaField> schemaFields = sortSpec.getSchemaFields();
     SortField[] sortFields = sortSpec.getSort().getSort();
 
@@ -1219,7 +1218,7 @@ public class QueryComponent extends SearchComponent
       if(!rb.rsp.getReturnFields().wantsField(uniqueField.getName())) {
         sreq.params.add(CommonParams.FL, uniqueField.getName());
       }
-    
+
       ArrayList<String> ids = new ArrayList<>(shardDocs.size());
       for (ShardDoc shardDoc : shardDocs) {
         // TODO: depending on the type, we may need more tha a simple toString()?
@@ -1265,7 +1264,7 @@ public class QueryComponent extends SearchComponent
               nl.add("trace", trace.toString() );
             }
           }
-          
+
           continue;
         }
         SolrDocumentList docs = (SolrDocumentList) srsp.getSolrResponse().getResponse().get("response");
