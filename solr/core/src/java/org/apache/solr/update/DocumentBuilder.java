@@ -32,6 +32,8 @@ import org.apache.solr.schema.SchemaField;
 
 import com.google.common.collect.Sets;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  *
  */
@@ -39,6 +41,7 @@ import com.google.common.collect.Sets;
 
 // Not thread safe - by design.  Create a new builder for each thread.
 public class DocumentBuilder {
+  private static final Logger logger = LoggerFactory.getLogger(DocumentBuilder.class);
 
   private static void addField(Document doc, SchemaField field, Object val, float boost) {
     if (val instanceof IndexableField) {
@@ -47,9 +50,14 @@ public class DocumentBuilder {
       doc.add((Field)val);
       return;
     }
+    try { // SEA
     for (IndexableField f : field.getType().createFields(field, val, boost)) {
       if (f != null) doc.add((Field) f); // null fields are not added
     }
+    } catch(Exception e) {
+      logger.error("Error adding '{}' field of type '{}' with '{}' values to document.", field.getName(), field.getType().getTypeName(), val);
+      throw e;
+    } // SEA
   }
   
   private static String getID( SolrInputDocument doc, IndexSchema schema )
