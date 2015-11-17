@@ -179,10 +179,11 @@ public class PivotFacetProcessor extends SimpleFacets
           pivot.add( "value", ftype.toObject(sfield, termval) );
         }
         pivot.add( "count", kv.getValue() );
-
-        DocSet subset = getSubset(docs, sfield, fieldValue);
-        
+        //begin: SEA-1485
         if( subField != null )  {
+
+          DocSet subset = getSubset(docs, sfield, fieldValue);
+          //end: SEA-1485
           NamedList<Integer> facetCounts;
           if(!vnames.isEmpty()){
             String val = vnames.pop();

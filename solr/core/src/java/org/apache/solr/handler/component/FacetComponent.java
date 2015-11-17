@@ -453,7 +453,7 @@ public class FacetComponent extends SearchComponent {
     } else if ( FacetParams.FACET_SORT_COUNT.equals(sort) ) {
       if ( 0 < requestedLimit ) {
         shardLimit = doOverRequestMath(shardLimit, overRequestRatio, overRequestCount);
-        shardMinCount = 0; 
+        shardMinCount = Math.min(requestedMinCount, 1); //SEA-1485
       } else {
         shardMinCount = Math.min(requestedMinCount, 1);
       }
